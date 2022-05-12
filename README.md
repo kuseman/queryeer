@@ -5,8 +5,16 @@ Query IDE based on [Payloadbuilder](https://github.com/kuseman/payloadbuilder) b
 
 ## Table of Contents
 
+* [About](#about)
 * [Usage](#usage)
 * [Developing](#developing)
+* [License](#license)
+
+## About
+
+Extensible Query IDE with support for Payloadbuilder Catalogs.
+
+![Queryeer](/documentation/queryeer.png?raw=true "Queryeer")
 
 ## Usage
 
@@ -16,10 +24,31 @@ Query IDE based on [Payloadbuilder](https://github.com/kuseman/payloadbuilder) b
 
 ## Developing
 
-Adding UI extension for Catalog implementations is a matter of implementing [ICatalogExtensionFactory](https://github.com/kuseman/queryeer/blob/master/queryeer-api/src/main/java/se/kuseman/queryeer/editor/api/ICatalogExtensionFactory.java)
+Extending Queryeer can be made with a set of extension points.
 
-Catalog extensions for Queryeer is loaded with it's own isolated classloader so make sure that dependencies are bundled. Using maven assembly plugin is a great choice for this. 
+  - [ICatalogExtensionFactory](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/catalog/ICatalogExtensionFactory.java)
+    - Adding a payloadbuilder catalog to Queeryer is made here
+
+   - [IConfigurable](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/IConfigurable.java)
+    - Adding a configurable component to Queryeer is made here. This will enable a component to appear in Options dialog to allow for changing and persisting options to other compoenents such as Catalog extensions etc.
+
+   - [IOutputExtension](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/output/IOutputExtension.java)
+    - Adding an output extension is made here. To enable other types of UI output (like table and text) this is the extension to add. Queryeer comes bundled with Table/Text and File outputs.
+
+   - [IOutputFormatExtension](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/output/IOutputFormatExtension.java)
+    - Adding an output format extension is made here. To enable other types of output formats (like JSON, CSV) this is the extension to add. Queryeer comes bundled with JSON and CSV formats.
+
+Extension classes implementing one of the above interfaces or annotated with [Inject](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/src/main/java/com/queryeer/api/Inject.java) is automatically discovered when placed in `plugins` folder. A set of [services](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/service) can be injected through constructor injection. Extension classes should have 1 constructor or 1 annotated with  [Inject](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/Inject.java)
+
+Each plugin is loaded with it's own isolated classloader so make sure that dependencies are bundled. Using maven assembly plugin is a great choice for this.
+
 Enabling the plugin by placing the distribution in the `plugins` folder in the unziped Queryeer distribution.
 Extra dependencies like jdbc-drivers etc. can be placed in `shared` folder. 
+
+## License
+
+Distributed under the Apache License Version 2.0.
+
+Free for non commercial use
 
 

@@ -134,7 +134,7 @@ class Model implements TableModel
     }
 
     @Override
-    public void setValueAt(Object aValue, int rowIndex, int columnIndex)
+    public void setValueAt(Object value, int rowIndex, int columnIndex)
     {
     }
 
