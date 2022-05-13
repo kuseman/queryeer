@@ -73,7 +73,7 @@ final class Utils
         HttpURLConnection c = null;
         try
         {
-            URL u = new URL("https://api.github.com/repos/kuseman/payloadbuilder/releases");
+            URL u = new URL("https://api.github.com/repos/kuseman/queryeer/releases");
             c = (HttpURLConnection) u.openConnection();
             c.setRequestMethod("GET");
             c.setRequestProperty("Content-length", "0");
