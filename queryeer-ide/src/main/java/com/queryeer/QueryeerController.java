@@ -6,7 +6,6 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FileUtils.byteCountToDisplaySize;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
-import java.awt.Color;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
@@ -58,6 +57,7 @@ class QueryeerController implements PropertyChangeListener
     private final CaretChangedListener caretChangedListener = new CaretChangedListener();
     private final ButtonGroup defaultGroup = new ButtonGroup();
     private final OptionsDialog optionsDialog;
+    private final AboutDialog aboutDialog;
 
     private int newFileCounter = 1;
     private final String version;
@@ -74,7 +74,6 @@ class QueryeerController implements PropertyChangeListener
         this.model.addPropertyChangeListener(this);
         this.variablesDialog = new VariablesDialog(view);
         this.optionsDialog = new OptionsDialog(view, serviceLoader);
-
         this.outputExtensions.sort((a, b) -> Integer.compare(a.order(), b.order()));
         this.outputFormatExtensions.sort((a, b) -> Integer.compare(a.order(), b.order()));
 
@@ -89,6 +88,8 @@ class QueryeerController implements PropertyChangeListener
             version = "Dev";
         }
 
+        this.aboutDialog = new AboutDialog(view, version);
+
         init();
     }
 
@@ -96,48 +97,10 @@ class QueryeerController implements PropertyChangeListener
     private void init()
     // CSON
     {
+        view.setTitle("Queryeer IDE - " + version);
         view.bindOutputExtensions(outputExtensions);
         view.setActionHandler(this::handleViewAction);
         view.setOpenRecentFileConsumer(this::openRecentFileAction);
-
-        // view.setExecuteAction(new ExecuteListener());
-        // view.setCancelAction(() ->
-        // {
-        // QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-        // .getSelectedComponent();
-        // if (queryFile != null
-        // && queryFile.getFile()
-        // .getState() == State.EXECUTING)
-        // {
-        // queryFile.getFile()
-        // .setState(State.ABORTED);
-        // }
-        // });
-
-        // NewQueryListener newQueryListener = new NewQueryListener();
-        // view.setNewQueryAction(newQueryListener);
-        // view.setSaveAction(new SaveListener());
-        // view.setSaveAsAction(new SaveAsListener());
-        // view.setOpenAction(new OpenListener());
-        // view.setToogleResultAction(() ->
-        // {
-        // QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-        // .getSelectedComponent();
-        // if (queryFile != null)
-        // {
-        // queryFile.toggleResultPane();
-        // }
-        // });
-        // view.setToggleCommentRunnable(() ->
-        // {
-        // QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-        // .getSelectedComponent();
-        // if (queryFile != null)
-        // {
-        // queryFile.toggleComments();
-        // }
-        // });
-        // view.setEditVariablesRunnable(new EditVariablesListener());
 
         JComboBox<IOutputExtension> outputCombo = view.getOutputCombo();
         DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) outputCombo.getModel();
@@ -151,64 +114,6 @@ class QueryeerController implements PropertyChangeListener
         {
             formatComboModel.addElement(outputFormatExtension);
         }
-
-        // view.setOutputChangedAction(() ->
-        // {
-        // QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-        // .getSelectedComponent();
-        // if (queryFile != null)
-        // {
-        // queryFile.getFile()
-        // .setOutput((IOutputExtension) view.getOutputCombo()
-        // .getSelectedItem());
-        //
-        // // Set output format accordingly
-        // IOutputFormatExtension outputFormat = queryFile.getFile()
-        // .getOutputFormat();
-        // if (outputFormat == null)
-        // {
-        // if (view.getFormatCombo()
-        // .getItemCount() > 0)
-        // {
-        // view.getFormatCombo()
-        // .setSelectedIndex(0);
-        // }
-        // }
-        // else
-        // {
-        // view.getFormatCombo()
-        // .setSelectedItem(outputFormat);
-        // }
-        // }
-        // });
-
-        // view.setOpenRecentFileConsumer(file ->
-        // {
-        // int length = model.getFiles()
-        // .size();
-        // for (int i = 0; i < length; i++)
-        // {
-        // if (model.getFiles()
-        // .get(i)
-        // .getFilename()
-        // .equals(file))
-        // {
-        // model.setSelectedFile(i);
-        // // TODO: remove this when proper binding exist in QueryeerModel
-        // // for selected file
-        // view.getEditorsTabbedPane()
-        // .setSelectedIndex(i);
-        // return;
-        // }
-        // }
-        //
-        // QueryFileModel queryFile = new QueryFileModel(config.getCatalogs(), new File(file));
-        // queryFile.setOutput(outputExtensions.get(0));
-        // model.addFile(queryFile);
-        // config.appendRecentFile(file);
-        // saveConfig();
-        // });
-        // view.setConfigOutputAction(this::configOutput);
 
         int y = 0;
         Insets insets = new Insets(0, 0, 3, 0);
@@ -232,57 +137,35 @@ class QueryeerController implements PropertyChangeListener
         }
         view.getPanelCatalogs()
                 .add(new JPanel(), new GridBagConstraints(0, y, 1, 1, 1, 1, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
-
         view.getEditorsTabbedPane()
                 .addChangeListener(new SelectedFileListener());
-        // view.setExitAction(this::exit);
-
         view.getMemoryLabel()
                 .setText(getMemoryString());
         new Timer(TIMER_INTERVAL, evt -> view.getMemoryLabel()
                 .setText(getMemoryString())).start();
         view.setRecentFiles(config.getRecentFiles());
 
-        view.getLabelVersion()
-                .setText("V: " + version);
-        view.getLabelVersion()
-                .addMouseListener(new MouseAdapter()
-                {
-                    @Override
-                    public void mouseClicked(MouseEvent e)
-                    {
-                        SwingUtilities.invokeLater(() -> checkLatestVersion(true));
-                    }
-                });
-
-        SwingUtilities.invokeLater(() -> checkLatestVersion(false));
+        SwingUtilities.invokeLater(() ->
+        {
+            final String message = aboutDialog.getNewVersionString();
+            if (message != null)
+            {
+                view.getLabelVersion()
+                        .setText("<html><b>New version available!</b>");
+                view.getLabelVersion()
+                        .addMouseListener(new MouseAdapter()
+                        {
+                            @Override
+                            public void mouseClicked(MouseEvent e)
+                            {
+                                aboutDialog.showNewVersionMessage(message);
+                            }
+                        });
+            }
+        });
 
         // Open a new query
         newQueryAction();
-    }
-
-    private void checkLatestVersion(boolean showDialog)
-    {
-        String latest = Utils.getLatestTag();
-        if (latest != null)
-        {
-            if (Utils.compareVersions(latest, version) < 0)
-            {
-                view.getLabelVersion()
-                        .setIcon(Constants.BELL_O);
-                view.getLabelVersion()
-                        .setBackground(Color.GREEN);
-                view.getLabelVersion()
-                        .setToolTipText("New version " + latest + " is available.");
-
-                return;
-            }
-        }
-
-        if (showDialog)
-        {
-            JOptionPane.showMessageDialog(view, "No new version found", "Version Check", JOptionPane.INFORMATION_MESSAGE);
-        }
     }
 
     private void defaultCatalogChanged(String catalogAlias)
@@ -531,6 +414,9 @@ class QueryeerController implements PropertyChangeListener
                 break;
             case OPTIONS:
                 showOptionsAction(null);
+                break;
+            case ABOUT:
+                aboutDialog.setVisible(true);
                 break;
             default:
                 throw new IllegalArgumentException("Unknown action " + action);
@@ -858,22 +744,6 @@ class QueryeerController implements PropertyChangeListener
         }
     }
 
-    // private Runnable executeRunnable;
-    // private Runnable cancelRunnable;
-    // private Runnable newQueryRunnable;
-    // private Runnable openRunnable;
-    // private Runnable saveRunnable;
-    // private Runnable saveAsRunnable;
-    // private Runnable exitRunnable;
-
-    // private Runnable toggleResultRunnable;
-    // private Runnable toggleCommentRunnable;
-    // private Runnable outputChangedRunnable;
-    // private Runnable configOutputRunnable;
-    // private Runnable formatChangedRunnable;
-    // private Runnable editVariablesRunnable;
-    // private Consumer<String> openRecentFileConsumer;
-
     /** View actions */
     enum ViewAction
     {
@@ -890,6 +760,7 @@ class QueryeerController implements PropertyChangeListener
         FORMAT_CHANGED,
         EDIT_VARIABLES,
         CONFIG_OUTPUT,
-        OPTIONS
+        OPTIONS,
+        ABOUT
     }
 }

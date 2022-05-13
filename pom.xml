@@ -6,7 +6,7 @@
     <packaging>pom</packaging>
     <name>Queryeer</name>
     <description>Query IDE based on Payloadbuilder</description>
-    <url>http://github.com/kuseman/queryeer</url>
+    <url>https://github.com/kuseman/queryeer</url>
 
     <properties>
         <!-- Build -->
@@ -21,7 +21,7 @@
         <mockito-core.version>4.3.1</mockito-core.version>
         <slf4j.version>1.7.30</slf4j.version>
         <spotless.version>2.22.0</spotless.version>
-        <payloadbuilder.version>0.8.0</payloadbuilder.version>
+        <payloadbuilder.version>0.8.1</payloadbuilder.version>
     </properties>
 
     <issueManagement>
@@ -78,6 +78,17 @@
             <build>
                 <plugins>
                     <plugin>
+                      <groupId>org.apache.maven.plugins</groupId>
+                      <artifactId>maven-jar-plugin</artifactId>
+                      <configuration>
+                        <archive>
+                          <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                          </manifest>
+                        </archive>
+                      </configuration>
+                    </plugin>
+                    <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
                         <version>3.2.1</version>
@@ -114,27 +125,6 @@
                             </execution>
                         </executions>
                     </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-gpg-plugin</artifactId>
-                        <version>3.0.1</version>
-                        <executions>
-                            <execution>
-                                <id>sign-artifacts</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>sign</goal>
-                                </goals>
-                                <configuration>
-                                    <!-- This is necessary for gpg to not try to use the pinentry programs -->
-                                    <gpgArguments>
-                                        <arg>--pinentry-mode</arg>
-                                        <arg>loopback</arg>
-                                    </gpgArguments>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                 </plugins>
             </build>
         </profile>
@@ -143,6 +133,11 @@
     <build>
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-deploy-plugin</artifactId>
+                    <version>2.8.2</version>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>

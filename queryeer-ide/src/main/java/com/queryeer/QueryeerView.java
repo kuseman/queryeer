@@ -82,8 +82,6 @@ class QueryeerView extends JFrame
     QueryeerView()
     // CSON
     {
-        String title = "Queryeer IDE";
-        setTitle(title);
         setLocationRelativeTo(null);
         getContentPane().setLayout(new BorderLayout(0, 0));
         // CSOFF
@@ -112,11 +110,7 @@ class QueryeerView extends JFrame
         labelCaret.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
         labelCaret.setPreferredSize(new Dimension(100, 20));
         labelCaret.setToolTipText("Caret position (Line, column, position)");
-
-        labelVersion = new JLabel("", SwingConstants.CENTER);
-        labelVersion.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
-        labelVersion.setPreferredSize(new Dimension(120, 20));
-        labelVersion.setToolTipText("Click to check for new version.");
+        labelVersion = new JLabel();
 
         // CSON
         panelStatus.add(labelMemory);
@@ -160,7 +154,19 @@ class QueryeerView extends JFrame
         toolsMenu.add(new JMenuItem(optionsAction))
                 .setText("Options ...");
 
+        JMenu helpMenu = new JMenu("Help");
+        helpMenu.add(new JMenuItem(new AbstractAction()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                actionHandler.accept(ViewAction.ABOUT);
+            }
+        }))
+                .setText("About Queryeer IDE");
+
         menuBar.add(toolsMenu);
+        menuBar.add(helpMenu);
 
         JToolBar toolBar = new JToolBar();
         toolBar.setRollover(true);
@@ -540,72 +546,6 @@ class QueryeerView extends JFrame
         }
     }
 
-    //
-    // void setExecuteAction(Runnable executeRunnable)
-    // {
-    // this.executeRunnable = executeRunnable;
-    // }
-    //
-    // void setNewQueryAction(Runnable newQueryRunnable)
-    // {
-    // this.newQueryRunnable = newQueryRunnable;
-    // }
-    //
-    // void setOpenAction(Runnable openRunnable)
-    // {
-    // this.openRunnable = openRunnable;
-    // }
-    //
-    // void setSaveAction(Runnable saveRunnable)
-    // {
-    // this.saveRunnable = saveRunnable;
-    // }
-    //
-    // void setSaveAsAction(Runnable saveAsRunnable)
-    // {
-    // this.saveAsRunnable = saveAsRunnable;
-    // }
-    //
-    // void setExitAction(Runnable exitRunnable)
-    // {
-    // this.exitRunnable = exitRunnable;
-    // }
-    //
-    // void setToogleResultAction(Runnable toggleResultRunnable)
-    // {
-    // this.toggleResultRunnable = toggleResultRunnable;
-    // }
-    //
-    // void setToggleCommentRunnable(Runnable toggleCommentRunnable)
-    // {
-    // this.toggleCommentRunnable = toggleCommentRunnable;
-    // }
-    //
-    // void setEditVariablesRunnable(Runnable editVariablesRunnable)
-    // {
-    // this.editVariablesRunnable = editVariablesRunnable;
-    // }
-    //
-    // void setCancelAction(Runnable cancelRunnable)
-    // {
-    // this.cancelRunnable = cancelRunnable;
-    // }
-    //
-    // void setOutputChangedAction(Runnable outputChangedRunnable)
-    // {
-    // this.outputChangedRunnable = outputChangedRunnable;
-    // }
-    //
-    // void setFormatChangedAction(Runnable formatChangedRunnable)
-    // {
-    // this.formatChangedRunnable = formatChangedRunnable;
-    // }
-    //
-    // public void setConfigOutputAction(Runnable configOutputRunnable)
-    // {
-    // this.configOutputRunnable = configOutputRunnable;
-    // }
-    //
     void setOpenRecentFileConsumer(Consumer<String> openRecentFileConsumer)
     {
         this.openRecentFileConsumer = openRecentFileConsumer;

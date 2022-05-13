@@ -7,7 +7,7 @@
     </parent>
     <artifactId>queryeer-dist</artifactId>
     <name>Queryeer :: Distribution</name>
-    <url>http://github.com/kuseman/queryeer</url>
+    <url>https://github.com/kuseman/queryeer</url>
     <packaging>pom</packaging>
 
     <properties>

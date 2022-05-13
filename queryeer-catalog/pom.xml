@@ -7,7 +7,7 @@
     </parent>
     <artifactId>queryeer-catalog</artifactId>
     <name>Queryeer :: Catalogs</name>
-    <url>http://github.com/kuseman/queryeer</url>
+    <url>https://github.com/kuseman/queryeer</url>
 
     <properties>
         <main.basedir>${project.parent.basedir}</main.basedir>
