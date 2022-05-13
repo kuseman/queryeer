@@ -3,7 +3,7 @@
     <parent>
         <groupId>com.queryeer</groupId>
         <artifactId>queryeer</artifactId>
-        <version>0.7.0-SNAPSHOT</version>
+        <version>0.7.0</version>
     </parent>
     <artifactId>queryeer-catalog</artifactId>
     <name>Queryeer :: Catalogs</name>
