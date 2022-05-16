@@ -5,8 +5,8 @@ import com.queryeer.api.extensions.output.IOutputExtension;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
-/** Extension point for {@link NoneOutput} */
-class NoneOutput implements IOutputExtension
+/** Extension point for {@link NoneOutputExtension} */
+class NoneOutputExtension implements IOutputExtension
 {
     @Override
     public String getTitle()
@@ -17,7 +17,7 @@ class NoneOutput implements IOutputExtension
     @Override
     public int order()
     {
-        return 30;
+        return 40;
     }
 
     @Override

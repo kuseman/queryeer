@@ -45,10 +45,15 @@ public interface IOutputExtension extends IExtension
     /**
      * Create the result component that is shown in the result tab panel at the bottom of query files.
      *
-     * @param file The query file that the result component is created for
      * @return Created result component
      */
-    default IOutputComponent createResultComponent(IQueryFile file)
+    default IOutputComponent createResultComponent()
+    {
+        return null;
+    }
+
+    /** Return the class of the output component that should be selected when this output extension is selected for execution */
+    default Class<? extends IOutputComponent> getResultOutputComponentClass()
     {
         return null;
     }
@@ -56,10 +61,12 @@ public interface IOutputExtension extends IExtension
     /**
      * Create the output writer for this extension
      *
+     * <pre>
+     * NOTE! Is called on EDT so user interaction is supported here, for example asking for input etc.
+     * </pre>
+     *
      * @param file The query file that the output writer is created for
-     * @return Created output writer
+     * @return Created output writer or null if there wasn't any writer created. This could mean the user aborted some action etc.
      */
     OutputWriter createOutputWriter(IQueryFile file);
-
-    // TODO: Toolbar buttons in tab component
 }

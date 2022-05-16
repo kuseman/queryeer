@@ -12,4 +12,4 @@ for filepath in "${LIB_DIR}"/*; do
   CLASSPATH="${CLASSPATH}:${filepath}"
 done
 
-java -cp "${CLASSPATH}" -Detc="${ETC_DIR}" -Dplugins="${PLUGINS_DIR}" -Dshared="${SHARED_DIR}" com.queryeer.Main
+java -cp "${CLASSPATH}" -Dfile.encoding=UTF-8 -Detc="${ETC_DIR}" -Dplugins="${PLUGINS_DIR}" -Dshared="${SHARED_DIR}" com.queryeer.Main

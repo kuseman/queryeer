@@ -13,8 +13,7 @@ import javax.swing.SwingUtilities;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
-import com.queryeer.ITextOutputComponent;
-import com.queryeer.api.extensions.output.IOutputExtension;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
@@ -45,12 +44,6 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     public Component getComponent()
     {
         return this;
-    }
-
-    @Override
-    public Class<? extends IOutputExtension> getExtensionClass()
-    {
-        return TextOutputExtension.class;
     }
 
     @Override

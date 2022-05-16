@@ -4,6 +4,7 @@ import static java.util.Objects.requireNonNull;
 
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
+import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IQueryFileProvider;
 
 /** Factory for {@link ESCatalogExtension}. */
@@ -11,17 +12,21 @@ class ESCatalogExtensionFactory implements ICatalogExtensionFactory
 {
     private final IQueryFileProvider queryFileProvider;
     private final ESConnectionsModel connectionsModel;
+    private IEventBus eventBus;
 
-    public ESCatalogExtensionFactory(IQueryFileProvider queryFileProvider, ESConnectionsModel connectionsModel)
+    public ESCatalogExtensionFactory(IQueryFileProvider queryFileProvider, IEventBus eventBus, ESConnectionsModel connectionsModel)
     {
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
+        this.eventBus = requireNonNull(eventBus, "eventBus");
     }
 
     @Override
     public ICatalogExtension create(String catalogAlias)
     {
-        return new ESCatalogExtension(queryFileProvider, connectionsModel, catalogAlias);
+        ESCatalogExtension extension = new ESCatalogExtension(queryFileProvider, connectionsModel, catalogAlias);
+        eventBus.register(extension);
+        return extension;
     }
 
     @Override

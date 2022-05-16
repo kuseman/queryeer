@@ -19,9 +19,6 @@ public interface IOutputComponent
     /** Return the UI component */
     Component getComponent();
 
-    /** Get the extension class that this output component belongs to */
-    Class<? extends IOutputExtension> getExtensionClass();
-
     /** Clear eventual state in the component */
     default void clearState()
     {

@@ -1,5 +1,7 @@
 package com.queryeer.api.extensions.output;
 
+import java.io.Writer;
+
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.IExtension;
 
@@ -21,7 +23,8 @@ public interface IOutputFormatExtension extends IExtension
      * Create the output writer for this extension
      *
      * @param file The query file that the output writer is created for
+     * @param writer The writer to write result to
      * @return Created output writer
      */
-    OutputWriter createOutputWriter(IQueryFile file);
+    OutputWriter createOutputWriter(IQueryFile file, Writer writer);
 }

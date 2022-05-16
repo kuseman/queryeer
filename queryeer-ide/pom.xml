@@ -16,7 +16,7 @@
         <slf4j-log4j12.version>1.7.30</slf4j-log4j12.version>
         <ikonli-fontawesome-pack.version>2.4.0</ikonli-fontawesome-pack.version>
         <ikonli-swing.version>2.4.0</ikonli-swing.version>
-        <rsyntaxtextarea.version>3.1.3</rsyntaxtextarea.version>
+        <rsyntaxtextarea.version>3.2.0</rsyntaxtextarea.version>
     </properties>
 
     <dependencies>
@@ -24,11 +24,6 @@
         <dependency>
             <groupId>se.kuseman.payloadbuilder</groupId>
             <artifactId>payloadbuilder-core</artifactId>
-            <version>${payloadbuilder.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>se.kuseman.payloadbuilder</groupId>
-            <artifactId>payloadbuilder-catalog</artifactId>
             <version>${payloadbuilder.version}</version>
         </dependency>
         <dependency>
@@ -61,6 +56,16 @@
         <dependency>
             <groupId>com.fifesoft</groupId>
             <artifactId>rsyntaxtextarea</artifactId>
+            <version>${rsyntaxtextarea.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fifesoft</groupId>
+            <artifactId>rstaui</artifactId>
+            <version>${rsyntaxtextarea.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fifesoft</groupId>
+            <artifactId>autocomplete</artifactId>
             <version>${rsyntaxtextarea.version}</version>
         </dependency>
 

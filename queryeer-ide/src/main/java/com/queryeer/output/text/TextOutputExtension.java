@@ -45,9 +45,15 @@ class TextOutputExtension implements IOutputExtension
     }
 
     @Override
-    public IOutputComponent createResultComponent(IQueryFile file)
+    public IOutputComponent createResultComponent()
     {
         return new TextOutputComponent();
+    }
+
+    @Override
+    public Class<? extends IOutputComponent> getResultOutputComponentClass()
+    {
+        return TextOutputComponent.class;
     }
 
     @Override
@@ -59,6 +65,6 @@ class TextOutputExtension implements IOutputExtension
             throw new IllegalArgumentException("No output format selected");
         }
 
-        return outputFormat.createOutputWriter(file);
+        return outputFormat.createOutputWriter(file, file.getMessagesWriter());
     }
 }

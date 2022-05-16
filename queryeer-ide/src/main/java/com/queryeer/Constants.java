@@ -37,6 +37,8 @@ public interface Constants
     static final Icon INDENT = FontIcon.of(FontAwesome.INDENT);
     static final Icon EDIT = FontIcon.of(FontAwesome.EDIT);
     static final Icon COG = FontIcon.of(FontAwesome.COG);
+    static final Icon SEARCH = FontIcon.of(FontAwesome.SEARCH);
+    static final Icon SHARE = FontIcon.of(FontAwesome.SHARE);
     public static final int SCROLLBAR_WIDTH = ((Integer) UIManager.get("ScrollBar.width")).intValue();
     public static final List<? extends Image> APPLICATION_ICONS = asList("icons8-database-administrator-48.png", "icons8-database-administrator-96.png").stream()
             .map(name -> QueryeerView.class.getResource("/icons/" + name))

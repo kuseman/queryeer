@@ -1,7 +1,10 @@
 package com.queryeer;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Frame;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
@@ -13,7 +16,6 @@ import java.util.stream.Collectors;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
-import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -31,26 +33,25 @@ import com.queryeer.api.extensions.IConfigurable;
 /** Options dialog */
 class OptionsDialog extends JDialog
 {
-    private final ServiceLoader serviceLoader;
+    private final List<IConfigurable> configurables;
+    private final List<Configurable> configurableNodes = new ArrayList<>();
     private final DefaultMutableTreeNode root;
-    private final List<Configurable> configurables = new ArrayList<>();
     private final JPanel configComponentPanel = new JPanel();
     private final JTree optionsTree = new JTree();
     private JButton ok;
     private JButton cancel;
 
-    OptionsDialog(JFrame parent, ServiceLoader serviceLoader)
+    OptionsDialog(List<IConfigurable> configurables)
     {
-        super(parent, "Options", true);
-        this.serviceLoader = serviceLoader;
+        super((Frame) null, "Options", true);
+        this.configurables = requireNonNull(configurables, "configurables");
         root = initRootNode();
         initDialog();
     }
 
     private DefaultMutableTreeNode initRootNode()
     {
-        Map<String, List<IConfigurable>> entries = serviceLoader.getAll(IConfigurable.class)
-                .stream()
+        Map<String, List<IConfigurable>> entries = configurables.stream()
                 .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.groupName(), b.groupName()))
                 .collect(Collectors.groupingBy(IConfigurable::groupName, LinkedHashMap::new, Collectors.toList()));
 
@@ -61,7 +62,7 @@ class OptionsDialog extends JDialog
             for (IConfigurable configurable : e.getValue())
             {
                 Configurable configurableNode = new Configurable(configurable);
-                configurables.add(configurableNode);
+                configurableNodes.add(configurableNode);
                 optionType.add(configurableNode);
             }
             root.add(optionType);
@@ -168,7 +169,7 @@ class OptionsDialog extends JDialog
             return;
         }
 
-        for (Configurable configurable : configurables)
+        for (Configurable configurable : configurableNodes)
         {
             if (configurableToSelect == configurable.getConfigurable()
                     .getClass())
@@ -181,7 +182,7 @@ class OptionsDialog extends JDialog
 
     private void commit()
     {
-        configurables.forEach(node ->
+        configurableNodes.forEach(node ->
         {
             if (node.dirty)
             {
@@ -205,7 +206,7 @@ class OptionsDialog extends JDialog
 
     private boolean close()
     {
-        if (configurables.stream()
+        if (configurableNodes.stream()
                 .anyMatch(c -> c.dirty))
         {
             int result = JOptionPane.showConfirmDialog(this, "There are changes made to configuration, proceed ?", "Unsaved changes", JOptionPane.YES_NO_OPTION);
@@ -215,7 +216,7 @@ class OptionsDialog extends JDialog
             }
         }
 
-        configurables.forEach(node ->
+        configurableNodes.forEach(node ->
         {
             if (node.dirty)
             {
@@ -269,7 +270,7 @@ class OptionsDialog extends JDialog
         configComponentPanel.repaint();
     }
 
-    private class OptionType extends DefaultMutableTreeNode
+    private static class OptionType extends DefaultMutableTreeNode
     {
         private final String title;
 
@@ -285,7 +286,7 @@ class OptionsDialog extends JDialog
         }
     }
 
-    private class Configurable extends DefaultMutableTreeNode
+    private static class Configurable extends DefaultMutableTreeNode
     {
         private boolean dirty;
         private Component configComponent;

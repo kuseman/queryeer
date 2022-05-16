@@ -1,4 +1,4 @@
-package com.queryeer;
+package com.queryeer.components;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -20,18 +20,19 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.plaf.basic.BasicButtonUI;
 
-import com.queryeer.api.extensions.output.IOutputComponent;
-
 /** View for tab header component */
-class TabComponentView extends JPanel
+public class TabComponent extends JPanel
 {
     private final JLabel lblTitle;
-    private final IOutputComponent outputComponent;
 
-    private TabComponentView(IOutputComponent outputComponent, String title, Icon icon, final Runnable closeAction)
+    public TabComponent(String title, Icon icon)
+    {
+        this(title, icon, null);
+    }
+
+    public TabComponent(String title, Icon icon, final Runnable closeAction)
     {
         super(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        this.outputComponent = outputComponent;
         setOpaque(false);
         setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
 
@@ -49,18 +50,13 @@ class TabComponentView extends JPanel
         }
     }
 
-    IOutputComponent getOutputComponent()
-    {
-        return outputComponent;
-    }
-
-    void setTitle(String titleString)
+    public void setTitle(String titleString)
     {
         lblTitle.setText(titleString);
     }
 
     /** Tab button */
-    class TabButton extends JButton
+    static class TabButton extends JButton
     {
         private static final int DELTA = 6;
         private static final int SIZE = 17;
@@ -113,9 +109,7 @@ class TabComponentView extends JPanel
         }
     }
 
-    // CSOFF
     private static final MouseListener BUTTON_MOUSE_LISTENER = new MouseAdapter()
-    // CSON
     {
         @Override
         public void mouseEntered(MouseEvent e)
@@ -139,14 +133,4 @@ class TabComponentView extends JPanel
             }
         }
     };
-
-    static TabComponentView queryFileHeader(String title, Icon icon, final Runnable closeAction)
-    {
-        return new TabComponentView(null, title, icon, closeAction);
-    }
-
-    static TabComponentView queryResultHeader(IOutputComponent outputComponent, String title, Icon icon)
-    {
-        return new TabComponentView(outputComponent, title, icon, null);
-    }
 }

@@ -1,7 +1,7 @@
 package com.queryeer;
 
+import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
-import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -13,71 +13,104 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.OverlayLayout;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 import javax.swing.text.BadLocationException;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.apache.commons.lang3.time.DurationFormatUtils;
+import org.fife.rsta.ui.GoToDialog;
+import org.fife.rsta.ui.search.FindDialog;
+import org.fife.rsta.ui.search.ReplaceDialog;
+import org.fife.rsta.ui.search.SearchEvent;
+import org.fife.rsta.ui.search.SearchListener;
 import org.fife.ui.rsyntaxtextarea.SquiggleUnderlineHighlightPainter;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.TextEditorPane;
 import org.fife.ui.rtextarea.RTextScrollPane;
-import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
+import org.fife.ui.rtextarea.SearchContext;
+import org.fife.ui.rtextarea.SearchEngine;
+import org.fife.ui.rtextarea.SearchResult;
 
 import com.queryeer.QueryFileModel.State;
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
+import com.queryeer.api.service.IEventBus;
+import com.queryeer.components.TabComponent;
+import com.queryeer.event.CaretChangedEvent;
 
 import se.kuseman.payloadbuilder.api.session.IQuerySession;
 
 /** Content of a query editor. Text editor and a result panel separated with a split panel */
-class QueryFileView extends JPanel implements IQueryFile
+class QueryFileView extends JPanel implements IQueryFile, SearchListener
 {
+    private static final String GOTO = "GOTO";
+
+    private static final String REPLACE = "REPLACE";
+
+    private static final String FIND = "FIND";
+
     private static final String PASTE_SPECIAL = "PASTE_SPECIAL";
 
+    private final QueryFileModel file;
     private final JSplitPane splitPane;
     private final TextEditorPane textEditor;
+    private final FindDialog findDialog;
+    private final ReplaceDialog replaceDialog;
+    private final GoToDialog gotoDialog;
     private final JTabbedPane resultTabs;
-    private final QueryFileModel file;
     private final List<IOutputComponent> outputComponents;
+    private final List<IOutputToolbarActionFactory> toolbarActionFactories;
     private final JLabel labelRunTime;
     private final JLabel labelRowCount;
     private final JLabel labelExecutionStatus;
     private final Timer executionTimer;
+    private final JToolBar outputComponentToolbar = new JToolBar();
+    private final QueryFileChangeListener queryFileChangeListener = new QueryFileChangeListener();
+
+    /** Reuse the same event to avoid creating new objects on every change */
+    private final CaretChangedEvent caretEvent;
 
     private boolean resultCollapsed;
     private int prevDividerLocation;
 
-    QueryFileView(QueryFileModel file, List<IOutputExtension> outputExtensions, Consumer<String> textChangeAction, Consumer<QueryFileView> caretChangeListener)
+    QueryFileView(QueryFileModel file, IEventBus eventBus, List<IOutputComponent> outputComponents, List<IOutputToolbarActionFactory> toolbarActionFactories)
     {
         this.file = file;
-        this.outputComponents = outputExtensions.stream()
-                .map(e -> e.createResultComponent(this))
-                .filter(Objects::nonNull)
-                .collect(toList());
+        this.outputComponents = requireNonNull(outputComponents, "outputComponents");
+        this.toolbarActionFactories = requireNonNull(toolbarActionFactories, "toolbarActionFactories");
+        this.caretEvent = new CaretChangedEvent(file.getCaret());
 
         setLayout(new BorderLayout());
 
@@ -90,14 +123,38 @@ class QueryFileView extends JPanel implements IQueryFile
         textEditor.setBracketMatchingEnabled(true);
         textEditor.setTabSize(2);
         textEditor.setTabsEmulated(true);
-        textEditor.setText(file.getQuery());
+        textEditor.setText(file.getQuery(false));
 
-        // Paste special
+        JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
+
+        findDialog = new FindDialog(topFrame, this);
+        findDialog.setIconImages(Constants.APPLICATION_ICONS);
+        replaceDialog = new ReplaceDialog(topFrame, this);
+        replaceDialog.setIconImages(Constants.APPLICATION_ICONS);
+        SearchContext context = findDialog.getSearchContext();
+        replaceDialog.setSearchContext(context);
+        gotoDialog = new GoToDialog(topFrame);
+        gotoDialog.setIconImages(Constants.APPLICATION_ICONS);
+
         KeyStroke pasteSpecialKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK + InputEvent.SHIFT_DOWN_MASK);
-        InputMap inputMap = textEditor.getInputMap();
+        KeyStroke findKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke replaceKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke gotoKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK);
+
+        InputMap inputMap = textEditor.getInputMap(JComponent.WHEN_FOCUSED);
         inputMap.put(pasteSpecialKeyStroke, PASTE_SPECIAL);
+        inputMap.put(findKeyStroke, FIND);
+        inputMap.put(replaceKeyStroke, REPLACE);
+        inputMap.put(gotoKeyStroke, GOTO);
+
         textEditor.getActionMap()
                 .put(PASTE_SPECIAL, pasteSpecialAction);
+        textEditor.getActionMap()
+                .put(FIND, showFindDialogAction);
+        textEditor.getActionMap()
+                .put(REPLACE, showReplaceDialogAction);
+        textEditor.getActionMap()
+                .put(GOTO, showGotoLineAction);
 
         RTextScrollPane sp = new RTextScrollPane(textEditor);
         textEditor.getDocument()
@@ -106,10 +163,15 @@ class QueryFileView extends JPanel implements IQueryFile
                     @Override
                     protected void update()
                     {
-                        textChangeAction.accept(textEditor.getText());
+                        file.setQuery(textEditor.getText());
                     }
                 });
-        textEditor.addCaretListener(evt -> caretChangeListener.accept(this));
+        textEditor.addCaretListener(evt ->
+        {
+            int length = textEditor.getSelectionEnd() - textEditor.getSelectionStart();
+            file.setCaret(textEditor.getCaretLineNumber() + 1, textEditor.getCaretOffsetFromLineStart() + 1, textEditor.getCaretPosition(), textEditor.getSelectionStart(), length);
+            eventBus.publish(caretEvent);
+        });
 
         JPanel tabPanel = new JPanel();
         tabPanel.setLayout(new OverlayLayout(tabPanel));
@@ -122,17 +184,23 @@ class QueryFileView extends JPanel implements IQueryFile
         for (IOutputComponent ouputComponent : outputComponents)
         {
             resultTabs.add(ouputComponent.getComponent());
-            resultTabs.setTabComponentAt(index, TabComponentView.queryResultHeader(ouputComponent, ouputComponent.title(), ouputComponent.icon()));
+            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(ouputComponent));
             index++;
         }
 
-        JButton clearButton = new JButton(FontIcon.of(FontAwesome.REMOVE));
-        clearButton.setToolTipText("Clear");
-        clearButton.setOpaque(false);
-        clearButton.setAlignmentX(1.0f);
-        clearButton.setAlignmentY(0.0f);
+        // Populate toolbar
+        if (index > 0)
+        {
+            outputComponentChanged();
+        }
 
-        tabPanel.add(clearButton);
+        resultTabs.addChangeListener(l -> outputComponentChanged());
+
+        outputComponentToolbar.setOpaque(false);
+        outputComponentToolbar.setAlignmentX(1.0f);
+        outputComponentToolbar.setAlignmentY(0.0f);
+
+        tabPanel.add(outputComponentToolbar);
         tabPanel.add(resultTabs);
 
         splitPane = new JSplitPane();
@@ -161,100 +229,60 @@ class QueryFileView extends JPanel implements IQueryFile
         panelStatus.add(labelRowCount);
 
         executionTimer = new Timer(100, l -> setExecutionStats());
-        file.addPropertyChangeListener(l ->
-        {
-            if (QueryFileModel.STATE.equals(l.getPropertyName()))
-            {
-                handleStateChanged(file, (State) l.getNewValue());
-            }
-        });
 
+        file.addPropertyChangeListener(queryFileChangeListener);
         file.getQuerySession()
                 .setPrintWriter(getMessagesWriter());
     }
 
     @Override
-    public void focusMessages()
+    public String getSelectedText()
     {
-        int count = resultTabs.getTabCount();
-        for (int i = 0; i < count; i++)
+        return textEditor.getSelectedText();
+    }
+
+    @Override
+    public void searchEvent(SearchEvent e)
+    {
+        SearchEvent.Type type = e.getType();
+        SearchContext context = e.getSearchContext();
+        SearchResult result;
+
+        switch (type)
         {
-            IOutputComponent component = ((TabComponentView) resultTabs.getTabComponentAt(i)).getOutputComponent();
-            if (component != null
-                    && ITextOutputComponent.class.isAssignableFrom(component.getClass()))
-            {
-                resultTabs.setSelectedIndex(i);
-                return;
-            }
+            default:
+            case MARK_ALL:
+                result = SearchEngine.markAll(textEditor, context);
+                break;
+            case FIND:
+                result = SearchEngine.find(textEditor, context);
+                if (!result.wasFound()
+                        || result.isWrapped())
+                {
+                    UIManager.getLookAndFeel()
+                            .provideErrorFeedback(textEditor);
+                }
+                break;
+            case REPLACE:
+                result = SearchEngine.replace(textEditor, context);
+                if (!result.wasFound()
+                        || result.isWrapped())
+                {
+                    UIManager.getLookAndFeel()
+                            .provideErrorFeedback(textEditor);
+                }
+                break;
+            case REPLACE_ALL:
+                result = SearchEngine.replaceAll(textEditor, context);
+                JOptionPane.showMessageDialog(null, result.getCount() + " occurrences replaced.");
+                break;
         }
     }
 
-    @Override
-    public PrintWriter getMessagesWriter()
+    private void outputComponentChanged()
     {
-        int count = resultTabs.getTabCount();
-        for (int i = 0; i < count; i++)
-        {
-            IOutputComponent component = ((TabComponentView) resultTabs.getTabComponentAt(i)).getOutputComponent();
-            if (component != null
-                    && ITextOutputComponent.class.isAssignableFrom(component.getClass()))
-            {
-                return ((ITextOutputComponent) component).getTextWriter();
-            }
-        }
-        return null;
-    }
-    //
-    // @Override
-    // public <T extends IOutputComponent> void focusOutputComponent(Class<T> clazz)
-    // {
-    // int count = resultTabs.getTabCount();
-    // for (int i = 0; i < count; i++)
-    // {
-    // IOutputComponent component = ((TabComponentView) resultTabs.getTabComponentAt(i)).getOutputComponent();
-    // if (component != null
-    // && clazz.isAssignableFrom(component.getClass()))
-    // {
-    // resultTabs.setSelectedIndex(i);
-    // return;
-    // }
-    // }
-    // }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public <T extends IOutputComponent> T getOutputComponent(Class<T> clazz)
-    {
-        int count = resultTabs.getTabCount();
-        for (int i = 0; i < count; i++)
-        {
-            IOutputComponent component = ((TabComponentView) resultTabs.getTabComponentAt(i)).getOutputComponent();
-            if (component != null
-                    && clazz.isAssignableFrom(component.getClass()))
-            {
-                return (T) component;
-            }
-        }
-
-        throw new RuntimeException("No output component found with extension class " + clazz);
-    }
-
-    @Override
-    public IQuerySession getSession()
-    {
-        return file.getQuerySession();
-    }
-
-    @Override
-    public void incrementTotalRowCount()
-    {
-        file.incrementTotalRowCount();
-    }
-
-    @Override
-    public IOutputFormatExtension getOutputFormat()
-    {
-        return file.getOutputFormat();
+        OutputComponentTabComponent tabComponent = (OutputComponentTabComponent) resultTabs.getTabComponentAt(resultTabs.getSelectedIndex());
+        tabComponent.populateToolbar();
     }
 
     private void handleStateChanged(QueryFileModel file, State state)
@@ -271,18 +299,20 @@ class QueryFileView extends JPanel implements IQueryFile
 
                 // Clear state of output components and select the one
                 // that is choosen in toolbar
-                int count = resultTabs.getTabCount();
+                int count = outputComponents.size();
                 for (int i = 0; i < count; i++)
                 {
-                    IOutputComponent outputComponent = ((TabComponentView) resultTabs.getTabComponentAt(i)).getOutputComponent();
+                    IOutputComponent outputComponent = outputComponents.get(i);
                     outputComponent.clearState();
-                    if (selectedOutputExtension.getClass() == outputComponent.getExtensionClass())
+                    if (selectedOutputExtension != null
+                            && selectedOutputExtension.getResultOutputComponentClass() != null
+                            && outputComponent.getClass()
+                                    .isAssignableFrom(selectedOutputExtension.getResultOutputComponentClass()))
                     {
                         resultTabs.setSelectedIndex(i);
                     }
                 }
 
-                file.clearForExecution();
                 executionTimer.start();
                 clearHighLights();
 
@@ -315,6 +345,92 @@ class QueryFileView extends JPanel implements IQueryFile
         {
             focusMessages();
         }
+    }
+
+    /* IQueryFile */
+
+    @Override
+    public void focusMessages()
+    {
+        int count = outputComponents.size();
+        for (int i = 0; i < count; i++)
+        {
+            IOutputComponent component = outputComponents.get(i);
+            if (ITextOutputComponent.class.isAssignableFrom(component.getClass()))
+            {
+                resultTabs.setSelectedIndex(i);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public PrintWriter getMessagesWriter()
+    {
+        return getOutputComponent(ITextOutputComponent.class).getTextWriter();
+    }
+
+    @Override
+    public <T extends IOutputComponent> T getOutputComponent(Class<T> clazz)
+    {
+        int count = outputComponents.size();
+        for (int i = 0; i < count; i++)
+        {
+            IOutputComponent component = outputComponents.get(i);
+            if (clazz.isAssignableFrom(component.getClass()))
+            {
+                return clazz.cast(component);
+            }
+        }
+
+        throw new RuntimeException("No output component found with extension class " + clazz);
+    }
+
+    @Override
+    public IQuerySession getSession()
+    {
+        return file.getQuerySession();
+    }
+
+    @Override
+    public void incrementTotalRowCount()
+    {
+        file.incrementTotalRowCount();
+    }
+
+    @Override
+    public IOutputFormatExtension getOutputFormat()
+    {
+        return file.getOutputFormat();
+    }
+
+    @Override
+    public void clearExecutionStats()
+    {
+        labelRunTime.setText("");
+        labelRowCount.setText("");
+    }
+
+    /* END IQueryFile */
+
+    void close()
+    {
+        file.removePropertyChangeListener(queryFileChangeListener);
+    }
+
+    void showFind()
+    {
+        showFindDialogAction.actionPerformed(null);
+    }
+
+    void showReplace()
+    {
+        showReplaceDialogAction.actionPerformed(null);
+    }
+
+    void showGoToLine()
+    {
+        showGotoLineAction.actionPerformed(null);
     }
 
     // CSOFF
@@ -375,6 +491,67 @@ class QueryFileView extends JPanel implements IQueryFile
         }
     };
 
+    /** Show find */
+    private final Action showFindDialogAction = new AbstractAction()
+    {
+        @Override
+        public void actionPerformed(ActionEvent e)
+        {
+            if (replaceDialog.isVisible())
+            {
+                replaceDialog.setVisible(false);
+            }
+            findDialog.setVisible(true);
+        }
+    };
+
+    /** Show replace */
+    private final Action showReplaceDialogAction = new AbstractAction()
+    {
+        @Override
+        public void actionPerformed(ActionEvent e)
+        {
+            if (findDialog.isVisible())
+            {
+                findDialog.setVisible(false);
+            }
+            replaceDialog.setVisible(true);
+        }
+    };
+
+    /** Goto line */
+    private final Action showGotoLineAction = new AbstractAction()
+    {
+        @Override
+        public void actionPerformed(ActionEvent e)
+        {
+            if (findDialog.isVisible())
+            {
+                findDialog.setVisible(false);
+            }
+            if (replaceDialog.isVisible())
+            {
+                replaceDialog.setVisible(false);
+            }
+            gotoDialog.setMaxLineNumberAllowed(textEditor.getLineCount());
+            gotoDialog.setVisible(true);
+            int line = gotoDialog.getLineNumber();
+            if (line > 0)
+            {
+                try
+                {
+                    textEditor.setCaretPosition(textEditor.getLineStartOffset(line - 1));
+                }
+                catch (BadLocationException ble)
+                { // Never happens
+                    UIManager.getLookAndFeel()
+                            .provideErrorFeedback(textEditor);
+                    ble.printStackTrace();
+                }
+            }
+        }
+    };
+
     private Icon getIconFromState(State state)
     {
         // CSOFF
@@ -398,21 +575,6 @@ class QueryFileView extends JPanel implements IQueryFile
     {
         labelRunTime.setText(DurationFormatUtils.formatDurationHMS(file.getExecutionTime()));
         labelRowCount.setText(String.valueOf(file.getTotalRowCount()));
-    }
-
-    int getCaretLineNumber()
-    {
-        return textEditor.getCaretLineNumber() + 1;
-    }
-
-    int getCaretOffsetFromLineStart()
-    {
-        return textEditor.getCaretOffsetFromLineStart() + 1;
-    }
-
-    int getCaretPosition()
-    {
-        return textEditor.getCaretPosition();
     }
 
     void toggleResultPane()
@@ -454,10 +616,10 @@ class QueryFileView extends JPanel implements IQueryFile
                 int startOffset = textEditor.getLineStartOffset(i);
                 int endOffset = textEditor.getLineEndOffset(i) - 1;
 
-                if (between(startOffset, endOffset, selStart)
+                if (Utils.between(startOffset, endOffset, selStart)
                         || (startOffset > selStart
                                 && endOffset <= selEnd)
-                        || between(startOffset, endOffset, selEnd))
+                        || Utils.between(startOffset, endOffset, selEnd))
                 {
                     if (addComments == null)
                     {
@@ -515,13 +677,6 @@ class QueryFileView extends JPanel implements IQueryFile
         return file;
     }
 
-    String getQuery(boolean selected)
-    {
-        return selected
-                && !isBlank(textEditor.getSelectedText()) ? textEditor.getSelectedText()
-                        : textEditor.getText();
-    }
-
     void saved()
     {
         textEditor.discardAllEdits();
@@ -559,9 +714,47 @@ class QueryFileView extends JPanel implements IQueryFile
         return true;
     }
 
-    private boolean between(int start, int end, int value)
+    /** Model listener */
+    private class QueryFileChangeListener implements PropertyChangeListener
     {
-        return value >= start
-                && value <= end;
+        @Override
+        public void propertyChange(PropertyChangeEvent evt)
+        {
+            if (QueryFileModel.STATE.equals(evt.getPropertyName()))
+            {
+                handleStateChanged(file, (State) evt.getNewValue());
+            }
+        }
+    }
+
+    private class OutputComponentTabComponent extends TabComponent
+    {
+        private IOutputComponent outputComponent;
+        private List<JButton> toolbarActions;
+
+        OutputComponentTabComponent(IOutputComponent outputComponent)
+        {
+            super(outputComponent.title(), outputComponent.icon());
+            this.outputComponent = outputComponent;
+        }
+
+        void populateToolbar()
+        {
+            outputComponentToolbar.removeAll();
+            if (toolbarActions == null)
+            {
+                toolbarActions = toolbarActionFactories.stream()
+                        .map(f -> f.create(outputComponent))
+                        .filter(Objects::nonNull)
+                        .flatMap(l -> l.stream())
+                        .sorted(Comparator.comparingInt(IExtensionAction::order))
+                        .map(a -> new JButton(a.getAction()))
+                        .collect(toList());
+            }
+            for (JButton button : toolbarActions)
+            {
+                outputComponentToolbar.add(button);
+            }
+        }
     }
 }

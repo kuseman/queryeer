@@ -67,6 +67,13 @@ final class Utils
         return components;
     }
 
+    /** Return true or false depending on if value is between start and end. Both inclusive */
+    static boolean between(int start, int end, int value)
+    {
+        return value >= start
+                && value <= end;
+    }
+
     /** Fetches latest version (tag) from github */
     static String getLatestTag()
     {

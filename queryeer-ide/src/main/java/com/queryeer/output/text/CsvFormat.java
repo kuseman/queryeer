@@ -2,6 +2,8 @@ package com.queryeer.output.text;
 
 import static java.util.Objects.requireNonNull;
 
+import java.io.Writer;
+
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 
@@ -32,19 +34,19 @@ class CsvFormat implements IOutputFormatExtension
     }
 
     @Override
-    public OutputWriter createOutputWriter(IQueryFile file)
+    public OutputWriter createOutputWriter(IQueryFile file, Writer writer)
     {
-        return new CsvTextOutputWriter(file, configurable.getSettings());
+        return new CsvTextOutputWriter(writer, file, configurable.getSettings());
     }
 
     /** CSV Output writer */
     static class CsvTextOutputWriter extends CsvOutputWriter
     {
-        private IQueryFile file;
+        private final IQueryFile file;
 
-        CsvTextOutputWriter(IQueryFile file, CsvSettings settings)
+        CsvTextOutputWriter(Writer writer, IQueryFile file, CsvSettings settings)
         {
-            super(file.getMessagesWriter(), settings);
+            super(writer, settings);
             this.file = file;
         }
 

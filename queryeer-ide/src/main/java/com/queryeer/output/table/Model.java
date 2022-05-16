@@ -1,14 +1,13 @@
 package com.queryeer.output.table;
 
+import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.ArrayUtils.EMPTY_STRING_ARRAY;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
-import java.io.IOException;
-import java.io.StringWriter;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.SwingUtilities;
 import javax.swing.event.EventListenerList;
@@ -17,28 +16,30 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.queryeer.output.table.TableOutputWriter.PairList;
+import com.queryeer.output.table.TableOutputWriter.RowList;
 
 /** Resulting model of a query */
 class Model implements TableModel
 {
     private static final String NO_COLUMN_NAME = "(No column name)";
-    private final List<PairList> rows = new ArrayList<>(50);
-    private String[] columns = EMPTY_STRING_ARRAY;
-    private boolean complete;
+    private final List<RowList> rows = new ArrayList<>(50);
+    private List<String> columns = emptyList();
     private int lastNotifyRowIndex = 0;
     private EventListenerList listenerList = new EventListenerList();
 
+    Map<Object, Object> internCache = new HashMap<>();
+
     /** Add row */
-    void addRow(PairList row)
+    void addRow(RowList row)
     {
-        if (complete)
+        // Intern values to minimize heap allocations
+        int size = row.size();
+        for (int i = 0; i < size; i++)
         {
-            throw new IllegalArgumentException("This result model is completed");
+            Object value = row.get(i);
+            row.set(i, internCache.computeIfAbsent(value, k -> value));
         }
 
         rows.add(row);
@@ -48,32 +49,17 @@ class Model implements TableModel
         }
     }
 
-    /** Called when result is completed. */
-    void done()
-    {
-        complete = true;
-        notifyChanges();
-    }
-
     /** Set columns */
-    void setColumns(String[] columns)
+    void setColumns(List<String> columns)
     {
-        this.columns = requireNonNull(columns);
-        SwingUtilities.invokeLater(() -> fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW)));
-    }
-
-    /** Move values, inserting nulls at 'atIndex' 'length' times */
-    void moveValues(int atIndex, int length)
-    {
-        List<Pair<String, Object>> padding = Collections.nCopies(length, Pair.of(null, null));
-        for (int i = 0; i < getRowCount(); i++)
+        if (requireNonNull(columns).size() > 0)
         {
-            rows.get(i)
-                    .addAll(atIndex, padding);
+            this.columns = columns;
+            SwingUtilities.invokeLater(() -> fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW)));
         }
     }
 
-    String[] getColumns()
+    List<String> getColumns()
     {
         return columns;
     }
@@ -87,13 +73,13 @@ class Model implements TableModel
     @Override
     public int getColumnCount()
     {
-        return columns.length;
+        return columns.size();
     }
 
     @Override
     public String getColumnName(int column)
     {
-        String col = columns[column];
+        String col = columns.get(column);
         if (column > 0
                 && isBlank(col))
         {
@@ -110,15 +96,13 @@ class Model implements TableModel
             return null;
         }
 
-        PairList row = rows.get(rowIndex);
-
+        RowList row = rows.get(rowIndex);
         if (columnIndex >= row.size())
         {
             return null;
         }
 
-        return row.get(columnIndex)
-                .getValue();
+        return row.get(columnIndex);
     }
 
     @Override
@@ -167,46 +151,6 @@ class Model implements TableModel
             }
             lastNotifyRowIndex = size;
         }
-    }
-
-    /**
-     * Get cell label for provided object. Produces a minimal json for array and map objects
-     */
-    static String getLabel(Object value, int size)
-    {
-        StringWriter sw = new StringWriter(size);
-        try (JsonGenerator generator = Utils.WRITER.getFactory()
-                .createGenerator(sw))
-        {
-            if (value instanceof List)
-            {
-                generator.writeStartArray();
-                @SuppressWarnings("unchecked")
-                List<Object> list = (List<Object>) value;
-
-                for (Object obj : list)
-                {
-                    generator.writeObject(obj);
-                    if (sw.getBuffer()
-                            .length() > size)
-                    {
-                        return sw.toString()
-                                .substring(0, size)
-                               + "...";
-                    }
-                }
-            }
-            else
-            {
-                generator.writeObject(value);
-            }
-        }
-        catch (IOException e)
-        {
-        }
-
-        return sw.getBuffer()
-                .toString();
     }
 
     /** Return pretty json for provided value */

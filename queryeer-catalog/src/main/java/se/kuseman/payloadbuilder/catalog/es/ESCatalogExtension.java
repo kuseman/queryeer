@@ -22,6 +22,10 @@ import javax.swing.event.ListDataListener;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.AutoCompletionComboBox;
+import com.queryeer.api.event.QueryFileChangedEvent;
+import com.queryeer.api.event.QueryFileStateEvent;
+import com.queryeer.api.event.QueryFileStateEvent.State;
+import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -129,21 +133,56 @@ class ESCatalogExtension implements ICatalogExtension
         return ESCatalogConfigurable.class;
     }
 
-    @Override
-    public void setup(String catalogAlias, IQuerySession querySession)
+    @Subscribe
+    private void queryFileChanged(QueryFileChangedEvent event)
     {
+        update();
+    }
+
+    @Subscribe
+    private void queryFileStateChanged(QueryFileStateEvent event)
+    {
+        IQueryFile queryFile = event.getQueryFile();
+
+        if (queryFileProvider.getCurrentFile() == queryFile)
+        {
+            // Update quick properties with changed properties from query session
+            if (event.getState() == State.AFTER_QUERY_EXECUTE)
+            {
+                update();
+            }
+            else if (event.getState() == State.BEFORE_QUERY_EXECUTE)
+            {
+                setup();
+            }
+        }
+    }
+
+    private void setup()
+    {
+        IQueryFile queryFile = queryFileProvider.getCurrentFile();
+        if (queryFile == null)
+        {
+            return;
+        }
+        IQuerySession session = queryFile.getSession();
         Connection connection = (Connection) quickPropertiesPanel.connections.getSelectedItem();
         if (connection != null)
         {
-            connection.setup(querySession, catalogAlias);
+            connection.setup(session, catalogAlias);
         }
         String index = (String) quickPropertiesPanel.indices.getSelectedItem();
-        querySession.setCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY, index);
+        session.setCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY, index);
     }
 
-    @Override
-    public void update(String catalogAlias, IQuerySession querySession)
+    private void update()
     {
+        IQueryFile queryFile = queryFileProvider.getCurrentFile();
+        if (queryFile == null)
+        {
+            return;
+        }
+        IQuerySession querySession = queryFile.getSession();
         // Try to find correct connection to select if changed
         String endpoint = querySession.getCatalogProperty(catalogAlias, ESCatalog.ENDPOINT_KEY);
         String index = querySession.getCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY);
@@ -221,11 +260,7 @@ class ESCatalogExtension implements ICatalogExtension
             connections = new JComboBox<>(new ConnectionsSelectionModel());
             connections.addItemListener(l ->
             {
-                IQueryFile queryFile = queryFileProvider.getCurrentFile();
-                if (queryFile != null)
-                {
-                    setup(catalogAlias, queryFile.getSession());
-                }
+                setup();
                 Connection connection = (Connection) connections.getSelectedItem();
                 indicesModel.removeAllElements();
                 if (connection != null)
@@ -242,11 +277,7 @@ class ESCatalogExtension implements ICatalogExtension
             indices = new JComboBox<>(indicesModel);
             indices.addItemListener(l ->
             {
-                IQueryFile queryFile = queryFileProvider.getCurrentFile();
-                if (queryFile != null)
-                {
-                    setup(catalogAlias, queryFile.getSession());
-                }
+                setup();
             });
 
             indices.setPrototypeDisplayValue(indexPrototype);

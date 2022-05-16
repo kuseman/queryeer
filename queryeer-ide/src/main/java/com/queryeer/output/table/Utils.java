@@ -3,6 +3,7 @@ package com.queryeer.output.table;
 import java.io.IOException;
 import java.io.StringReader;
 
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.w3c.dom.Node;
@@ -65,8 +66,11 @@ class Utils
         try
         {
             final InputSource src = new InputSource(new StringReader(xml));
-            final Node document = DocumentBuilderFactory.newInstance()
-                    .newDocumentBuilder()
+
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+
+            final Node document = factory.newDocumentBuilder()
                     .parse(src)
                     .getDocumentElement();
             final Boolean keepDeclaration = Boolean.valueOf(xml.startsWith("<?xml"));

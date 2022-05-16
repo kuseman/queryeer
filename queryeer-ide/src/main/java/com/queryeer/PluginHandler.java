@@ -175,7 +175,7 @@ class PluginHandler
         else
         {
             urls = Arrays.stream(Optional.of(dir.listFiles())
-                    .orElse(new File[] {}))
+                    .orElse(new File[0]))
                     .filter(f -> f.getName()
                             .endsWith(".jar"))
                     .sorted()
@@ -238,7 +238,7 @@ class PluginHandler
         }
 
         final URL[] urls = Arrays.stream(Optional.of(sharedDir.listFiles())
-                .orElse(new File[] {}))
+                .orElse(new File[0]))
                 .filter(f -> f.getName()
                         .endsWith(".jar"))
                 .sorted()

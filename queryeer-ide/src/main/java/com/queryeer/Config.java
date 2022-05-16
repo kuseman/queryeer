@@ -2,12 +2,14 @@ package com.queryeer;
 
 import static com.queryeer.QueryeerController.MAPPER;
 import static java.util.Collections.emptyList;
+import static java.util.Collections.unmodifiableList;
 import static java.util.stream.Collectors.toMap;
 import static org.apache.commons.lang3.StringUtils.lowerCase;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -17,15 +19,15 @@ import java.util.Set;
 import java.util.function.Function;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
 import com.queryeer.api.service.IConfig;
-
-import se.kuseman.payloadbuilder.core.CsvOutputWriter.CsvSettings;
-import se.kuseman.payloadbuilder.core.JsonOutputWriter.JsonSettings;
+import com.queryeer.domain.ICatalogModel;
 
 /** Queryeer config */
 class Config implements IConfig
@@ -35,13 +37,13 @@ class Config implements IConfig
 
     private static final int MAX_RECENT_FILES = 10;
     @JsonProperty
-    private List<Catalog> catalogs = new ArrayList<>();
+    @JsonDeserialize(
+            contentAs = Catalog.class)
+    private List<ICatalogModel> catalogs = new ArrayList<>();
     @JsonProperty
     private String lastOpenPath;
     @JsonProperty
     private final List<String> recentFiles = new ArrayList<>();
-    // @JsonProperty
-    // private final OutputConfig outputConfig = new OutputConfig();
     private File etcFolder;
 
     Config(File etcFolder) throws IOException
@@ -53,22 +55,21 @@ class Config implements IConfig
         {
             file = new File(etcFolder, CONFIG_DEFAULT);
         }
-
-        // Read existing config
-        if (file.exists())
+        else
         {
+            // Read existing config
             MAPPER.readerForUpdating(this)
                     .readValue(file);
         }
     }
 
-    List<Catalog> getCatalogs()
+    List<ICatalogModel> getCatalogs()
     {
         if (catalogs == null)
         {
             return emptyList();
         }
-        return catalogs;
+        return unmodifiableList(catalogs);
     }
 
     String getLastOpenPath()
@@ -85,11 +86,6 @@ class Config implements IConfig
     {
         return recentFiles;
     }
-
-    // public OutputConfig getOutputConfig()
-    // {
-    // return outputConfig;
-    // }
 
     void appendRecentFile(String file)
     {
@@ -127,35 +123,12 @@ class Config implements IConfig
         }
     }
 
-    // @Override
-    // public Map<String, Object> loadExtensionConfig(String name)
-    // {
-    // return loadExtensionConfig(name);
-    // }
-    //
-    // public void saveOutputExtensionConfig(IOutputExtension extension, Map<String, Object> config)
-    // {
-    // saveExtensionConfig(extension.getName(), config);
-    // }
-    //
-    // /** Load extension config for provided extension class */
-    // Map<String, Object> loadCatalogExtensionConfig(ICatalogExtension extension)
-    // {
-    // return loadExtensionConfig(extension.getName());
-    // }
-    //
-    // /** Save provided catalog extension config */
-    // void saveCatalogExtensionConfig(ICatalogExtension extension, Map<String, Object> config)
-    // {
-    // saveExtensionConfig(extension.getName(), config);
-    // }
-
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> loadExtensionConfig(String name)
     {
         // First try regular config
-        File configFile = new File(etcFolder, name + ".cfg");
+        File configFile = new File(etcFolder, FilenameUtils.getName(name + ".cfg"));
         if (!configFile.exists())
         {
             return new HashMap<>();
@@ -181,7 +154,7 @@ class Config implements IConfig
     @Override
     public void saveExtensionConfig(String name, Map<String, Object> config)
     {
-        File configFile = new File(etcFolder, name + ".cfg");
+        File configFile = new File(etcFolder, FilenameUtils.getName(name + ".cfg"));
         try
         {
             QueryeerController.MAPPER.writerWithDefaultPrettyPrinter()
@@ -194,24 +167,10 @@ class Config implements IConfig
     }
 
     /** Load config with provide etc-folder */
-    void loadCatalogExtensions(ServiceLoader serviceLoader) throws IOException
+    void loadCatalogExtensions(List<ICatalogExtensionFactory> catalogExtensionFactories) throws IOException
     {
-        // File file = new File(etcFolder, CONFIG);
-        // if (!file.exists())
-        // {
-        // file = new File(etcFolder, CONFIG_DEFAULT);
-        // }
-
-        // try
-        // {
-        // if (file.exists())
-        // {
-        // config = MAPPER.readerForUpdating(config)
-        // .readValue(file);
-        // }
-
         Set<String> seenAliases = new HashSet<>();
-        for (Config.Catalog catalog : catalogs)
+        for (ICatalogModel catalog : catalogs)
         {
             if (!seenAliases.add(lowerCase(catalog.getAlias())))
             {
@@ -219,13 +178,10 @@ class Config implements IConfig
             }
         }
 
-        serviceLoader.getAll(ICatalogExtensionFactory.class);
-
         // Load extension according to config
         // Auto add missing extension with the extensions default alias
-        Map<String, ICatalogExtensionFactory> extensions = serviceLoader.getAll(ICatalogExtensionFactory.class)
-                .stream()
-                .sorted((a, b) -> Integer.compare(a.order(), b.order()))
+        Map<String, ICatalogExtensionFactory> extensions = catalogExtensionFactories.stream()
+                .sorted(Comparator.comparingInt(ICatalogExtensionFactory::order))
                 .collect(toMap(c -> c.getClass()
                         .getName(), Function.identity(), (e1, e2) -> e1, LinkedHashMap::new));
 
@@ -234,25 +190,25 @@ class Config implements IConfig
         // Loop configured extensions
         boolean configChanged = false;
 
-        for (Config.Catalog catalog : catalogs)
+        for (ICatalogModel catalog : catalogs)
         {
-            ICatalogExtensionFactory factory = extensions.get(catalog.getFactory());
+            ICatalogExtensionFactory factory = extensions.get(((Catalog) catalog).getFactory());
             processedFactories.add(factory);
             // Disable current catalog if no extension found
             if (factory == null)
             {
                 configChanged = true;
-                catalog.disabled = true;
+                ((Catalog) catalog).disabled = true;
             }
             else
             {
-                catalog.catalogExtension = factory.create(catalog.alias);
-                if (catalog.disabled)
+                ((Catalog) catalog).catalogExtension = factory.create(catalog.getAlias());
+                if (catalog.isDisabled())
                 {
                     configChanged = true;
                 }
                 // Enable config
-                catalog.disabled = false;
+                ((Catalog) catalog).disabled = false;
             }
         }
 
@@ -291,15 +247,10 @@ class Config implements IConfig
         {
             save();
         }
-        // }
-        // catch (Exception e)
-        // {
-        // throw new RuntimeException("Error loading config from " + file.getAbsolutePath(), e);
-        // }
     }
 
     /** Catalog extension */
-    static class Catalog
+    static class Catalog implements ICatalogModel
     {
         @JsonProperty
         private String alias;
@@ -311,6 +262,7 @@ class Config implements IConfig
         @JsonIgnore
         private ICatalogExtension catalogExtension;
 
+        @Override
         public String getAlias()
         {
             return alias;
@@ -321,33 +273,16 @@ class Config implements IConfig
             return factory;
         }
 
+        @Override
         public boolean isDisabled()
         {
             return disabled;
         }
 
+        @Override
         public ICatalogExtension getCatalogExtension()
         {
             return catalogExtension;
-        }
-    }
-
-    /** Output configuration */
-    static class OutputConfig
-    {
-        @JsonProperty
-        private final CsvSettings csvSettings = new CsvSettings();
-        @JsonProperty
-        private final JsonSettings jsonSettings = new JsonSettings();
-
-        public CsvSettings getCsvSettings()
-        {
-            return csvSettings;
-        }
-
-        public JsonSettings getJsonSettings()
-        {
-            return jsonSettings;
         }
     }
 }

@@ -1,18 +1,21 @@
 package com.queryeer.output.table;
 
+import static java.util.Arrays.asList;
+
 import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Stack;
+
+import javax.swing.SwingUtilities;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.tuple.Pair;
 
 import com.queryeer.api.IQueryFile;
 
@@ -30,8 +33,8 @@ class TableOutputWriter implements OutputWriter
         this.queryFile = Objects.requireNonNull(queryFile, "queryFile");
     }
 
-    private final Stack<Object> parent = new Stack<>();
-    private final Stack<String> currentField = new Stack<>();
+    private final Deque<Object> parent = new ArrayDeque<>();
+    private final Deque<String> currentField = new ArrayDeque<>();
 
     @Override
     public void initResult(String[] columns)
@@ -39,24 +42,25 @@ class TableOutputWriter implements OutputWriter
         // Print previous model row count
         if (model != null)
         {
-            // model.done();
-
+            model.internCache = null;
             int rowCount = model.getRowCount();
             queryFile.getMessagesWriter()
                     .println(String.valueOf(rowCount) + " row(s) selected" + System.lineSeparator());
         }
 
         this.model = new Model();
-        this.model.setColumns(columns);
-        // Add model to output component
-        getTablesOutputComponent().addResult(this.model);
+        this.model.setColumns(asList(columns));
+        SwingUtilities.invokeLater(() -> getTablesOutputComponent().addResult(this.model));
     }
 
     @Override
     public void close()
     {
-        getTablesOutputComponent().resizeLastTablesColumns();
-        // model.done();
+        if (model != null)
+        {
+            model.internCache = null;
+        }
+        SwingUtilities.invokeLater(() -> getTablesOutputComponent().resizeLastTablesColumns());
     }
 
     @Override
@@ -69,86 +73,8 @@ class TableOutputWriter implements OutputWriter
             return;
         }
 
-        // Adjust columns
-        PairList pairList = getValue(model.getRowCount() + 1);
-        // Adjust columns in model
-        if (!pairList.matchesModelColumns)
-        {
-            int count = model.getColumnCount();
-            int listCount = pairList.size();
-            int newColumnsAdjust = 0;
-            boolean changeModelColumns = count != listCount;
-
-            // Don't need to check row_id (first) columns
-            for (int i = 1; i < count; i++)
-            {
-                String modelColumn = model.getColumns()[i];
-                String listColumn = (i + newColumnsAdjust) < listCount ? pairList.get(i + newColumnsAdjust)
-                        .getKey()
-                        : null;
-
-                // New column that is about to be added last, mark
-                // model to be changed and move on
-                if (listColumn == null)
-                {
-                    changeModelColumns = true;
-                    continue;
-                }
-
-                // Find out if we should pad previous values or new rows values
-                if (!modelColumn.equalsIgnoreCase(listColumn))
-                {
-                    // Step forward in pairList until we find the current column
-                    int c = findListColumn(pairList, modelColumn, i + newColumnsAdjust);
-                    // CSOFF
-                    if (c == -1)
-                    // CSON
-                    {
-                        // Pad current row with null
-                        pairList.add(i + newColumnsAdjust, Pair.of(modelColumn, null));
-                    }
-                    else
-                    {
-                        changeModelColumns = true;
-                        newColumnsAdjust += c;
-                        model.moveValues(i, c);
-                    }
-                }
-            }
-
-            if (changeModelColumns)
-            {
-                model.setColumns(pairList.columns.toArray(ArrayUtils.EMPTY_STRING_ARRAY));
-            }
-        }
-
-        model.addRow(pairList);
-    }
-
-    Model getModel()
-    {
-        return model;
-    }
-
-    /**
-     * Tries to find provided column in povided list starting at start index.
-     *
-     * @return Returns number of steps away or -1 if not found
-     */
-    private int findListColumn(PairList list, String column, int startIndex)
-    {
-        int size = list.size();
-        int steps = 0;
-        for (int i = startIndex; i < size; i++)
-        {
-            if (column.equalsIgnoreCase(list.get(i)
-                    .getKey()))
-            {
-                return steps;
-            }
-            steps++;
-        }
-        return -1;
+        RowList rowList = getValue(model.getRowCount() + 1);
+        ColumnsMerger.merge(model, rowList);
     }
 
     @Override
@@ -196,31 +122,31 @@ class TableOutputWriter implements OutputWriter
         if (parent.size() == 0)
         {
             // CSOFF
-            parent.push(new PairList(10));
+            parent.addFirst(new RowList(model.getRowCount() + 1, 10));
             // CSON
         }
         else
         {
-            parent.push(new LinkedHashMap<>());
+            parent.addFirst(new LinkedHashMap<>());
         }
     }
 
     @Override
     public void endObject()
     {
-        putValue(parent.pop());
+        putValue(parent.removeFirst());
     }
 
     @Override
     public void startArray()
     {
-        parent.push(new ArrayList<>());
+        parent.addFirst(new ArrayList<>());
     }
 
     @Override
     public void endArray()
     {
-        putValue(parent.pop());
+        putValue(parent.removeFirst());
     }
 
     @SuppressWarnings("unchecked")
@@ -229,34 +155,34 @@ class TableOutputWriter implements OutputWriter
         // Top of stack put value back
         if (parent.isEmpty())
         {
-            parent.push(value);
+            parent.addFirst(value);
             return;
         }
 
-        Object p = parent.peek();
+        Object p = parent.peekFirst();
 
-        if (p instanceof PairList)
+        if (p instanceof RowList)
         {
             // Find out where to put this entry
-            PairList list = (PairList) p;
-            String column = currentField.pop();
-            // Adjust for row_id column
-            int columnIndex = list.size() + 1;
+            RowList list = (RowList) p;
+            String column = currentField.removeFirst();
+            int columnIndex = list.size();
 
             // Flag that the list is not matching model columns
             // model needs to adjust later on
             if (list.matchesModelColumns
                     && (columnIndex >= model.getColumnCount()
-                            || !column.equalsIgnoreCase(model.getColumns()[columnIndex])))
+                            || !column.equalsIgnoreCase(model.getColumns()
+                                    .get(columnIndex))))
             {
                 list.matchesModelColumns = false;
             }
 
-            list.add(Pair.of(column, value));
+            list.add(column, value);
         }
         else if (p instanceof Map)
         {
-            ((Map<String, Object>) p).put(currentField.pop(), value);
+            ((Map<String, Object>) p).put(currentField.removeFirst(), value);
         }
         else if (p instanceof List)
         {
@@ -270,50 +196,37 @@ class TableOutputWriter implements OutputWriter
     }
 
     /** Returns written value and clears state. */
-    private PairList getValue(int rowNumber)
+    private RowList getValue(int rowNumber)
     {
         currentField.clear();
-        Object v = parent.pop();
-        if (!(v instanceof PairList))
+        Object v = parent.removeFirst();
+        if (!(v instanceof RowList))
         {
-            throw new RuntimeException("Expected a list of string/value pairs but got " + v);
+            throw new RuntimeException("Expected a RowList but got " + v);
         }
 
-        PairList result = (PairList) v;
-        result.add(0, Pair.of("", rowNumber));
-        return (PairList) v;
+        RowList result = (RowList) v;
+        return result;
     }
 
     /** Pair list. */
-    static class PairList extends ArrayList<Pair<String, Object>>
+    static class RowList extends ArrayList<Object>
     {
-        static final PairList EMPTY = new PairList(0);
-        private final List<String> columns;
-        private boolean matchesModelColumns = true;
+        List<String> columns;
+        boolean matchesModelColumns = true;
 
-        private PairList(int capacity)
+        RowList(int rowId, int capacity)
         {
             super(capacity);
             columns = new ArrayList<>(capacity);
+            // Add first row id column
+            add("", rowId);
         }
 
-        List<String> getColumns()
+        void add(String column, Object value)
         {
-            return columns;
-        }
-
-        @Override
-        public void add(int index, Pair<String, Object> pair)
-        {
-            columns.add(index, pair.getKey());
-            super.add(index, pair);
-        }
-
-        @Override
-        public boolean add(Pair<String, Object> pair)
-        {
-            columns.add(pair.getKey());
-            return super.add(pair);
+            columns.add(column);
+            add(value);
         }
     }
 }

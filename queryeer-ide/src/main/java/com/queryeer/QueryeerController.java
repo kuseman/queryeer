@@ -6,6 +6,7 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FileUtils.byteCountToDisplaySize;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
@@ -13,33 +14,35 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Consumer;
 
-import javax.swing.ButtonGroup;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 
 import org.apache.commons.io.FilenameUtils;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.QueryFileModel.State;
+import com.queryeer.api.event.QueryFileChangedEvent;
+import com.queryeer.api.event.QueryFileStateEvent;
+import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.service.IEventBus;
+import com.queryeer.components.CatalogExtensionViewFactory;
+import com.queryeer.domain.ICatalogModel;
+import com.queryeer.event.CaretChangedEvent;
+import com.queryeer.event.QueryFileClosingEvent;
+import com.queryeer.event.ShowOptionsEvent;
 
 /** Main controller for Queryeer */
 class QueryeerController implements PropertyChangeListener
@@ -49,13 +52,8 @@ class QueryeerController implements PropertyChangeListener
     private final QueryeerView view;
     private final QueryeerModel model;
     private final Config config;
-    private final List<IOutputExtension> outputExtensions;
-    private final List<IOutputFormatExtension> outputFormatExtensions;
-
-    private final List<CatalogExtensionView> catalogExtensionViews = new ArrayList<>();
+    private final IEventBus eventBus;
     private final VariablesDialog variablesDialog;
-    private final CaretChangedListener caretChangedListener = new CaretChangedListener();
-    private final ButtonGroup defaultGroup = new ButtonGroup();
     private final OptionsDialog optionsDialog;
     private final AboutDialog aboutDialog;
 
@@ -63,19 +61,18 @@ class QueryeerController implements PropertyChangeListener
     private final String version;
     private QueryFileProvider queryFileProvider;
 
-    QueryeerController(ServiceLoader serviceLoader, QueryeerView view, QueryeerModel model)
+    QueryeerController(Config config, QueryFileProvider queryFileProvider, IEventBus eventBus, QueryeerModel model, QueryeerView view, OptionsDialog optionsDialog,
+            CatalogExtensionViewFactory catalogExtensionViewFactory)
     {
-        this.config = requireNonNull(requireNonNull(serviceLoader, "serviceLoader").get(Config.class), "config");
-        this.outputExtensions = requireNonNull(serviceLoader.getAll(IOutputExtension.class), "outputExtensions");
-        this.outputFormatExtensions = requireNonNull(serviceLoader.getAll(IOutputFormatExtension.class), "outputFormatExtensions");
-        this.queryFileProvider = requireNonNull(serviceLoader.get(QueryFileProvider.class), "queryFileProvider");
         this.view = requireNonNull(view, "view");
+        this.config = requireNonNull(config, "config");
+
+        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        this.eventBus = requireNonNull(eventBus, "eventBus");
         this.model = requireNonNull(model, "model");
         this.model.addPropertyChangeListener(this);
         this.variablesDialog = new VariablesDialog(view);
-        this.optionsDialog = new OptionsDialog(view, serviceLoader);
-        this.outputExtensions.sort((a, b) -> Integer.compare(a.order(), b.order()));
-        this.outputFormatExtensions.sort((a, b) -> Integer.compare(a.order(), b.order()));
+        this.optionsDialog = requireNonNull(optionsDialog, "optionsDialog");
 
         if (!isBlank(QueryeerView.class.getPackage()
                 .getImplementationVersion()))
@@ -90,34 +87,22 @@ class QueryeerController implements PropertyChangeListener
 
         this.aboutDialog = new AboutDialog(view, version);
 
-        init();
+        init(catalogExtensionViewFactory);
     }
 
     // CSOFF
-    private void init()
+    private void init(CatalogExtensionViewFactory catalogExtensionViewFactory)
     // CSON
     {
         view.setTitle("Queryeer IDE - " + version);
-        view.bindOutputExtensions(outputExtensions);
         view.setActionHandler(this::handleViewAction);
         view.setOpenRecentFileConsumer(this::openRecentFileAction);
 
-        JComboBox<IOutputExtension> outputCombo = view.getOutputCombo();
-        DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) outputCombo.getModel();
-        for (IOutputExtension outputExtension : outputExtensions)
-        {
-            outputComboModel.addElement(outputExtension);
-        }
-        JComboBox<IOutputFormatExtension> formatCombo = view.getFormatCombo();
-        DefaultComboBoxModel<IOutputFormatExtension> formatComboModel = (DefaultComboBoxModel<IOutputFormatExtension>) formatCombo.getModel();
-        for (IOutputFormatExtension outputFormatExtension : outputFormatExtensions)
-        {
-            formatComboModel.addElement(outputFormatExtension);
-        }
+        eventBus.register(this);
 
         int y = 0;
         Insets insets = new Insets(0, 0, 3, 0);
-        for (Config.Catalog catalog : config.getCatalogs())
+        for (ICatalogModel catalog : config.getCatalogs())
         {
             if (catalog.isDisabled())
             {
@@ -130,15 +115,12 @@ class QueryeerController implements PropertyChangeListener
                 continue;
             }
 
-            CatalogExtensionView extensionView = new CatalogExtensionView(extension, defaultGroup, c -> defaultCatalogChanged(c), c -> showOptionsAction(c));
-            catalogExtensionViews.add(extensionView);
+            Component extensionView = catalogExtensionViewFactory.create(extension, catalog.getAlias());
             view.getPanelCatalogs()
                     .add(extensionView, new GridBagConstraints(0, y++, 1, 1, 1, 0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
         }
         view.getPanelCatalogs()
                 .add(new JPanel(), new GridBagConstraints(0, y, 1, 1, 1, 1, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
-        view.getEditorsTabbedPane()
-                .addChangeListener(new SelectedFileListener());
         view.getMemoryLabel()
                 .setText(getMemoryString());
         new Timer(TIMER_INTERVAL, evt -> view.getMemoryLabel()
@@ -165,18 +147,25 @@ class QueryeerController implements PropertyChangeListener
         });
 
         // Open a new query
-        newQueryAction();
+        newQueryAction(null);
     }
 
-    private void defaultCatalogChanged(String catalogAlias)
+    Component getView()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
-        if (queryFile != null)
+        return view;
+    }
+
+    @Override
+    public void propertyChange(PropertyChangeEvent evt)
+    {
+        if (QueryeerModel.SELECTED_FILE.equals(evt.getPropertyName()))
         {
-            queryFile.getFile()
-                    .getQuerySession()
-                    .setDefaultCatalogAlias(catalogAlias);
+            QueryFileView file = view.getCurrentFile();
+            queryFileProvider.setQueryFile(file);
+            eventBus.publish(new QueryFileChangedEvent(file));
+            /* Publish caret change to update the current since there is no editor change when switching tab */
+            eventBus.publish(new CaretChangedEvent(file.getFile()
+                    .getCaret()));
         }
     }
 
@@ -192,6 +181,7 @@ class QueryeerController implements PropertyChangeListener
         view.setRecentFiles(config.getRecentFiles());
     }
 
+    /** Util method for saving a queryfile. Opens dialog and asks for overwrite etc. */
     private boolean save(QueryFileModel file, boolean saveAs)
     {
         if (!saveAs
@@ -253,131 +243,12 @@ class QueryeerController implements PropertyChangeListener
         return true;
     }
 
-    @Override
-    public void propertyChange(PropertyChangeEvent evt)
-    {
-        if (QueryeerModel.SELECTED_FILE.equals(evt.getPropertyName()))
-        {
-            QueryFileModel file = (QueryFileModel) evt.getNewValue();
-            // New tab
-            if (evt.getOldValue() == null)
-            {
-                final QueryFileView content = new QueryFileView(file, outputExtensions, text -> file.setQuery(text), caretChangedListener);
-                view.getEditorsTabbedPane()
-                        .add(content);
-
-                final TabComponentView tabComponent = TabComponentView.queryFileHeader(file.getTabTitle(), null, () ->
-                {
-                    // CSOFF
-                    if (file.isDirty())
-                    // CSON
-                    {
-                        int result = JOptionPane.showConfirmDialog(view, "Save changes ?", "Save", JOptionPane.YES_NO_CANCEL_OPTION);
-                        // CSOFF
-                        if (result == JOptionPane.CANCEL_OPTION)
-                        // CSON
-                        {
-                            return;
-                        }
-                        else if (result == JOptionPane.YES_OPTION)
-                        {
-                            // CSOFF
-                            if (!save(file, false))
-                            // CSON
-                            {
-                                return;
-                            }
-                        }
-                    }
-
-                    // Find tab index with "this" content
-                    int length = view.getEditorsTabbedPane()
-                            .getComponents().length;
-                    for (int i = 0; i < length; i++)
-                    {
-                        // CSOFF
-                        if (view.getEditorsTabbedPane()
-                                .getComponents()[i] == content)
-                        // CSON
-                        {
-                            model.removeFile(file);
-                            view.getEditorsTabbedPane()
-                                    .remove(content);
-                            break;
-                        }
-                    }
-                });
-
-                // Set title and tooltip upon change
-                file.addPropertyChangeListener(l ->
-                {
-                    tabComponent.setTitle(file.getTabTitle());
-                    int length = view.getEditorsTabbedPane()
-                            .getTabCount();
-                    for (int i = 0; i < length; i++)
-                    {
-                        // CSOFF
-                        if (view.getEditorsTabbedPane()
-                                .getTabComponentAt(i) == tabComponent)
-                        // CSON
-                        {
-                            view.getEditorsTabbedPane()
-                                    .setToolTipTextAt(i, file.getFilename());
-                            break;
-                        }
-                    }
-                });
-
-                int index = model.getFiles()
-                        .size() - 1;
-                view.getEditorsTabbedPane()
-                        .setToolTipTextAt(index, file.getFilename());
-                view.getEditorsTabbedPane()
-                        .setTabComponentAt(index, tabComponent);
-                view.getEditorsTabbedPane()
-                        .setSelectedIndex(index);
-                content.requestFocusInWindow();
-            }
-        }
-    }
-
-    /** Selected file listener. */
-    private class SelectedFileListener implements ChangeListener
-    {
-        @Override
-        public void stateChanged(ChangeEvent e)
-        {
-            queryFileProvider.setQueryFile(null);
-            int index = view.getEditorsTabbedPane()
-                    .getSelectedIndex();
-            if (index >= 0)
-            {
-                QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                        .getSelectedComponent();
-                queryFileProvider.setQueryFile(queryFile);
-                caretChangedListener.accept(queryFile);
-                model.setSelectedFile(index);
-                view.getOutputCombo()
-                        .setSelectedItem(queryFile.getFile()
-                                .getOutputExtension());
-                view.getFormatCombo()
-                        .setSelectedItem(queryFile.getFile()
-                                .getOutputFormat());
-                defaultGroup.clearSelection();
-                catalogExtensionViews.forEach(v -> v.init(queryFile.getFile()));
-            }
-        }
-    }
-
     private void handleViewAction(ViewAction action)
     {
         switch (action)
         {
             case CANCEL:
                 cancelAction();
-                break;
-            case CONFIG_OUTPUT:
-                configOutputAction();
                 break;
             case EDIT_VARIABLES:
                 editVariablesAction();
@@ -392,7 +263,7 @@ class QueryeerController implements PropertyChangeListener
                 formatChangedAction();
                 break;
             case NEWQUERY:
-                newQueryAction();
+                newQueryAction(null);
                 break;
             case OPEN:
                 openAction();
@@ -423,41 +294,44 @@ class QueryeerController implements PropertyChangeListener
         }
     }
 
-    private void openRecentFileAction(String file)
+    @Subscribe
+    private void closeQueryFile(QueryFileClosingEvent event)
     {
-        int length = model.getFiles()
-                .size();
-        for (int i = 0; i < length; i++)
+        QueryFileModel file = ((QueryFileView) event.getQueryFile()).getFile();
+        if (file.isDirty())
         {
-            if (model.getFiles()
-                    .get(i)
-                    .getFilename()
-                    .equals(file))
+            int result = JOptionPane.showConfirmDialog(view, "Save changes ?", "Save", JOptionPane.YES_NO_CANCEL_OPTION);
+            if (result == JOptionPane.CANCEL_OPTION)
             {
-                model.setSelectedFile(i);
-                // TODO: remove this when proper binding exist in QueryeerModel
-                // for selected file
-                view.getEditorsTabbedPane()
-                        .setSelectedIndex(i);
                 return;
             }
+            else if (result == JOptionPane.YES_OPTION)
+            {
+                if (!save(file, false))
+                {
+                    return;
+                }
+            }
         }
-
-        QueryFileModel queryFile = new QueryFileModel(config.getCatalogs(), new File(file));
-        queryFile.setOutput(outputExtensions.get(0));
-        model.addFile(queryFile);
-        config.appendRecentFile(file);
-        saveConfig();
+        model.removeFile(file);
     }
 
-    private void configOutputAction()
+    @Subscribe
+    private void showOptions(ShowOptionsEvent event)
     {
-        IOutputExtension extension = (IOutputExtension) view.getOutputCombo()
-                .getSelectedItem();
-        if (extension.getConfigurableClass() != null)
+        showOptionsAction(event.getConfigurableClassToSelect());
+    }
+
+    private void openRecentFileAction(String file)
+    {
+        if (model.select(file))
         {
-            showOptionsAction(extension.getConfigurableClass());
+            return;
         }
+
+        newQueryAction(new File(file));
+        config.appendRecentFile(file);
+        saveConfig();
     }
 
     /** Exit action */
@@ -501,8 +375,7 @@ class QueryeerController implements PropertyChangeListener
 
     private void outputChangedAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
+        QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null)
         {
             queryFile.getFile()
@@ -531,8 +404,7 @@ class QueryeerController implements PropertyChangeListener
 
     private void formatChangedAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
+        QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null)
         {
             queryFile.getFile()
@@ -543,8 +415,7 @@ class QueryeerController implements PropertyChangeListener
 
     private void toggleCommentAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
+        QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null)
         {
             queryFile.toggleComments();
@@ -559,8 +430,7 @@ class QueryeerController implements PropertyChangeListener
 
     private void toggleResultAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
+        QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null)
         {
             queryFile.toggleResultPane();
@@ -570,8 +440,7 @@ class QueryeerController implements PropertyChangeListener
     /** Cancel action */
     private void cancelAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
+        QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null
                 && queryFile.getFile()
                         .getState() == State.EXECUTING)
@@ -584,54 +453,36 @@ class QueryeerController implements PropertyChangeListener
     /** Execute listener. */
     private void executeAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
-        if (queryFile == null)
-        {
-            return;
-        }
-        String queryString = queryFile.getQuery(true);
-        if (isBlank(queryString))
+        QueryFileView fileView = view.getCurrentFile();
+        if (view == null)
         {
             return;
         }
 
-        QueryFileModel fileModel = queryFile.getFile();
-        if (fileModel.getState() == State.EXECUTING)
+        QueryFileModel queryFile = fileView.getFile();
+
+        if (queryFile.getState() == State.EXECUTING)
         {
             return;
         }
 
-        // Setup extensions from model data
-        // Do this here also besides when properties changes,
-        // since there is a possibility that no changes was made before a query is executed.
-        fileModel.setupBeforeExecution();
-
-        PayloadbuilderService.executeQuery(config, queryFile, queryString, () ->
+        eventBus.publish(new QueryFileStateEvent(fileView, QueryFileStateEvent.State.BEFORE_QUERY_EXECUTE));
+        PayloadbuilderService.executeQuery(fileView, () ->
         {
-            QueryFileView current = (QueryFileView) view.getEditorsTabbedPane()
-                    .getSelectedComponent();
-
-            // Only update extensions panel if the completed query is current query file
-            if (fileModel == current.getFile())
-            {
-                // Update properties in UI after query is finished
-                // Change current index/instance/database etc. that was altered in query
-                catalogExtensionViews.forEach(v -> v.init(fileModel));
-            }
+            eventBus.publish(new QueryFileStateEvent(fileView, QueryFileStateEvent.State.AFTER_QUERY_EXECUTE));
         });
     }
 
     /** Edit vars listener. */
     public void editVariablesAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
+        QueryFileView queryFile = view.getCurrentFile();
         if (queryFile == null)
         {
             return;
         }
-        String queryString = queryFile.getQuery(true);
+        String queryString = queryFile.getFile()
+                .getQuery(true);
         if (isBlank(queryString))
         {
             return;
@@ -664,23 +515,19 @@ class QueryeerController implements PropertyChangeListener
         }
     }
 
-    /** Caret change listener. */
-    private class CaretChangedListener implements Consumer<QueryFileView>
-    {
-        @Override
-        public void accept(QueryFileView t)
-        {
-            view.getCaretLabel()
-                    .setText(String.format("%d : %d : %d", t.getCaretLineNumber(), t.getCaretOffsetFromLineStart(), t.getCaretPosition()));
-        }
-    }
-
     /** New query action. */
-    private void newQueryAction()
+    private void newQueryAction(File file)
     {
-        QueryFileModel queryFile = new QueryFileModel(config.getCatalogs());
-        queryFile.setOutput(outputExtensions.get(0));
-        queryFile.setFilename("Query" + (newFileCounter++) + ".sql");
+        IOutputExtension outputExtension = (IOutputExtension) view.getOutputCombo()
+                .getSelectedItem();
+        IOutputFormatExtension outputFormatExtension = (IOutputFormatExtension) view.getFormatCombo()
+                .getSelectedItem();
+
+        QueryFileModel queryFile = new QueryFileModel(config.getCatalogs(), outputExtension, outputFormatExtension, file);
+        if (file == null)
+        {
+            queryFile.setFilename("Query" + (newFileCounter++) + ".sql");
+        }
         model.addFile(queryFile);
     }
 
@@ -701,12 +548,15 @@ class QueryeerController implements PropertyChangeListener
                 return;
             }
 
+            boolean saveConfig = false;
             for (File selectedFile : fileChooser.getSelectedFiles())
             {
-                QueryFileModel file = new QueryFileModel(config.getCatalogs(), selectedFile);
-                file.setOutput(outputExtensions.get(0));
-                model.addFile(file);
-                config.appendRecentFile(selectedFile.getAbsolutePath());
+                if (!model.select(selectedFile.getAbsolutePath()))
+                {
+                    newQueryAction(selectedFile);
+                    config.appendRecentFile(selectedFile.getAbsolutePath());
+                    saveConfig = true;
+                }
             }
 
             // Store last selected path if differs
@@ -715,19 +565,21 @@ class QueryeerController implements PropertyChangeListener
             {
                 config.setLastOpenPath(fileChooser.getCurrentDirectory()
                         .getAbsolutePath());
+                saveConfig = true;
             }
-            saveConfig();
+            if (saveConfig)
+            {
+                saveConfig();
+            }
         }
     }
 
     /** Save action. */
     private void saveAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
-        if (queryFile != null)
+        QueryFileModel file = model.getSelectedFile();
+        if (file != null)
         {
-            QueryFileModel file = queryFile.getFile();
             save(file, false);
         }
     }
@@ -735,11 +587,9 @@ class QueryeerController implements PropertyChangeListener
     /** Save As action. */
     private void saveAsAction()
     {
-        QueryFileView queryFile = (QueryFileView) view.getEditorsTabbedPane()
-                .getSelectedComponent();
-        if (queryFile != null)
+        QueryFileModel file = model.getSelectedFile();
+        if (file != null)
         {
-            QueryFileModel file = queryFile.getFile();
             save(file, true);
         }
     }
@@ -759,7 +609,6 @@ class QueryeerController implements PropertyChangeListener
         OUTPUT_CHANGED,
         FORMAT_CHANGED,
         EDIT_VARIABLES,
-        CONFIG_OUTPUT,
         OPTIONS,
         ABOUT
     }

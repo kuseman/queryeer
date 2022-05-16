@@ -13,11 +13,14 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.InputMap;
 import javax.swing.JButton;
@@ -33,15 +36,18 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.border.EtchedBorder;
 
 import com.queryeer.QueryeerController.ViewAction;
+import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.service.IEventBus;
+import com.queryeer.domain.Caret;
+import com.queryeer.event.CaretChangedEvent;
 
 /** Main view */
 class QueryeerView extends JFrame
@@ -57,7 +63,6 @@ class QueryeerView extends JFrame
     private final JPanel topPanel;
 
     private final JSplitPane splitPane;
-    private final JTabbedPane tabEditor;
     private final JPanel panelCatalogs;
     private final JPanel panelStatus;
     private final JLabel labelMemory;
@@ -71,19 +76,28 @@ class QueryeerView extends JFrame
     private final JMenu recentFiles;
     private final JComboBox<IOutputExtension> comboOutput;
     private final JComboBox<IOutputFormatExtension> comboFormat;
-    private final JButton configOutputButton;
 
     private Consumer<String> openRecentFileConsumer;
     private Consumer<ViewAction> actionHandler;
     private boolean catalogsCollapsed;
     private int prevCatalogsDividerLocation;
+    private final QueryFileTabbedPane tabbedPane;
 
     // CSOFF
-    QueryeerView()
+    QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, IEventBus eventBus, List<IOutputExtension> outputExtensions, List<IOutputFormatExtension> outputFormatExtensions)
     // CSON
     {
         setLocationRelativeTo(null);
         getContentPane().setLayout(new BorderLayout(0, 0));
+
+        this.tabbedPane = tabbedPane;
+
+        List<IOutputExtension> actualOutputExtensions = new ArrayList<>(outputExtensions);
+        List<IOutputFormatExtension> actualOutputFormatExtensions = new ArrayList<>(outputFormatExtensions);
+
+        actualOutputExtensions.sort(Comparator.comparingInt(IOutputExtension::order));
+        actualOutputFormatExtensions.sort(Comparator.comparingInt(IOutputFormatExtension::order));
+
         // CSOFF
         panelStatus = new JPanel();
         panelStatus.setPreferredSize(new Dimension(10, 20));
@@ -165,6 +179,33 @@ class QueryeerView extends JFrame
         }))
                 .setText("About Queryeer IDE");
 
+        JMenu editMenu = new JMenu("Edit");
+        editMenu.add(new JMenuItem(new AbstractAction("Find ...", Constants.SEARCH)
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                getCurrentFile().showFind();
+            }
+        }));
+        editMenu.add(new JMenuItem(new AbstractAction("Replace ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                getCurrentFile().showReplace();
+            }
+        }));
+        editMenu.add(new JMenuItem(new AbstractAction("GoTo Line ...", Constants.SHARE)
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                getCurrentFile().showGoToLine();
+            }
+        }));
+
+        menuBar.add(editMenu);
         menuBar.add(toolsMenu);
         menuBar.add(helpMenu);
 
@@ -245,6 +286,12 @@ class QueryeerView extends JFrame
         comboOutput.setMaximumSize(new Dimension(130, 20));
         // CSON
 
+        DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) comboOutput.getModel();
+        for (IOutputExtension outputExtension : actualOutputExtensions)
+        {
+            outputComboModel.addElement(outputExtension);
+        }
+
         comboFormat = new JComboBox<>();
         comboFormat.setRenderer(new DefaultListCellRenderer()
         {
@@ -264,15 +311,18 @@ class QueryeerView extends JFrame
         // CSOFF
         comboFormat.setMaximumSize(new Dimension(100, 20));
         // CSON
+
+        DefaultComboBoxModel<IOutputFormatExtension> formatComboModel = (DefaultComboBoxModel<IOutputFormatExtension>) comboFormat.getModel();
+        for (IOutputFormatExtension outputFormatExtension : actualOutputFormatExtensions)
+        {
+            formatComboModel.addElement(outputFormatExtension);
+        }
+
         comboFormat.addActionListener(l -> actionHandler.accept(ViewAction.FORMAT_CHANGED));
 
         toolBar.addSeparator();
-        configOutputButton = new JButton("Output ", Constants.COG);
-        configOutputButton.setToolTipText("Configure output");
-        configOutputButton.addActionListener(e -> actionHandler.accept(ViewAction.CONFIG_OUTPUT));
-        toolBar.add(configOutputButton);
+        toolBar.add(new JLabel("Output "));
         toolBar.add(comboOutput);
-
         toolBar.addSeparator();
         toolBar.add(new JLabel("Format "));
         toolBar.add(comboFormat);
@@ -281,9 +331,7 @@ class QueryeerView extends JFrame
         splitPane.setDividerSize(3);
         getContentPane().add(splitPane, BorderLayout.CENTER);
 
-        tabEditor = new JTabbedPane(SwingConstants.TOP);
-        tabEditor.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-        splitPane.setRightComponent(tabEditor);
+        splitPane.setRightComponent(tabbedPane);
 
         panelCatalogs = new JPanel();
         panelCatalogs.setLayout(new GridBagLayout());
@@ -296,9 +344,11 @@ class QueryeerView extends JFrame
         {
             IOutputExtension extension = (IOutputExtension) comboOutput.getSelectedItem();
             comboFormat.setEnabled(extension.supportsOutputFormats());
-            configOutputButton.setEnabled(extension.getConfigurableClass() != null);
             actionHandler.accept(ViewAction.OUTPUT_CHANGED);
         });
+
+        IOutputExtension extension = (IOutputExtension) comboOutput.getSelectedItem();
+        comboFormat.setEnabled(extension.supportsOutputFormats());
 
         addWindowListener(new WindowAdapter()
         {
@@ -309,6 +359,9 @@ class QueryeerView extends JFrame
             }
         });
 
+        eventBus.register(this);
+        bindOutputExtensions(outputExtensions);
+
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         // CSOFF
         setPreferredSize(new Dimension(1600, 800));
@@ -317,7 +370,7 @@ class QueryeerView extends JFrame
         pack();
     }
 
-    void bindOutputExtensions(List<IOutputExtension> outputExtensions)
+    private void bindOutputExtensions(List<IOutputExtension> outputExtensions)
     {
         InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         for (IOutputExtension outputExtension : outputExtensions)
@@ -335,21 +388,12 @@ class QueryeerView extends JFrame
         }
     }
 
-    // private void gotoLine()
-    // {
-    // GoToDialog dialog = new GoToDialog(this);
-    // dialog.setMaxLineNumberAllowed(textArea.getLineCount());
-    // dialog.setVisible(true);
-    // int line = dialog.getLineNumber();
-    // if (line>0) {
-    // try {
-    // textArea.setCaretPosition(textArea.getLineStartOffset(line-1));
-    // } catch (BadLocationException ble) { // Never happens
-    // UIManager.getLookAndFeel().provideErrorFeedback(textArea);
-    // ble.printStackTrace();
-    // }
-    // }
-    // }
+    @Subscribe
+    private void carretChanged(CaretChangedEvent event)
+    {
+        Caret caret = event.getCaret();
+        labelCaret.setText(String.format("%d : %d : %d", caret.getLineNumber(), caret.getOffset(), caret.getPosition()));
+    }
 
     private String getAcceleratorText(KeyStroke accelerator)
     {
@@ -505,11 +549,6 @@ class QueryeerView extends JFrame
         return panelCatalogs;
     }
 
-    JLabel getCaretLabel()
-    {
-        return labelCaret;
-    }
-
     JLabel getMemoryLabel()
     {
         return labelMemory;
@@ -528,11 +567,6 @@ class QueryeerView extends JFrame
     JComboBox<IOutputFormatExtension> getFormatCombo()
     {
         return comboFormat;
-    }
-
-    JTabbedPane getEditorsTabbedPane()
-    {
-        return tabEditor;
     }
 
     void setRecentFiles(List<String> recentFiles)
@@ -555,4 +589,10 @@ class QueryeerView extends JFrame
     {
         this.actionHandler = actionHandler;
     }
+
+    QueryFileView getCurrentFile()
+    {
+        return (QueryFileView) tabbedPane.getSelectedComponent();
+    }
+
 }

@@ -2,22 +2,23 @@ package com.queryeer.output.text;
 
 import static java.util.Objects.requireNonNull;
 
+import java.io.Writer;
+
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.core.JsonOutputWriter;
-import se.kuseman.payloadbuilder.core.JsonOutputWriter.JsonSettings;
 
 /** Extension point for {@link JsonFormat} */
 class JsonFormat implements IOutputFormatExtension
 {
     static final String JSON = "JSON";
-    private JsonSettings settings;
+    private JsonConfigurable configurable;
 
     JsonFormat(JsonConfigurable configurable)
     {
-        this.settings = requireNonNull(configurable, "configurable").getSettings();
+        this.configurable = requireNonNull(configurable, "configurable");
     }
 
     @Override
@@ -33,9 +34,9 @@ class JsonFormat implements IOutputFormatExtension
     }
 
     @Override
-    public OutputWriter createOutputWriter(IQueryFile file)
+    public OutputWriter createOutputWriter(IQueryFile file, Writer writer)
     {
-        return new JsonTextOutputWriter(file, settings);
+        return new JsonTextOutputWriter(writer, file, configurable.getSettings());
     }
 
     /** Text Output writer for JSON */
@@ -43,9 +44,9 @@ class JsonFormat implements IOutputFormatExtension
     {
         private IQueryFile file;
 
-        JsonTextOutputWriter(IQueryFile file, JsonSettings settings)
+        JsonTextOutputWriter(Writer writer, IQueryFile file, JsonSettings settings)
         {
-            super(file.getMessagesWriter(), settings);
+            super(writer, settings);
             this.file = file;
         }
 

@@ -1,19 +1,30 @@
 package com.queryeer.output.table;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.util.List;
 
 import javax.swing.KeyStroke;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
+import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** The main table output extension */
-class TableOutput implements IOutputExtension
+class TableOutputExtension implements IOutputExtension
 {
+    private List<ITableContextMenuActionFactory> contextMenuActionFactories;
+
+    TableOutputExtension(List<ITableContextMenuActionFactory> contextMenuActionFactories)
+    {
+        this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
+    }
+
     @Override
     public String getTitle()
     {
@@ -33,9 +44,15 @@ class TableOutput implements IOutputExtension
     }
 
     @Override
-    public IOutputComponent createResultComponent(IQueryFile file)
+    public IOutputComponent createResultComponent()
     {
-        return new TableOutputComponent();
+        return new TableOutputComponent(contextMenuActionFactories);
+    }
+
+    @Override
+    public Class<? extends IOutputComponent> getResultOutputComponentClass()
+    {
+        return TableOutputComponent.class;
     }
 
     @Override

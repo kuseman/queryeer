@@ -14,26 +14,6 @@ public interface ICatalogExtension
     /** Get title of extension */
     String getTitle();
 
-    /**
-     * Setup session before query is executed. Ie. set selected database/index etc.
-     *
-     * @param catalogAlias Alias that this extension/catalog has been given
-     * @param querySession Current query session
-     **/
-    default void setup(String catalogAlias, IQuerySession querySession)
-    {
-    }
-
-    /**
-     * Update the extension based on the query session. Ie acting upon changed variables etc.
-     *
-     * @param catalogAlias Alias that this extension/catalog has been given
-     * @param querySession Current query session
-     **/
-    default void update(String catalogAlias, IQuerySession querySession)
-    {
-    }
-
     /** Get the configurable class if this catalog extension supports configuration */
     default Class<? extends IConfigurable> getConfigurableClass()
     {

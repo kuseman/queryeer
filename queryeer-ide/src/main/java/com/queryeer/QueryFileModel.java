@@ -1,31 +1,28 @@
 package com.queryeer;
 
-import static java.util.stream.Collectors.toList;
+import static java.util.Collections.unmodifiableList;
 import static org.apache.commons.lang3.StringUtils.isAllBlank;
 
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.swing.SwingUtilities;
 import javax.swing.event.SwingPropertyChangeSupport;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.time.StopWatch;
 import org.apache.commons.lang3.tuple.Pair;
 
-import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.domain.Caret;
+import com.queryeer.domain.ICatalogModel;
 
 import se.kuseman.payloadbuilder.core.QuerySession;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
@@ -36,16 +33,16 @@ import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 class QueryFileModel
 {
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this, true);
-    // static final String RESULT_MODEL = "resultModel";
     static final String DIRTY = "dirty";
     static final String FILENAME = "filename";
     static final String QUERY = "query";
+    static final String CARET = "carret";
     static final String STATE = "state";
 
-    private final AtomicInteger queryId = new AtomicInteger();
     private final Map<String, Object> variables = new HashMap<>();
     private final QuerySession querySession = new QuerySession(new CatalogRegistry(), variables);
-    private final List<Pair<ICatalogExtension, CatalogExtensionModel>> catalogExtensions;
+    private final List<ICatalogModel> catalogs;
+    private final Caret caret = new Caret();
 
     private boolean dirty;
     private boolean newFile = true;
@@ -59,24 +56,17 @@ class QueryFileModel
     private IOutputExtension outputExtension;
     private IOutputFormatExtension outputFormat;
 
-    // private Output output = Output.TABLE;
-    // private Format format = Format.CSV;
-
     /** Execution fields */
-    // private final List<ResultModel> results = new ArrayList<>();
-
     private StopWatch sw;
     private String error;
     private Pair<Integer, Integer> parseErrorLocation;
 
-    QueryFileModel(List<Config.Catalog> catalogs)
-    {
-        this(catalogs, null);
-    }
-
     /** Initialize a file from filename */
-    QueryFileModel(List<Config.Catalog> catalogs, File file)
+    QueryFileModel(List<ICatalogModel> catalogs, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file)
     {
+        this.catalogs = unmodifiableList(catalogs);
+        this.outputExtension = outputExtension;
+        this.outputFormat = outputFormat;
         if (file != null)
         {
             this.filename = file.getAbsolutePath();
@@ -93,17 +83,12 @@ class QueryFileModel
             savedQuery = query;
         }
 
-        catalogExtensions = init(catalogs);
+        initCatalogs();
     }
 
-    private List<Pair<ICatalogExtension, CatalogExtensionModel>> init(List<Config.Catalog> catalogs)
+    private void initCatalogs()
     {
-        List<Pair<ICatalogExtension, CatalogExtensionModel>> catalogExtensions = catalogs.stream()
-                .filter(c -> !c.isDisabled())
-                .map(c -> Pair.of(c.getCatalogExtension(), new CatalogExtensionModel(c.getAlias())))
-                .collect(toList());
-
-        for (Config.Catalog catalog : catalogs)
+        for (ICatalogModel catalog : catalogs)
         {
             // Register catalogs
             querySession.getCatalogRegistry()
@@ -120,18 +105,6 @@ class QueryFileModel
                 querySession.setDefaultCatalogAlias(catalog.getAlias());
             }
         }
-
-        return catalogExtensions;
-    }
-
-    int getQueryId()
-    {
-        return queryId.get();
-    }
-
-    int incrementAndGetQueryId()
-    {
-        return queryId.incrementAndGet();
     }
 
     boolean isDirty()
@@ -175,22 +148,7 @@ class QueryFileModel
                 sw.stop();
             }
 
-            // Let UI update correctly when chaning state of query model
-            if (SwingUtilities.isEventDispatchThread())
-            {
-                pcs.firePropertyChange(STATE, oldValue, newValue);
-            }
-            else
-            {
-                try
-                {
-                    SwingUtilities.invokeAndWait(() -> pcs.firePropertyChange(STATE, oldValue, newValue));
-                }
-                catch (InvocationTargetException | InterruptedException e)
-                {
-                    throw new RuntimeException("Error updating state of query", e);
-                }
-            }
+            pcs.firePropertyChange(STATE, oldValue, newValue);
         }
     }
 
@@ -206,7 +164,6 @@ class QueryFileModel
         totalRowCount = 0;
         error = "";
         parseErrorLocation = null;
-        // results.clear();
     }
 
     boolean isNew()
@@ -251,8 +208,14 @@ class QueryFileModel
         setDirty(false);
     }
 
-    String getQuery()
+    String getQuery(boolean selected)
     {
+        if (selected)
+        {
+            return caret.getSelectionLength() > 0 ? query.substring(caret.getSelectionStart(), caret.getSelectionStart() + caret.getSelectionLength())
+                    : query;
+        }
+
         return query;
     }
 
@@ -268,9 +231,28 @@ class QueryFileModel
         }
     }
 
+    Caret getCaret()
+    {
+        return caret;
+    }
+
+    void setCaret(int lineNumber, int offset, int position, int selectionStart, int selectionLength)
+    {
+        caret.setLineNumber(lineNumber);
+        caret.setOffset(offset);
+        caret.setPosition(position);
+        caret.setSelectionStart(selectionStart);
+        caret.setSelectionLength(selectionLength);
+    }
+
     void addPropertyChangeListener(PropertyChangeListener listener)
     {
         pcs.addPropertyChangeListener(listener);
+    }
+
+    void removePropertyChangeListener(PropertyChangeListener listener)
+    {
+        pcs.removePropertyChangeListener(listener);
     }
 
     IOutputExtension getOutputExtension()
@@ -281,11 +263,6 @@ class QueryFileModel
     void setOutput(IOutputExtension outputExtension)
     {
         this.outputExtension = outputExtension;
-    }
-
-    IOutputFormatExtension getOutputFormat()
-    {
-        return outputFormat;
     }
 
     void setOutputFormat(IOutputFormatExtension outputFormat)
@@ -313,50 +290,9 @@ class QueryFileModel
         this.parseErrorLocation = parseErrorLocation;
     }
 
-    String getTabTitle()
-    {
-        String filename = FilenameUtils.getName(getFilename());
-        StringBuilder sb = new StringBuilder();
-        if (isDirty())
-        {
-            sb.append("*");
-        }
-        sb.append(filename);
-        if (getState() == State.EXECUTING)
-        {
-            sb.append(" Executing ...");
-        }
-        return sb.toString();
-    }
-
     QuerySession getQuerySession()
     {
         return querySession;
-    }
-
-    Map<String, Object> getVariables()
-    {
-        return variables;
-    }
-
-    // List<ResultModel> getResults()
-    // {
-    // return results;
-    // }
-
-    // void addResult(ResultModel model)
-    // {
-    //// results.add(model);
-    //// if (output != Output.NONE)
-    //// {
-    //// pcs.firePropertyChange(RESULT_MODEL, null, model);
-    //// }
-    // }
-
-    /** Total row count of current execution including all result sets */
-    int getTotalRowCount()
-    {
-        return totalRowCount;
     }
 
     void incrementTotalRowCount()
@@ -364,32 +300,25 @@ class QueryFileModel
         totalRowCount++;
     }
 
-    List<Pair<ICatalogExtension, CatalogExtensionModel>> getCatalogExtensions()
+    IOutputFormatExtension getOutputFormat()
     {
-        return catalogExtensions;
+        return outputFormat;
     }
 
-    /** Setup extensions before query */
-    void setupBeforeExecution()
+    Map<String, Object> getVariables()
     {
-        for (Pair<ICatalogExtension, CatalogExtensionModel> pair : catalogExtensions)
-        {
-            ICatalogExtension extension = pair.getKey();
-            CatalogExtensionModel model = pair.getValue();
-            extension.setup(model.getAlias(), querySession);
-        }
+        return variables;
+    }
 
-        // .forEach(e ->
-        // {
-        // // Register catalog in session
-        // fileModel.getQuerySession()
-        // .getCatalogRegistry()
-        // .registerCatalog(model.getAlias(), extension.getCatalog());
-        // // Setup extensions from model data
-        // // Do this here also besides when properties changes,
-        // // since there is a possibility that no changes was made before a query is executed.
-        // extension.setup(model.getAlias(), fileModel.getQuerySession());
-        // });
+    /** Total row count of current execution including all result sets */
+    int getTotalRowCount()
+    {
+        return totalRowCount;
+    }
+
+    List<ICatalogModel> getCatalogs()
+    {
+        return catalogs;
     }
 
     /** Execution state of this file */
@@ -400,7 +329,7 @@ class QueryFileModel
         ABORTED("Aborted"),
         ERROR("Error");
 
-        String tooltip;
+        final String tooltip;
 
         State(String tooltip)
         {
@@ -409,19 +338,7 @@ class QueryFileModel
 
         public String getToolTip()
         {
-            return null;
+            return tooltip;
         }
     }
-
-    // /** Current output of this file */
-    // enum Output
-    // {
-    // TABLE, FILE, TEXT, NONE;
-    // }
-
-    // /** Current output format of this file */
-    // enum Format
-    // {
-    // CSV, JSON
-    // }
 }

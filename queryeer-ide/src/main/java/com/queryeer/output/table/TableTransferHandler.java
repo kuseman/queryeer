@@ -234,8 +234,7 @@ class TableTransferHandler extends TransferHandler implements UIResource
         {
             int cols = headerNames.length;
 
-            StringBuffer htmlBuf = new StringBuffer();
-
+            StringBuilder htmlBuf = new StringBuilder();
             htmlBuf.append("<html>\n<body>\n<table>\n");
             htmlBuf.append("<tr>\n");
             for (int col = 0; col < cols; col++)
@@ -269,7 +268,7 @@ class TableTransferHandler extends TransferHandler implements UIResource
             int cols = headerNames.length;
             int rows = rowsValues.size();
 
-            StringBuffer plainBuf = new StringBuffer();
+            StringBuilder plainBuf = new StringBuilder();
             for (int row = 0; row < rows; row++)
             {
                 Object[] values = rowsValues.get(row);
@@ -279,11 +278,16 @@ class TableTransferHandler extends TransferHandler implements UIResource
                     String val = (obj == null) ? ""
                             : obj.toString();
 
-                    plainBuf.append(val + "\t");
+                    plainBuf.append(val);
+                    if (col < cols - 1)
+                    {
+                        plainBuf.append('\t');
+                    }
                 }
-                // we want a newline at the end of each line and not a tab
-                plainBuf.deleteCharAt(plainBuf.length() - 1)
-                        .append("\n");
+                if (row < rows - 1)
+                {
+                    plainBuf.append(System.lineSeparator());
+                }
             }
             return plainBuf.toString();
         }

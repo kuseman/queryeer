@@ -32,4 +32,7 @@ public interface IQueryFile
 
     /** Get the current selected output format for this file */
     IOutputFormatExtension getOutputFormat();
+
+    /** Clears the query files executions stats like runtime, number of rows etc. */
+    void clearExecutionStats();
 }

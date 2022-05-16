@@ -3,6 +3,7 @@ package com.queryeer;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import javax.swing.event.SwingPropertyChangeSupport;
 
@@ -13,6 +14,7 @@ class QueryeerModel
     public static final String FILES = "files";
     public static final String SELECTED_FILE = "selectedFile";
 
+    private QueryFileModel selectedFile;
     private final List<QueryFileModel> files = new ArrayList<>();
 
     void addPropertyChangeListener(PropertyChangeListener listener)
@@ -22,32 +24,52 @@ class QueryeerModel
 
     void addFile(QueryFileModel file)
     {
-        setSelectedFile(files.size(), file);
+        int index = files.size();
+        files.add(file);
+
+        pcs.fireIndexedPropertyChange(FILES, index, null, file);
+
+        setSelectedFile(file);
     }
 
-    void setSelectedFile(int index)
+    void removeFile(QueryFileModel file)
     {
-        setSelectedFile(index, files.get(index));
-    }
-
-    void setSelectedFile(int index, QueryFileModel file)
-    {
-        QueryFileModel existing = index == files.size() ? null
-                : files.get(index);
-        if (existing != null)
+        int index = files.indexOf(file);
+        if (index == -1)
         {
-            if (existing.equals(file))
-            {
-                return;
-            }
-            files.remove(index);
-            files.add(index, file);
+            return;
+        }
+        files.remove(index);
+
+        pcs.fireIndexedPropertyChange(FILES, index, file, null);
+
+        QueryFileModel selectedFile;
+        // Select file at old position
+        if (files.size() > index)
+        {
+            selectedFile = files.get(index);
         }
         else
         {
-            files.add(file);
+            selectedFile = null;
         }
-        pcs.fireIndexedPropertyChange(SELECTED_FILE, index, existing, file);
+
+        setSelectedFile(selectedFile);
+    }
+
+    void setSelectedFile(QueryFileModel file)
+    {
+        if (!Objects.equals(selectedFile, file))
+        {
+            QueryFileModel old = selectedFile;
+            selectedFile = file;
+            pcs.firePropertyChange(SELECTED_FILE, old, selectedFile);
+        }
+    }
+
+    QueryFileModel getSelectedFile()
+    {
+        return selectedFile;
     }
 
     List<QueryFileModel> getFiles()
@@ -55,8 +77,18 @@ class QueryeerModel
         return files;
     }
 
-    void removeFile(QueryFileModel file)
+    /** Tries to select provided file if in model. Returns true if found */
+    boolean select(String file)
     {
-        files.remove(file);
+        for (QueryFileModel model : files)
+        {
+            if (model.getFilename()
+                    .equalsIgnoreCase(file))
+            {
+                setSelectedFile(model);
+                return true;
+            }
+        }
+        return false;
     }
 }

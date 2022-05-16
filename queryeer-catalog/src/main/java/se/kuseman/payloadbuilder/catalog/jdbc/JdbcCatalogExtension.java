@@ -27,6 +27,10 @@ import org.apache.commons.lang3.mutable.MutableObject;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.AutoCompletionComboBox;
+import com.queryeer.api.event.QueryFileChangedEvent;
+import com.queryeer.api.event.QueryFileStateEvent;
+import com.queryeer.api.event.QueryFileStateEvent.State;
+import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -79,74 +83,6 @@ class JdbcCatalogExtension implements ICatalogExtension
     public boolean hasQuickPropertieComponent()
     {
         return true;
-    }
-
-    @Override
-    public void setup(String catalogAlias, IQuerySession querySession)
-    {
-        JdbcConnectionsModel.Connection connection = (JdbcConnectionsModel.Connection) propertiesComponent.connections.getSelectedItem();
-        String url = "";
-        String driverClassName = "";
-        if (connection != null)
-        {
-            url = connection.getJdbcURL();
-            driverClassName = connection.getJdbcDriverClassName();
-            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.USERNAME, connection.getUsername());
-            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD, connection.getPassword());
-        }
-        String database = (String) propertiesComponent.databases.getSelectedItem();
-        querySession.setCatalogProperty(catalogAlias, JdbcCatalog.DRIVER_CLASSNAME, driverClassName);
-        querySession.setCatalogProperty(catalogAlias, JdbcCatalog.URL, url);
-        querySession.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, database);
-    }
-
-    @Override
-    public void update(String catalogAlias, IQuerySession querySession)
-    {
-        String url = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.URL);
-        String database = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE);
-
-        MutableObject<JdbcConnectionsModel.Connection> connectionToSelect = new MutableObject<>();
-        MutableObject<String> databaseToSelect = new MutableObject<>();
-
-        int size = connectionsModel.getSize();
-        for (int i = 0; i < size; i++)
-        {
-            JdbcConnectionsModel.Connection connection = connectionsModel.getElementAt(i);
-
-            if (!equalsIgnoreCase(url, connection.getJdbcURL()))
-            {
-                continue;
-            }
-
-            connectionToSelect.setValue(connection);
-
-            int size2 = connection.getDatabases()
-                    .size();
-            for (int j = 0; j < size2; j++)
-            {
-                if (equalsIgnoreCase(database, connection.getDatabases()
-                        .get(j)))
-                {
-                    databaseToSelect.setValue(connection.getDatabases()
-                            .get(j));
-                    break;
-                }
-            }
-            break;
-        }
-
-        if (connectionToSelect.getValue() == null
-                && connectionsModel.getSize() > 0)
-        {
-            connectionToSelect.setValue(connectionsModel.getElementAt(0));
-        }
-
-        SwingUtilities.invokeLater(() ->
-        {
-            propertiesComponent.connections.setSelectedItem(connectionToSelect.getValue());
-            propertiesComponent.databases.setSelectedItem(databaseToSelect.getValue());
-        });
     }
 
     @Override
@@ -209,6 +145,108 @@ class JdbcCatalogExtension implements ICatalogExtension
         return propertiesComponent;
     }
 
+    @Subscribe
+    private void queryFileChanged(QueryFileChangedEvent event)
+    {
+        update();
+    }
+
+    @Subscribe
+    private void queryFileStateChanged(QueryFileStateEvent event)
+    {
+        IQueryFile queryFile = event.getQueryFile();
+        if (queryFileProvider.getCurrentFile() == queryFile)
+        {
+            // Update quick properties with changed properties from query session
+            if (event.getState() == State.AFTER_QUERY_EXECUTE)
+            {
+                update();
+            }
+            else if (event.getState() == State.BEFORE_QUERY_EXECUTE)
+            {
+                setup();
+            }
+        }
+    }
+
+    private void setup()
+    {
+        IQueryFile queryFile = queryFileProvider.getCurrentFile();
+        if (queryFile == null)
+        {
+            return;
+        }
+        IQuerySession session = queryFile.getSession();
+        JdbcConnectionsModel.Connection connection = (JdbcConnectionsModel.Connection) propertiesComponent.connections.getSelectedItem();
+        String url = "";
+        String driverClassName = "";
+        if (connection != null)
+        {
+            url = connection.getJdbcURL();
+            driverClassName = connection.getJdbcDriverClassName();
+            session.setCatalogProperty(catalogAlias, JdbcCatalog.USERNAME, connection.getUsername());
+            session.setCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD, connection.getPassword());
+        }
+        String database = (String) propertiesComponent.databases.getSelectedItem();
+        session.setCatalogProperty(catalogAlias, JdbcCatalog.DRIVER_CLASSNAME, driverClassName);
+        session.setCatalogProperty(catalogAlias, JdbcCatalog.URL, url);
+        session.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, database);
+    }
+
+    private void update()
+    {
+        IQueryFile queryFile = queryFileProvider.getCurrentFile();
+        if (queryFile == null)
+        {
+            return;
+        }
+        IQuerySession session = queryFile.getSession();
+        String url = session.getCatalogProperty(catalogAlias, JdbcCatalog.URL);
+        String database = session.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE);
+
+        MutableObject<JdbcConnectionsModel.Connection> connectionToSelect = new MutableObject<>();
+        MutableObject<String> databaseToSelect = new MutableObject<>();
+
+        int size = connectionsModel.getSize();
+        for (int i = 0; i < size; i++)
+        {
+            JdbcConnectionsModel.Connection connection = connectionsModel.getElementAt(i);
+
+            if (!equalsIgnoreCase(url, connection.getJdbcURL()))
+            {
+                continue;
+            }
+
+            connectionToSelect.setValue(connection);
+
+            int size2 = connection.getDatabases()
+                    .size();
+            for (int j = 0; j < size2; j++)
+            {
+                if (equalsIgnoreCase(database, connection.getDatabases()
+                        .get(j)))
+                {
+                    databaseToSelect.setValue(connection.getDatabases()
+                            .get(j));
+                    break;
+                }
+            }
+            break;
+        }
+
+        if (connectionToSelect.getValue() == null
+                && connectionsModel.getSize() > 0)
+        {
+            connectionToSelect.setValue(connectionsModel.getElementAt(0));
+        }
+
+        SwingUtilities.invokeLater(() ->
+        {
+            propertiesComponent.connections.setSelectedItem(connectionToSelect.getValue());
+            propertiesComponent.databases.setSelectedItem(databaseToSelect.getValue());
+        });
+    }
+
     /** Properties component. */
     private class PropertiesComponent extends JPanel
     {
@@ -246,11 +284,7 @@ class JdbcCatalogExtension implements ICatalogExtension
             databases.setPrototypeDisplayValue(PROTOTYPE_CATALOG);
             databases.addItemListener(l ->
             {
-                IQueryFile queryFile = queryFileProvider.getCurrentFile();
-                if (queryFile != null)
-                {
-                    setup(catalogAlias, queryFile.getSession());
-                }
+                setup();
             });
             // CSOFF
             databases.setMaximumRowCount(25);
@@ -351,7 +385,7 @@ class JdbcCatalogExtension implements ICatalogExtension
         {
             // Guard against weird values sent in
             if (connection != null
-                    && !(connection instanceof Connection))
+                    && !(connection instanceof JdbcConnectionsModel.Connection))
             {
                 return;
             }
