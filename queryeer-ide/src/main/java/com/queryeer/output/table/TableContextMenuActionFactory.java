@@ -55,10 +55,6 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         {
             return new AbstractAction("View as JSON", Constants.STICKY_NOTE_O)
             {
-                {
-                    putValue(TableOutputComponent.CELL_DOUBLE_CLICK_ACTION, true);
-                }
-
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
@@ -116,7 +112,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
     }
 
-    private static void showValueDialog(String title, Object val, String preferredSyntax)
+    static void showValueDialog(String title, Object val, String preferredSyntax)
     {
         Object value = val;
         if (value == null)

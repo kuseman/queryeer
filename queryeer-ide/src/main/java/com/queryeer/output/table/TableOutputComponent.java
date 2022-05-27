@@ -16,8 +16,6 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 import javax.swing.AbstractAction;
@@ -40,6 +38,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.fife.rsta.ui.search.FindDialog;
 import org.fife.rsta.ui.search.SearchEvent;
 import org.fife.rsta.ui.search.SearchListener;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.SearchContext;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -54,7 +53,6 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 {
     private static final String FIND = "FIND";
     static final int COLUMN_ADJUST_ROW_LIMIT = 30;
-    static final String CELL_DOUBLE_CLICK_ACTION = "cellDoubleClickAction";
     private final List<ITableContextMenuActionFactory> contextMenuActionFactories;
     private final List<Table> tables = new ArrayList<>();
     private final TableClickedCell lastClickedCell = new TableClickedCell();
@@ -182,26 +180,6 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
     }
 
-    private boolean match(Object val, SearchContext context, Pattern pattern)
-    {
-        if (val == null)
-        {
-            return false;
-        }
-        String value = String.valueOf(val);
-        if (pattern != null)
-        {
-            return pattern.matcher(value)
-                    .find();
-        }
-        else if (context.getMatchCase())
-        {
-            return value.contains(context.getSearchFor());
-        }
-
-        return StringUtils.containsIgnoreCase(value, context.getSearchFor());
-    }
-
     @Override
     public String title()
     {
@@ -239,6 +217,26 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         showFindDialogAction.actionPerformed(null);
     }
 
+    private boolean match(Object val, SearchContext context, Pattern pattern)
+    {
+        if (val == null)
+        {
+            return false;
+        }
+        String value = String.valueOf(val);
+        if (pattern != null)
+        {
+            return pattern.matcher(value)
+                    .find();
+        }
+        else if (context.getMatchCase())
+        {
+            return value.contains(context.getSearchFor());
+        }
+
+        return StringUtils.containsIgnoreCase(value, context.getSearchFor());
+    }
+
     private Table createTable()
     {
         if (contextMenuActions == null)
@@ -251,15 +249,10 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     .collect(toList());
         }
 
-        AtomicReference<Action> doubleClickAction = new AtomicReference<>();
         Table table = new Table();
         for (Action action : contextMenuActions)
         {
             table.tablePopupMenu.add(action);
-            if (Objects.equals(true, action.getValue(CELL_DOUBLE_CLICK_ACTION)))
-            {
-                doubleClickAction.set(action);
-            }
         }
 
         table.addMouseListener(new MouseAdapter()
@@ -277,11 +270,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 if (e.getClickCount() == 2
                         && e.getButton() == MouseEvent.BUTTON1)
                 {
-                    if (row >= 0
-                            && doubleClickAction.get() != null)
+                    if (row >= 0)
                     {
-                        doubleClickAction.get()
-                                .actionPerformed(new ActionEvent(table, -1, "DoubleClick"));
+                        TableContextMenuActionFactory.showValueDialog("Value viewer - " + table.getColumnName(col), lastClickedCell.value, SyntaxConstants.SYNTAX_STYLE_NONE);
                     }
                 }
                 else if (e.getClickCount() == 1
