@@ -203,6 +203,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     {
         removeAll();
         tables.clear();
+        lastClickedCell.clear();
         repaint();
     }
 
@@ -430,6 +431,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         public Object getValue()
         {
             return value;
+        }
+
+        void clear()
+        {
+            header = "";
+            value = null;
         }
     }
 

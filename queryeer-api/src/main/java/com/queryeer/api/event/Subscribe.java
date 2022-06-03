@@ -13,5 +13,4 @@ import com.queryeer.api.service.IEventBus;
 @Target({ ElementType.METHOD })
 public @interface Subscribe
 {
-
 }

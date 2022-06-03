@@ -16,7 +16,7 @@ class ColumnsMerger
         // First row => just add columns and row
         if (model.getRowCount() == 0)
         {
-            model.setColumns(row.columns);
+            model.setColumns(row.columns, true);
             row.columns = null;
             model.addRow(row);
             return;
@@ -85,7 +85,7 @@ class ColumnsMerger
             {
                 List<String> modelColumns = new ArrayList<>(model.getColumns());
                 modelColumns.addAll(row.columns.subList(i, row.columns.size()));
-                model.setColumns(modelColumns);
+                model.setColumns(modelColumns, true);
             }
         }
 

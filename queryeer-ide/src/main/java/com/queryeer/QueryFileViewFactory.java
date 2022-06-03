@@ -34,6 +34,10 @@ class QueryFileViewFactory
                 .filter(Objects::nonNull)
                 .collect(toList());
 
-        return new QueryFileView(model, eventBus, outputComponents, outputToolbarActionFactories);
+        QueryFileView view = new QueryFileView(model, eventBus, outputComponents, outputToolbarActionFactories);
+        // Init the state
+        model.getQueryFileState()
+                .init(view);
+        return view;
     }
 }

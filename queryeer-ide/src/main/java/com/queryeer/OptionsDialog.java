@@ -171,8 +171,8 @@ class OptionsDialog extends JDialog
 
         for (Configurable configurable : configurableNodes)
         {
-            if (configurableToSelect == configurable.getConfigurable()
-                    .getClass())
+            if (configurableToSelect.isAssignableFrom(configurable.getConfigurable()
+                    .getClass()))
             {
                 optionsTree.setSelectionPath(new TreePath(configurable.getPath()));
                 return;

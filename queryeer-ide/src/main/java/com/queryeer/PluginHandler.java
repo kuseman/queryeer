@@ -110,59 +110,6 @@ class PluginHandler
         return plugins.values();
     }
 
-    // /**
-    // * Load extension with provided class from plugins
-    // *
-    // * @param clazz Class to load
-    // */
-    // <T> List<T> load(Class<T> clazz)
-    // {
-    // // ClassLoader[] classLoaders = new ClassLoader[1 + plugins.size()];
-    // // classLoaders[0] = PluginHandler.class.getClassLoader();
-    // // int index = 1;
-    // // for (Plugin plugin : plugins.values())
-    // // {
-    // // classLoaders[index++] = plugin.pluginClassLoader;
-    // // }
-    // //
-    // // long time = System.currentTimeMillis();
-    // // try (ScanResult scanResult = new ClassGraph().enableClassInfo()
-    // // .overrideClassLoaders(classLoaders)
-    // // .scan())
-    // // {
-    // //
-    // // ClassInfoList list = scanResult.getClassesImplementing(IExtensionFactory.class)
-    // // .filter(c -> !c.isInterface());
-    // // for (ClassInfo l : list)
-    // // {
-    // // Class<?> clz = l.loadClass();
-    // // System.out.println(clz.getName() + " " + clz.getClassLoader());
-    // // }
-    // // }
-    // // System.out.println(System.currentTimeMillis() - time);
-    //
-    // List<T> services = new ArrayList<>();
-    //
-    // // Load from IDE class loader
-    // addServices(services, ServiceLoader.load(clazz));
-    // // Load from each plugin
-    // for (Plugin plugin : plugins.values())
-    // {
-    // addServices(services, ServiceLoader.load(clazz, plugin.pluginClassLoader));
-    // }
-    // return services;
-    // }
-    //
-    // private <T> void addServices(List<T> services, ServiceLoader<T> serviceLoader)
-    // {
-    // Iterator<T> iterator = serviceLoader.iterator();
-    // while (iterator.hasNext())
-    // {
-    // T service = iterator.next();
-    // services.add(service);
-    // }
-    // }
-
     private URLClassLoader createPluginClassLoader(URLClassLoader sharedClassLoader, File dir)
     {
         URL[] urls;

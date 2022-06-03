@@ -9,11 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import com.queryeer.api.component.IPropertiesComponent;
 import com.queryeer.api.component.IPropertyAware;
 import com.queryeer.api.component.Properties;
-import com.queryeer.api.component.PropertiesComponent;
 import com.queryeer.api.component.Property;
 import com.queryeer.api.extensions.IConfigurable;
+import com.queryeer.api.service.IComponentFactory;
 import com.queryeer.api.service.IConfig;
 
 import se.kuseman.payloadbuilder.core.JsonOutputWriter.JsonSettings;
@@ -24,12 +25,14 @@ class JsonConfigurable implements IConfigurable
     private static final String NAME = TextOutputExtension.NAME + ".json";
     private final List<Consumer<Boolean>> dirstyStateConsumers = new ArrayList<>();
     private final IConfig config;
+    private final IComponentFactory componentFactory;
     private JsonSettingsWrapper settings;
-    private PropertiesComponent component;
+    private IPropertiesComponent component;
 
-    JsonConfigurable(IConfig config)
+    JsonConfigurable(IConfig config, IComponentFactory componentFactory)
     {
         this.config = requireNonNull(config, "config");
+        this.componentFactory = requireNonNull(componentFactory, "componentFactory");
         this.settings = loadSettings();
     }
 
@@ -43,10 +46,10 @@ class JsonConfigurable implements IConfigurable
     {
         if (component == null)
         {
-            component = new PropertiesComponent(JsonSettingsWrapper.class, this::notifyDirty);
+            component = componentFactory.createPropertiesComponent(JsonSettingsWrapper.class, this::notifyDirty);
             component.init(new JsonSettingsWrapper(settings));
         }
-        return component;
+        return component.getComponent();
     }
 
     @Override

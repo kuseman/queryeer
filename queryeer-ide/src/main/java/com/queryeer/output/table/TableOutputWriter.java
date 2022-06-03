@@ -4,6 +4,7 @@ import static java.util.Arrays.asList;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -43,14 +44,29 @@ class TableOutputWriter implements OutputWriter
         if (model != null)
         {
             model.internCache = null;
-            int rowCount = model.getRowCount();
-            queryFile.getMessagesWriter()
-                    .println(String.valueOf(rowCount) + " row(s) selected" + System.lineSeparator());
+
         }
 
         this.model = new Model();
-        this.model.setColumns(asList(columns));
-        SwingUtilities.invokeLater(() -> getTablesOutputComponent().addResult(this.model));
+        this.model.setColumns(asList(columns), false);
+        try
+        {
+            SwingUtilities.invokeAndWait(() ->
+            {
+                getTablesOutputComponent().addResult(this.model);
+            });
+        }
+        catch (InvocationTargetException | InterruptedException e)
+        {
+            e.printStackTrace(queryFile.getMessagesWriter());
+        }
+    }
+
+    @Override
+    public void endResult()
+    {
+        // Print row count after each resultset
+        printRowCount();
     }
 
     @Override
@@ -147,6 +163,13 @@ class TableOutputWriter implements OutputWriter
     public void endArray()
     {
         putValue(parent.removeFirst());
+    }
+
+    private void printRowCount()
+    {
+        int rowCount = model.getRowCount();
+        queryFile.getMessagesWriter()
+                .println(System.lineSeparator() + String.valueOf(rowCount) + " row(s) selected");
     }
 
     @SuppressWarnings("unchecked")

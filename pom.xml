@@ -21,7 +21,7 @@
         <mockito-core.version>4.3.1</mockito-core.version>
         <slf4j.version>1.7.30</slf4j.version>
         <spotless.version>2.22.0</spotless.version>
-        <payloadbuilder.version>0.8.3</payloadbuilder.version>
+        <payloadbuilder.version>0.8.4-SNAPSHOT</payloadbuilder.version>
     </properties>
 
     <issueManagement>
@@ -39,7 +39,7 @@
     <modules>
         <module>queryeer-api</module>
         <module>queryeer-ide</module>
-        <module>queryeer-catalog</module>
+        <module>queryeer-provider</module>
         <module>queryeer-dist</module>
     </modules>
 

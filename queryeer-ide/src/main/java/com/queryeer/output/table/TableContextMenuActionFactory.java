@@ -134,6 +134,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
 
         JFrame frame = new JFrame(title);
         frame.setIconImages(Constants.APPLICATION_ICONS);
+
         RSyntaxTextArea rta = new RSyntaxTextArea();
         // CSOFF
         rta.setColumns(80);

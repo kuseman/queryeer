@@ -1,20 +1,14 @@
 package com.queryeer;
 
-import static org.apache.commons.lang3.StringUtils.isBlank;
-
-import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
 import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IQueryFileProvider;
-import com.queryeer.components.CatalogExtensionViewFactory;
 
 /** Main of Queryeer */
 public class Main
@@ -22,13 +16,6 @@ public class Main
     /** Main */
     public static void main(String[] args) throws Exception
     {
-        String etcProp = System.getProperty("etc");
-
-        if (isBlank(etcProp))
-        {
-            throw new IllegalArgumentException("No etc folder property defined");
-        }
-
         try
         {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -39,13 +26,8 @@ public class Main
             ex.printStackTrace();
         }
         // CSON
-        File etcFolder = new File(etcProp);
         ServiceLoader serviceLoader = new ServiceLoader();
-        wire(etcFolder, serviceLoader);
-
-        List<ICatalogExtensionFactory> catalogExtensionFactories = serviceLoader.getAll(ICatalogExtensionFactory.class);
-        Config config = serviceLoader.get(Config.class);
-        config.loadCatalogExtensions(catalogExtensionFactories);
+        wire(serviceLoader);
 
         QueryeerController controller = serviceLoader.get(QueryeerController.class);
 
@@ -57,7 +39,7 @@ public class Main
         });
     }
 
-    private static void wire(File etcFolder, ServiceLoader serviceLoader) throws IOException, InstantiationException, IllegalAccessException
+    private static void wire(ServiceLoader serviceLoader) throws IOException, InstantiationException, IllegalAccessException
     {
         serviceLoader.register(serviceLoader);
 
@@ -65,7 +47,7 @@ public class Main
         serviceLoader.register(IEventBus.class, eventBus);
         serviceLoader.register(eventBus);
 
-        Config config = new Config(etcFolder);
+        Config config = new Config();
         serviceLoader.register(IConfig.class, config);
         serviceLoader.register(config);
 
@@ -80,7 +62,6 @@ public class Main
         serviceLoader.register(OptionsDialog.class);
         serviceLoader.register(QueryFileTabbedPane.class);
         serviceLoader.register(QueryFileViewFactory.class);
-        serviceLoader.register(CatalogExtensionViewFactory.class);
         //
 
         // Inject plugins last
