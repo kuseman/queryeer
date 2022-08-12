@@ -8,7 +8,7 @@ public interface IExtensionAction
     /** Return the order of the action */
     default int order()
     {
-        return 0;
+        return Integer.MAX_VALUE;
     }
 
     /** Return the Swing action */

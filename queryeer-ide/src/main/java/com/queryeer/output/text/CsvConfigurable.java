@@ -9,10 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import com.queryeer.api.component.IPropertiesComponent;
 import com.queryeer.api.component.Properties;
-import com.queryeer.api.component.PropertiesComponent;
 import com.queryeer.api.component.Property;
 import com.queryeer.api.extensions.IConfigurable;
+import com.queryeer.api.service.IComponentFactory;
 import com.queryeer.api.service.IConfig;
 
 import se.kuseman.payloadbuilder.core.CsvOutputWriter.CsvSettings;
@@ -23,12 +24,14 @@ class CsvConfigurable implements IConfigurable
     private static final String NAME = TextOutputExtension.NAME + ".csv";
     private final List<Consumer<Boolean>> dirstyStateConsumers = new ArrayList<>();
     private final IConfig config;
-    private PropertiesComponent component;
+    private final IComponentFactory componentFactory;
+    private IPropertiesComponent component;
     private CsvSettingsWrapper settings;
 
-    CsvConfigurable(IConfig config)
+    CsvConfigurable(IConfig config, IComponentFactory componentFactory)
     {
         this.config = requireNonNull(config, "config");
+        this.componentFactory = componentFactory;
         this.settings = loadSettings();
     }
 
@@ -42,10 +45,10 @@ class CsvConfigurable implements IConfigurable
     {
         if (component == null)
         {
-            component = new PropertiesComponent(CsvSettingsWrapper.class, this::notifyDirty);
+            component = componentFactory.createPropertiesComponent(CsvSettingsWrapper.class, this::notifyDirty);
             component.init(new CsvSettingsWrapper(settings));
         }
-        return component;
+        return component.getComponent();
     }
 
     @Override

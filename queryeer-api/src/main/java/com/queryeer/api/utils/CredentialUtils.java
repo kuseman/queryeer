@@ -21,8 +21,22 @@ public final class CredentialUtils
 {
     private static final int PASSWORD_FIELD_LENGTH = 20;
 
-    /** Show dialog that ask for credentials */
+    /**
+     * Show dialog that ask for credentials
+     *
+     * @return Credentials or null if user cancelled
+     */
     public static Credentials getCredentials(String connectionDescription, String prefilledUsername)
+    {
+        return getCredentials(connectionDescription, prefilledUsername, false);
+    }
+
+    /**
+     * Show dialog that ask for credentials
+     *
+     * @return Credentials or null if user cancelled
+     */
+    public static Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean usernameReadonly)
     {
         JPanel panel = new JPanel();
         panel.setLayout(new GridBagLayout());
@@ -38,6 +52,12 @@ public final class CredentialUtils
         usernameField.setText(prefilledUsername);
         JTextField focusCompoennt = isBlank(usernameField.getText()) ? usernameField
                 : passwordField;
+
+        if (usernameReadonly)
+        {
+            usernameField.setEnabled(false);
+            focusCompoennt = passwordField;
+        }
 
         focusCompoennt.addAncestorListener(new AncestorListener()
         {

@@ -1,6 +1,7 @@
 package com.queryeer;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -10,9 +11,9 @@ import javax.swing.SwingConstants;
 
 import org.apache.commons.io.FilenameUtils;
 
-import com.queryeer.QueryFileModel.State;
+import com.queryeer.api.IQueryFile.ExecutionState;
 import com.queryeer.api.service.IEventBus;
-import com.queryeer.components.TabComponent;
+import com.queryeer.component.TabComponent;
 import com.queryeer.event.QueryFileClosingEvent;
 
 /** Tabbed pane for query files */
@@ -50,6 +51,7 @@ class QueryFileTabbedPane extends JTabbedPane
                 {
                     queryeerModel.setSelectedFile(component.file);
                 }
+                getComponentAt(index).requestFocusInWindow();
             }
         });
     }
@@ -126,7 +128,17 @@ class QueryFileTabbedPane extends JTabbedPane
             sb.append("*");
         }
         sb.append(filename);
-        if (queryFile.getState() == State.EXECUTING)
+
+        String summary = queryFile.getQueryFileState()
+                .getSummary();
+
+        if (!isBlank(summary))
+        {
+            sb.append(" - ")
+                    .append(summary);
+        }
+
+        if (queryFile.getExecutionState() == ExecutionState.EXECUTING)
         {
             sb.append(" Executing ...");
         }

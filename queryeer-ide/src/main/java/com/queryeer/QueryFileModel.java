@@ -1,56 +1,37 @@
 package com.queryeer;
 
-import static java.util.Collections.unmodifiableList;
-import static org.apache.commons.lang3.StringUtils.isAllBlank;
+import static java.util.Objects.requireNonNull;
 
+import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import javax.swing.event.SwingPropertyChangeSupport;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.time.StopWatch;
-import org.apache.commons.lang3.tuple.Pair;
 
+import com.queryeer.api.IQueryFile.ExecutionState;
+import com.queryeer.api.IQueryFileState;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
-import com.queryeer.domain.Caret;
-import com.queryeer.domain.ICatalogModel;
-
-import se.kuseman.payloadbuilder.core.QuerySession;
-import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 
 /**
  * Model of a query file. Has information about filename, execution state etc.
  **/
-class QueryFileModel
+class QueryFileModel implements PropertyChangeListener
 {
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this, true);
     static final String DIRTY = "dirty";
     static final String FILENAME = "filename";
-    static final String QUERY = "query";
-    static final String CARET = "carret";
-    static final String STATE = "state";
+    static final String EXECUTION_STATE = "executionState";
 
-    private final Map<String, Object> variables = new HashMap<>();
-    private final QuerySession querySession = new QuerySession(new CatalogRegistry(), variables);
-    private final List<ICatalogModel> catalogs;
-    private final Caret caret = new Caret();
+    private final IQueryFileState queryFileState;
 
     private boolean dirty;
     private boolean newFile = true;
     private String filename = "";
-    private State state = State.COMPLETED;
-    /** Query before modifications */
-    private String savedQuery = "";
-    private String query = "";
+    private ExecutionState executionState = ExecutionState.COMPLETED;
     private int totalRowCount;
 
     private IOutputExtension outputExtension;
@@ -58,53 +39,73 @@ class QueryFileModel
 
     /** Execution fields */
     private StopWatch sw;
-    private String error;
-    private Pair<Integer, Integer> parseErrorLocation;
 
     /** Initialize a file from filename */
-    QueryFileModel(List<ICatalogModel> catalogs, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file)
+    QueryFileModel(IQueryFileState queryFileState, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file)
     {
-        this.catalogs = unmodifiableList(catalogs);
+        this.queryFileState = requireNonNull(queryFileState, "queryFileState");
+        queryFileState.addPropertyChangeListener(this);
         this.outputExtension = outputExtension;
         this.outputFormat = outputFormat;
         if (file != null)
         {
             this.filename = file.getAbsolutePath();
-            try
-            {
-                query = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeException(e);
-            }
             dirty = false;
             newFile = false;
-            savedQuery = query;
         }
-
-        initCatalogs();
     }
 
-    private void initCatalogs()
+    @Override
+    public void propertyChange(PropertyChangeEvent evt)
     {
-        for (ICatalogModel catalog : catalogs)
+        // Propagate dirty change from state
+        if (IQueryFileState.DIRTY.equals(evt.getPropertyName()))
         {
-            // Register catalogs
-            querySession.getCatalogRegistry()
-                    .registerCatalog(catalog.getAlias(), catalog.getCatalogExtension()
-                            .getCatalog());
-
-            // Set first extension as default
-            // We pick the first catalog that has a UI component
-            if (isAllBlank(querySession.getDefaultCatalogAlias())
-                    && !catalog.isDisabled()
-                    && catalog.getCatalogExtension()
-                            .getConfigurableClass() != null)
-            {
-                querySession.setDefaultCatalogAlias(catalog.getAlias());
-            }
+            setDirty((boolean) evt.getNewValue());
         }
+        else
+        {
+            // Else propagate the event
+            pcs.firePropertyChange(evt);
+        }
+    }
+
+    void close()
+    {
+        queryFileState.removePropertyChangeListener(this);
+    }
+
+    void load()
+    {
+        try
+        {
+            queryFileState.load(filename);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Unable to save file " + filename, e);
+        }
+        newFile = false;
+        setDirty(false);
+    }
+
+    void save()
+    {
+        try
+        {
+            queryFileState.save(filename);
+        }
+        catch (Exception e)
+        {
+            throw new RuntimeException("Unable to save file " + filename, e);
+        }
+        newFile = false;
+        setDirty(false);
+    }
+
+    IQueryFileState getQueryFileState()
+    {
+        return queryFileState;
     }
 
     boolean isDirty()
@@ -123,21 +124,21 @@ class QueryFileModel
         }
     }
 
-    State getState()
+    ExecutionState getExecutionState()
     {
-        return state;
+        return executionState;
     }
 
-    void setState(State state)
+    void setExecutionState(ExecutionState state)
     {
-        State oldValue = this.state;
-        State newValue = state;
+        ExecutionState oldValue = this.executionState;
+        ExecutionState newValue = state;
         if (oldValue != newValue)
         {
-            this.state = state;
+            this.executionState = state;
 
             // Reset execution fields when starting
-            if (state == State.EXECUTING)
+            if (state == ExecutionState.EXECUTING)
             {
                 sw = new StopWatch();
                 sw.start();
@@ -148,7 +149,7 @@ class QueryFileModel
                 sw.stop();
             }
 
-            pcs.firePropertyChange(STATE, oldValue, newValue);
+            pcs.firePropertyChange(EXECUTION_STATE, oldValue, newValue);
         }
     }
 
@@ -162,8 +163,6 @@ class QueryFileModel
     void clearForExecution()
     {
         totalRowCount = 0;
-        error = "";
-        parseErrorLocation = null;
     }
 
     boolean isNew()
@@ -192,59 +191,6 @@ class QueryFileModel
         }
     }
 
-    /** Saves file to disk */
-    void save()
-    {
-        try
-        {
-            FileUtils.write(new File(filename), query, StandardCharsets.UTF_8);
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException("Unable to save file " + filename, e);
-        }
-        newFile = false;
-        savedQuery = query;
-        setDirty(false);
-    }
-
-    String getQuery(boolean selected)
-    {
-        if (selected)
-        {
-            return caret.getSelectionLength() > 0 ? query.substring(caret.getSelectionStart(), caret.getSelectionStart() + caret.getSelectionLength())
-                    : query;
-        }
-
-        return query;
-    }
-
-    void setQuery(String query)
-    {
-        String newValue = query;
-        String oldValue = this.query;
-        if (!newValue.equals(oldValue))
-        {
-            this.query = query;
-            pcs.firePropertyChange(QUERY, oldValue, newValue);
-            setDirty(!Objects.equals(query, savedQuery));
-        }
-    }
-
-    Caret getCaret()
-    {
-        return caret;
-    }
-
-    void setCaret(int lineNumber, int offset, int position, int selectionStart, int selectionLength)
-    {
-        caret.setLineNumber(lineNumber);
-        caret.setOffset(offset);
-        caret.setPosition(position);
-        caret.setSelectionStart(selectionStart);
-        caret.setSelectionLength(selectionLength);
-    }
-
     void addPropertyChangeListener(PropertyChangeListener listener)
     {
         pcs.addPropertyChangeListener(listener);
@@ -270,31 +216,6 @@ class QueryFileModel
         this.outputFormat = outputFormat;
     }
 
-    String getError()
-    {
-        return error;
-    }
-
-    void setError(String error)
-    {
-        this.error = error;
-    }
-
-    Pair<Integer, Integer> getParseErrorLocation()
-    {
-        return parseErrorLocation;
-    }
-
-    void setParseErrorLocation(Pair<Integer, Integer> parseErrorLocation)
-    {
-        this.parseErrorLocation = parseErrorLocation;
-    }
-
-    QuerySession getQuerySession()
-    {
-        return querySession;
-    }
-
     void incrementTotalRowCount()
     {
         totalRowCount++;
@@ -305,40 +226,9 @@ class QueryFileModel
         return outputFormat;
     }
 
-    Map<String, Object> getVariables()
-    {
-        return variables;
-    }
-
     /** Total row count of current execution including all result sets */
     int getTotalRowCount()
     {
         return totalRowCount;
-    }
-
-    List<ICatalogModel> getCatalogs()
-    {
-        return catalogs;
-    }
-
-    /** Execution state of this file */
-    enum State
-    {
-        COMPLETED("Stopped"),
-        EXECUTING("Executing"),
-        ABORTED("Aborted"),
-        ERROR("Error");
-
-        final String tooltip;
-
-        State(String tooltip)
-        {
-            this.tooltip = tooltip;
-        }
-
-        public String getToolTip()
-        {
-            return tooltip;
-        }
     }
 }

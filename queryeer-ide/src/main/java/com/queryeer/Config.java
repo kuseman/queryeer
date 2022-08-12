@@ -1,33 +1,20 @@
 package com.queryeer;
 
 import static com.queryeer.QueryeerController.MAPPER;
-import static java.util.Collections.emptyList;
-import static java.util.Collections.unmodifiableList;
-import static java.util.stream.Collectors.toMap;
-import static org.apache.commons.lang3.StringUtils.lowerCase;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.queryeer.api.extensions.catalog.ICatalogExtension;
-import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
 import com.queryeer.api.service.IConfig;
-import com.queryeer.domain.ICatalogModel;
 
 /** Queryeer config */
 class Config implements IConfig
@@ -36,19 +23,30 @@ class Config implements IConfig
     private static final String CONFIG_DEFAULT = CONFIG + ".default";
 
     private static final int MAX_RECENT_FILES = 10;
-    @JsonProperty
-    @JsonDeserialize(
-            contentAs = Catalog.class)
-    private List<ICatalogModel> catalogs = new ArrayList<>();
+    // @JsonProperty
+    // @JsonDeserialize(
+    // contentAs = Catalog.class)
+    // private List<ICatalogModel> catalogs = new ArrayList<>();
     @JsonProperty
     private String lastOpenPath;
     @JsonProperty
     private final List<String> recentFiles = new ArrayList<>();
+
+    @JsonProperty
+    private String defaultQueryProvider;
+
     private File etcFolder;
 
-    Config(File etcFolder) throws IOException
+    Config() throws IOException
     {
-        this.etcFolder = etcFolder;
+        String etcProp = System.getProperty("etc");
+
+        if (isBlank(etcProp))
+        {
+            throw new IllegalArgumentException("No etc folder property defined");
+        }
+
+        this.etcFolder = new File(etcProp);
 
         File file = new File(etcFolder, CONFIG);
         if (!file.exists())
@@ -63,14 +61,14 @@ class Config implements IConfig
         }
     }
 
-    List<ICatalogModel> getCatalogs()
-    {
-        if (catalogs == null)
-        {
-            return emptyList();
-        }
-        return unmodifiableList(catalogs);
-    }
+    // List<ICatalogModel> getCatalogs()
+    // {
+    // if (catalogs == null)
+    // {
+    // return emptyList();
+    // }
+    // return unmodifiableList(catalogs);
+    // }
 
     String getLastOpenPath()
     {
@@ -95,6 +93,16 @@ class Config implements IConfig
         {
             recentFiles.remove(recentFiles.size() - 1);
         }
+    }
+
+    String getDefaultQueryProvider()
+    {
+        return defaultQueryProvider;
+    }
+
+    void setDefaultQueryProvider(String defaultQueryProvider)
+    {
+        this.defaultQueryProvider = defaultQueryProvider;
     }
 
     /** Save config to disk */
@@ -166,123 +174,123 @@ class Config implements IConfig
         }
     }
 
-    /** Load config with provide etc-folder */
-    void loadCatalogExtensions(List<ICatalogExtensionFactory> catalogExtensionFactories) throws IOException
-    {
-        Set<String> seenAliases = new HashSet<>();
-        for (ICatalogModel catalog : catalogs)
-        {
-            if (!seenAliases.add(lowerCase(catalog.getAlias())))
-            {
-                throw new IllegalArgumentException("Duplicate alias found in config. Alias: " + catalog.getAlias());
-            }
-        }
-
-        // Load extension according to config
-        // Auto add missing extension with the extensions default alias
-        Map<String, ICatalogExtensionFactory> extensions = catalogExtensionFactories.stream()
-                .sorted(Comparator.comparingInt(ICatalogExtensionFactory::order))
-                .collect(toMap(c -> c.getClass()
-                        .getName(), Function.identity(), (e1, e2) -> e1, LinkedHashMap::new));
-
-        Set<ICatalogExtensionFactory> processedFactories = new HashSet<>();
-
-        // Loop configured extensions
-        boolean configChanged = false;
-
-        for (ICatalogModel catalog : catalogs)
-        {
-            ICatalogExtensionFactory factory = extensions.get(((Catalog) catalog).getFactory());
-            processedFactories.add(factory);
-            // Disable current catalog if no extension found
-            if (factory == null)
-            {
-                configChanged = true;
-                ((Catalog) catalog).disabled = true;
-            }
-            else
-            {
-                ((Catalog) catalog).catalogExtension = factory.create(catalog.getAlias());
-                if (catalog.isDisabled())
-                {
-                    configChanged = true;
-                }
-                // Enable config
-                ((Catalog) catalog).disabled = false;
-            }
-        }
-
-        // Append all new extensions not found in config
-        for (ICatalogExtensionFactory factory : extensions.values())
-        {
-            if (processedFactories.contains(factory))
-            {
-                continue;
-            }
-
-            Config.Catalog catalog = new Catalog();
-            catalogs.add(catalog);
-
-            catalog.factory = factory.getClass()
-                    .getName();
-            catalog.disabled = false;
-
-            String alias = factory.getDefaultAlias();
-
-            // Find an empty alias
-            int count = 1;
-            String currentAlias = alias;
-            while (seenAliases.contains(lowerCase(currentAlias)))
-            {
-                currentAlias = (alias + count++);
-            }
-
-            catalog.alias = alias;
-            catalog.catalogExtension = factory.create(alias);
-
-            configChanged = true;
-        }
-
-        if (configChanged)
-        {
-            save();
-        }
-    }
-
-    /** Catalog extension */
-    static class Catalog implements ICatalogModel
-    {
-        @JsonProperty
-        private String alias;
-        @JsonProperty
-        private String factory;
-        @JsonProperty
-        private boolean disabled;
-
-        @JsonIgnore
-        private ICatalogExtension catalogExtension;
-
-        @Override
-        public String getAlias()
-        {
-            return alias;
-        }
-
-        public String getFactory()
-        {
-            return factory;
-        }
-
-        @Override
-        public boolean isDisabled()
-        {
-            return disabled;
-        }
-
-        @Override
-        public ICatalogExtension getCatalogExtension()
-        {
-            return catalogExtension;
-        }
-    }
+    // /** Load config with provide etc-folder */
+    // void loadCatalogExtensions(List<ICatalogExtensionFactory> catalogExtensionFactories) throws IOException
+    // {
+    // Set<String> seenAliases = new HashSet<>();
+    // for (ICatalogModel catalog : catalogs)
+    // {
+    // if (!seenAliases.add(lowerCase(catalog.getAlias())))
+    // {
+    // throw new IllegalArgumentException("Duplicate alias found in config. Alias: " + catalog.getAlias());
+    // }
+    // }
+    //
+    // // Load extension according to config
+    // // Auto add missing extension with the extensions default alias
+    // Map<String, ICatalogExtensionFactory> extensions = catalogExtensionFactories.stream()
+    // .sorted(Comparator.comparingInt(ICatalogExtensionFactory::order))
+    // .collect(toMap(c -> c.getClass()
+    // .getName(), Function.identity(), (e1, e2) -> e1, LinkedHashMap::new));
+    //
+    // Set<ICatalogExtensionFactory> processedFactories = new HashSet<>();
+    //
+    // // Loop configured extensions
+    // boolean configChanged = false;
+    //
+    // for (ICatalogModel catalog : catalogs)
+    // {
+    // ICatalogExtensionFactory factory = extensions.get(((Catalog) catalog).getFactory());
+    // processedFactories.add(factory);
+    // // Disable current catalog if no extension found
+    // if (factory == null)
+    // {
+    // configChanged = true;
+    // ((Catalog) catalog).disabled = true;
+    // }
+    // else
+    // {
+    // ((Catalog) catalog).catalogExtension = factory.create(catalog.getAlias());
+    // if (catalog.isDisabled())
+    // {
+    // configChanged = true;
+    // }
+    // // Enable config
+    // ((Catalog) catalog).disabled = false;
+    // }
+    // }
+    //
+    // // Append all new extensions not found in config
+    // for (ICatalogExtensionFactory factory : extensions.values())
+    // {
+    // if (processedFactories.contains(factory))
+    // {
+    // continue;
+    // }
+    //
+    // Config.Catalog catalog = new Catalog();
+    // catalogs.add(catalog);
+    //
+    // catalog.factory = factory.getClass()
+    // .getName();
+    // catalog.disabled = false;
+    //
+    // String alias = factory.getDefaultAlias();
+    //
+    // // Find an empty alias
+    // int count = 1;
+    // String currentAlias = alias;
+    // while (seenAliases.contains(lowerCase(currentAlias)))
+    // {
+    // currentAlias = (alias + count++);
+    // }
+    //
+    // catalog.alias = alias;
+    // catalog.catalogExtension = factory.create(alias);
+    //
+    // configChanged = true;
+    // }
+    //
+    // if (configChanged)
+    // {
+    // save();
+    // }
+    // }
+    //
+    // /** Catalog extension */
+    // static class Catalog implements ICatalogModel
+    // {
+    // @JsonProperty
+    // private String alias;
+    // @JsonProperty
+    // private String factory;
+    // @JsonProperty
+    // private boolean disabled;
+    //
+    // @JsonIgnore
+    // private ICatalogExtension catalogExtension;
+    //
+    // @Override
+    // public String getAlias()
+    // {
+    // return alias;
+    // }
+    //
+    // public String getFactory()
+    // {
+    // return factory;
+    // }
+    //
+    // @Override
+    // public boolean isDisabled()
+    // {
+    // return disabled;
+    // }
+    //
+    // @Override
+    // public ICatalogExtension getCatalogExtension()
+    // {
+    // return catalogExtension;
+    // }
+    // }
 }

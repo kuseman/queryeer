@@ -26,5 +26,4 @@ public class QueryFileStateEvent extends QueryFileEvent
         BEFORE_QUERY_EXECUTE,
         AFTER_QUERY_EXECUTE
     }
-
 }

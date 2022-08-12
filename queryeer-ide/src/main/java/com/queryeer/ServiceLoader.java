@@ -5,6 +5,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toSet;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -16,12 +17,13 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.queryeer.PluginHandler.Plugin;
 import com.queryeer.api.extensions.IExtension;
-import com.queryeer.api.extensions.Inject;
+import com.queryeer.api.service.Inject;
 
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
@@ -55,12 +57,12 @@ class ServiceLoader
         ServiceRegistration registration = services.get(clazz);
         if (registration == null)
         {
-            return null;
+            return emptyList();
         }
         return registration.resolve();
     }
 
-    void register(Class<?> serviceClass, List<Class<?>> interfaces)
+    void register(Class<?> serviceClass, Collection<Class<?>> interfaces)
     {
         ServiceRegistration serviceRegistration = services.computeIfAbsent(serviceClass, k -> new ServiceRegistration());
         serviceRegistration.addServiceType(serviceClass);
@@ -95,8 +97,9 @@ class ServiceLoader
     void injectExtensions() throws InstantiationException, IllegalAccessException
     {
         Collection<Plugin> plugins = pluginHandler.getPlugins();
+        ClassLoader queryeerLoader = PluginHandler.class.getClassLoader();
         ClassLoader[] classLoaders = new ClassLoader[1 + plugins.size()];
-        classLoaders[0] = PluginHandler.class.getClassLoader();
+        classLoaders[0] = queryeerLoader;
         int index = 1;
         for (Plugin plugin : plugins)
         {
@@ -127,11 +130,32 @@ class ServiceLoader
             }
         }
 
+        // Wire Queryeer classes first
+        extensionClasses.sort((c1, c2) ->
+        {
+            int a = c1.getClassLoader() == queryeerLoader ? -1
+                    : 1;
+            int b = c2.getClassLoader() == queryeerLoader ? -1
+                    : 1;
+            return Integer.compare(a, b);
+        });
+
         for (Class<?> clz : extensionClasses)
         {
-            List<Class<?>> ifaces = Arrays.stream(clz.getInterfaces())
-                    .filter(c -> IExtension.class.isAssignableFrom(c))
-                    .collect(toList());
+            Set<Class<?>> ifaces = Arrays.stream(clz.getInterfaces())
+                    .collect(toSet());
+
+            for (Class<?> iface : ifaces)
+            {
+                Class<?>[] subifaces = iface.getInterfaces();
+                for (Class<?> subiface : subifaces)
+                {
+                    if (IExtension.class != subiface)
+                    {
+                        ifaces.add(subiface);
+                    }
+                }
+            }
 
             register(clz, ifaces);
         }
@@ -264,7 +288,14 @@ class ServiceLoader
                     return;
                 }
             }
-            serviceTypes.add(new ServiceType(serviceClass));
+            try
+            {
+                serviceTypes.add(new ServiceType(serviceClass));
+            }
+            catch (Throwable e)
+            {
+                throw new RuntimeException("Error registering " + serviceClass, e);
+            }
         }
     }
 }

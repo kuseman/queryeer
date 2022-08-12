@@ -50,12 +50,23 @@ class Model implements TableModel
     }
 
     /** Set columns */
-    void setColumns(List<String> columns)
+    void setColumns(List<String> columns, boolean notify)
     {
         if (requireNonNull(columns).size() > 0)
         {
             this.columns = columns;
-            SwingUtilities.invokeLater(() -> fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW)));
+            if (notify)
+            {
+                Runnable r = () -> fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW));
+                if (SwingUtilities.isEventDispatchThread())
+                {
+                    r.run();
+                }
+                else
+                {
+                    SwingUtilities.invokeLater(r);
+                }
+            }
         }
     }
 
