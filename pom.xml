@@ -15,7 +15,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <main.basedir>${project.basedir}</main.basedir>
-        <maven.deploy.skip>true</maven.deploy.skip>
 
         <!-- Versions -->
         <junit.version>4.13.1</junit.version>
