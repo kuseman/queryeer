@@ -1,0 +1,50 @@
+CHANGELOG
+
+Queryeer
+
+v0.9.0
+fix: Bump payloadbuilder 
+fix: Add changelog in about dialog
+fix: Deploy parent pom to avoid broken artifacts in central
+fix: Add pipeline for releasing API to central
+fix: Change table double click action to open plain data and not json
+fix(release-build): Fetch changelog messages from commits
+
+v0.8.0
+fix: Added an eventbus to be able to abstract away alot of boiler plate UI code 
+feat: Added support for output component toolbar actions 
+feat: Added support for file output extension 
+fix: Bump payloadbuilder 
+fix: Misc refactoring etc. 
+feat(build): Add changelog to GITHUB release build 
+feat: Added support for find/replace in text editor and table output result 
+fix: Bump dependencies
+fix: Add missing image referenced in README
+
+Payloadbuilder
+
+v0.8.5
+feat(ESCatalog): Add support for version 8.x of Elastic where type is removed
+feat: Add new regexp_match scalar function 
+fix: Add proper aggreagtion functionallity for count/sum/min/max 
+fix: Misc. fixes 
+fix: Performance fixes in BatchHashJoin 
+fix: Bump verions of github actions
+
+v0.8.4
+feat: Add support for back tick template string expression 
+fix: Fix failing test of function atTimeZone when running in non Sweden 
+fix: Misc fixes from Sonatype Lift
+feat: Add atTimeZone function to change a datetime to another zone
+fix: Bump library versions
+
+v0.8.3
+fix(ESCatalog): Fixed issue with _id index where wrong URL was generated
+fix(ESCatalog): Try to format error message from ES as JSON
+
+v0.8.2
+fix: Fix checkstyle
+fix: Clean up of cache namings. Don't expose implementation in API bundle
+
+v0.8.1
+fix: Fix README and minor stuff in pom's
