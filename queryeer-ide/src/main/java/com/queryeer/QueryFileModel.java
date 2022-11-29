@@ -90,6 +90,11 @@ class QueryFileModel
     {
         for (ICatalogModel catalog : catalogs)
         {
+            if (catalog.isDisabled())
+            {
+                continue;
+            }
+
             // Register catalogs
             querySession.getCatalogRegistry()
                     .registerCatalog(catalog.getAlias(), catalog.getCatalogExtension()

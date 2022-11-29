@@ -10,6 +10,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -21,10 +22,13 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
 import javax.swing.WindowConstants;
 import javax.swing.event.HyperlinkEvent;
+
+import org.apache.commons.io.IOUtils;
 
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
 
@@ -32,6 +36,7 @@ import se.kuseman.payloadbuilder.core.Payloadbuilder;
 class AboutDialog extends JDialog
 {
     private final String version;
+    private final String CHANGELOG = readChangeLog();
 
     AboutDialog(JFrame parent, String version)
     {
@@ -67,10 +72,15 @@ class AboutDialog extends JDialog
         JPanel contentPanel = new JPanel();
         contentPanel.setLayout(new GridBagLayout());
 
+        JTextArea changelog = new JTextArea();
+        changelog.setEditable(false);
+        changelog.setText(CHANGELOG);
+
         JLabel banner = new JLabel(getBanner());
         banner.setVerticalAlignment(SwingConstants.TOP);
-        contentPanel.add(banner, new GridBagConstraints(0, 0, 1, 1, 0, 1, GridBagConstraints.NORTH, GridBagConstraints.BOTH, new Insets(5, 5, 0, 0), 0, 0));
-        contentPanel.add(aboutText, new GridBagConstraints(1, 0, 1, 1, 1, 1, GridBagConstraints.BASELINE, GridBagConstraints.BOTH, new Insets(5, 5, 0, 0), 0, 0));
+        contentPanel.add(banner, new GridBagConstraints(0, 0, 1, 3, 0, 1, GridBagConstraints.NORTH, GridBagConstraints.BOTH, new Insets(5, 5, 0, 0), 0, 0));
+        contentPanel.add(aboutText, new GridBagConstraints(1, 0, 1, 1, 0, 0, GridBagConstraints.BASELINE, GridBagConstraints.BOTH, new Insets(5, 5, 0, 0), 0, 0));
+        contentPanel.add(new JScrollPane(changelog), new GridBagConstraints(1, 1, 1, 1, 1, 1, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(5, 5, 5, 5), 0, 0));
 
         getContentPane().add(contentPanel, BorderLayout.CENTER);
 
@@ -159,5 +169,17 @@ class AboutDialog extends JDialog
         sb.append("(C) Copyright Marcus Henriksson 2022");
 
         return sb.toString();
+    }
+
+    private static String readChangeLog()
+    {
+        try
+        {
+            return IOUtils.toString(AboutDialog.class.getResourceAsStream("/changelog.txt"), StandardCharsets.UTF_8);
+        }
+        catch (Exception e)
+        {
+            return "";
+        }
     }
 }

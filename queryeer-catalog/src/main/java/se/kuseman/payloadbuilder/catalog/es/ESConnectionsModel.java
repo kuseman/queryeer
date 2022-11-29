@@ -36,7 +36,6 @@ import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.session.IQuerySession;
-import se.kuseman.payloadbuilder.catalog.es.HttpClientUtils.AuthType;
 
 /**
  * Model for {@link ESCatalogExtension}'s connections
@@ -295,7 +294,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         @Property(
                 order = 4,
                 title = "Auth")
-        public HttpClientUtils.AuthType getAuthType()
+        public AuthType getAuthType()
         {
             return authType;
         }
