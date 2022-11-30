@@ -17,7 +17,7 @@ public interface ICatalogExtensionFactory extends IExtension
     String getDefaultAlias();
 
     /**
-     * Specifies order in which the extensions is added to Queryeer for this module. Only applicable if {@link ICatalogExtension#hasConfigComponent()} or
+     * Specifies order in which the extensions is added to Queryeer for this module. Only applicable if
      * {@link ICatalogExtension#hasQuickPropertieComponent()} is true.
      */
     default int order()

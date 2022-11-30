@@ -36,7 +36,7 @@ import se.kuseman.payloadbuilder.core.Payloadbuilder;
 class AboutDialog extends JDialog
 {
     private final String version;
-    private final String CHANGELOG = readChangeLog();
+    private static final String CHANGELOG = readChangeLog();
 
     AboutDialog(JFrame parent, String version)
     {
