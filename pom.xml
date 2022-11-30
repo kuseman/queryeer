@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.queryeer</groupId>
     <artifactId>queryeer</artifactId>
-    <version>0.9.0</version>
+    <version>0.10.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Queryeer</name>
     <description>Query IDE based on Payloadbuilder</description>
@@ -44,7 +44,7 @@
         <url>https://github.com/kuseman/queryeer</url>
         <connection>scm:git:git@github.com:kuseman/queryeer.git</connection>
         <developerConnection>scm:git:git@github.com:kuseman/queryeer.git</developerConnection>
-        <tag>v0.9.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <modules>
@@ -132,6 +132,27 @@
                                         <additionalJOption>-Xdoclint:-missing</additionalJOption>
                                     </additionalJOptions>
                                     <failOnError>false</failOnError>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.0.1</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                                <configuration>
+                                    <!-- This is necessary for gpg to not try to use the pinentry programs -->
+                                    <gpgArguments>
+                                        <arg>--pinentry-mode</arg>
+                                        <arg>loopback</arg>
+                                    </gpgArguments>
                                 </configuration>
                             </execution>
                         </executions>
