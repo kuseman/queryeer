@@ -3,7 +3,7 @@
     <parent>
         <groupId>com.queryeer</groupId>
         <artifactId>queryeer</artifactId>
-        <version>0.10.0-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>queryeer-ide</artifactId>
     <name>Queryeer :: Query IDE</name>
@@ -14,10 +14,13 @@
         <maven.deploy.skip>true</maven.deploy.skip>
 
         <!-- Versions -->
-        <slf4j-log4j12.version>1.7.30</slf4j-log4j12.version>
+        <slf4j-reload4j.version>1.7.36</slf4j-reload4j.version>
         <ikonli-fontawesome-pack.version>2.4.0</ikonli-fontawesome-pack.version>
         <ikonli-swing.version>2.4.0</ikonli-swing.version>
-        <rsyntaxtextarea.version>3.2.0</rsyntaxtextarea.version>
+        <rsyntaxtextarea.version>3.3.3</rsyntaxtextarea.version>
+        <autocomplete.version>3.3.1</autocomplete.version>
+        <rstaui.version>3.3.1</rstaui.version>
+        <jasypt.version>1.9.3</jasypt.version>
     </properties>
 
     <dependencies>
@@ -35,12 +38,29 @@
         <!-- External -->
         <dependency>
             <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
+            <artifactId>slf4j-reload4j</artifactId>
+            <version>${slf4j-reload4j.version}</version>
         </dependency>
         <dependency>
             <groupId>io.github.classgraph</groupId>
             <artifactId>classgraph</artifactId>
             <version>4.8.146</version>
+        </dependency>
+        <dependency>
+            <groupId>com.vmware.antlr4-c3</groupId>
+            <artifactId>antlr4-c3</artifactId>
+            <version>1.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr4</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.jasypt</groupId>
+            <artifactId>jasypt</artifactId>
+            <version>${jasypt.version}</version>
         </dependency>
 
         <!--  UI -->
@@ -62,12 +82,12 @@
         <dependency>
             <groupId>com.fifesoft</groupId>
             <artifactId>rstaui</artifactId>
-            <version>${rsyntaxtextarea.version}</version>
+            <version>${rstaui.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fifesoft</groupId>
             <artifactId>autocomplete</artifactId>
-            <version>${rsyntaxtextarea.version}</version>
+            <version>${autocomplete.version}</version>
         </dependency>
 
         <!-- TEST -->

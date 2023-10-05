@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.swing.ImageIcon;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 
 /** Variuos utils used by Queryeer */
@@ -15,6 +17,11 @@ final class Utils
 {
     private static final Pattern VERSION_PATTERN = Pattern.compile("(\\d+)(?:\\.)?");
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+
+    static ImageIcon getResouceIcon(String name)
+    {
+        return new ImageIcon(Utils.class.getResource(name));
+    }
 
     /** Get HEX represenatation of a byte arrya */
     static String bytesToHex(byte[] bytes)

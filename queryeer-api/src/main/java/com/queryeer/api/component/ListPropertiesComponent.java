@@ -1,7 +1,6 @@
 package com.queryeer.api.component;
 
 import static java.util.Objects.requireNonNull;
-import static se.kuseman.payloadbuilder.api.utils.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.GridBagConstraints;
@@ -17,9 +16,12 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.event.AncestorEvent;
 import javax.swing.event.AncestorListener;
+
+import com.queryeer.api.utils.StringUtils;
 
 /**
  * Component with a editable list of items and a {@link PropertiesComponent} for selected item.
@@ -97,7 +99,7 @@ public class ListPropertiesComponent<T> extends JPanel
 
         JPanel listPanel = new JPanel();
         listPanel.setLayout(new GridBagLayout());
-        listPanel.add(itemList, new GridBagConstraints(0, 0, 2, 1, 1.0, 1.0, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
+        listPanel.add(new JScrollPane(itemList), new GridBagConstraints(0, 0, 2, 1, 1.0, 1.0, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
         listPanel.add(add, new GridBagConstraints(0, 1, 1, 1, 0.5, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
         listPanel.add(remove, new GridBagConstraints(1, 1, 1, 1, 0.5, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
 
@@ -146,7 +148,7 @@ public class ListPropertiesComponent<T> extends JPanel
         propertiesPanel.add(propertiesComponent, BorderLayout.CENTER);
 
         int y = 0;
-        if (!isBlank(propertiesComponent.propertyFields.getHeader()))
+        if (!StringUtils.isBlank(propertiesComponent.propertyFields.getHeader()))
         {
             JLabel label = new JLabel(propertiesComponent.propertyFields.getHeader());
             label.setHorizontalAlignment(JLabel.CENTER);

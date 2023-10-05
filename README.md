@@ -23,7 +23,6 @@ Extensible Query IDE with support for Payloadbuilder Catalogs.
 - Run launcher script in `bin` folder
 - Distribution folder layout
   - bin  (start scripts etc.)
-  - etc (configuration files etc.)
   - lib (Queryeer libraries)
   - plugins (Plugins)
   - shared (Shared libraries folder. Usefull for jdbc drviers etc. This is shared among all plugins classloaders)

@@ -1,21 +1,22 @@
 package com.queryeer;
 
-import static java.util.Collections.emptySet;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
-import java.util.HashSet;
+import java.awt.Color;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import com.queryeer.QueryFileModel.State;
+import com.queryeer.api.TextSelection;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.extensions.catalog.ICatalogExtension.ExceptionAction;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.domain.ICatalogModel;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
@@ -23,19 +24,11 @@ import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.core.CompiledQuery;
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
 import se.kuseman.payloadbuilder.core.QueryResult;
-import se.kuseman.payloadbuilder.core.parser.AExpressionVisitor;
-import se.kuseman.payloadbuilder.core.parser.AStatementVisitor;
-import se.kuseman.payloadbuilder.core.parser.Expression;
 import se.kuseman.payloadbuilder.core.parser.ParseException;
-import se.kuseman.payloadbuilder.core.parser.QueryParser;
-import se.kuseman.payloadbuilder.core.parser.QueryStatement;
-import se.kuseman.payloadbuilder.core.parser.VariableExpression;
 
 /** Class the executes queries etc. */
 class PayloadbuilderService
 {
-    private static final VariableVisitor VARIABLES_VISITOR = new VariableVisitor();
-    private static final QueryParser PARSER = new QueryParser();
     private static final AtomicInteger THREAD_ID = new AtomicInteger(1);
     private static final Executor EXECUTOR = Executors.newFixedThreadPool(Runtime.getRuntime()
             .availableProcessors() * 2, r ->
@@ -74,11 +67,33 @@ class PayloadbuilderService
             {
                 file.setState(State.EXECUTING);
 
+                ITextOutputComponent textOutput = fileView.getOutputComponent(ITextOutputComponent.class);
                 try
                 {
                     file.getQuerySession()
                             .setAbortSupplier(() -> file.getState() == State.ABORTED);
-                    CompiledQuery query = Payloadbuilder.compile(queryString);
+
+                    file.getQuerySession()
+                            .setExceptionHandler(e -> textOutput.appendWarning(e.getMessage(), TextSelection.EMPTY));
+
+                    CompiledQuery query = Payloadbuilder.compile(file.getQuerySession(), queryString);
+
+                    if (!query.getWarnings()
+                            .isEmpty())
+                    {
+                        for (CompiledQuery.Warning warning : query.getWarnings())
+                        {
+                            TextSelection selection = fileView.getSelection(warning.location());
+                            String message = "Warning, line: " + warning.location()
+                                    .line() + System.lineSeparator() + warning.message() + System.lineSeparator();
+                            textOutput.appendWarning(message, selection);
+                            fileView.highlight(selection, Color.BLUE);
+                        }
+
+                        textOutput.getTextWriter()
+                                .append(System.lineSeparator());
+                    }
+
                     QueryResult queryResult = query.execute(file.getQuerySession());
 
                     while (queryResult.hasMoreResults())
@@ -91,13 +106,25 @@ class PayloadbuilderService
                         queryResult.writeResult(writer);
                         // Flush after each result set
                         writer.flush();
+
+                        long time = file.getQuerySession()
+                                .getLastQueryExecutionTime();
+                        long rowCount = file.getQuerySession()
+                                .getLastQueryRowCount();
+
+                        String output = String.format("%s%d row(s) affected, execution time: %s", System.lineSeparator(), rowCount, DurationFormatUtils.formatDurationHMS(time));
+                        file.getQuerySession()
+                                .printLine(output);
                     }
                     completed = true;
                 }
                 catch (ParseException e)
                 {
-                    file.setError(String.format("Syntax error. Line: %d, Column: %d. %s", e.getLine(), e.getColumn(), e.getMessage()));
-                    file.setParseErrorLocation(Pair.of(e.getLine(), e.getColumn() + 1));
+                    TextSelection selection = fileView.getSelection(e.getLocation());
+                    String message = "Syntax error, line: " + e.getLocation()
+                            .line() + System.lineSeparator() + e.getMessage() + System.lineSeparator();
+                    fileView.highlight(selection, Color.RED);
+                    textOutput.appendWarning(message, selection);
                     file.setState(State.ERROR);
                     completed = true;
                 }
@@ -122,14 +149,15 @@ class PayloadbuilderService
                         }
                     }
 
-                    String message = e.getMessage();
-                    if (e.getCause() != null)
+                    Throwable t = ExceptionUtils.getRootCause(e);
+                    if (t == null)
                     {
-                        message += " (" + e.getCause()
-                                .getClass()
-                                .getSimpleName() + ")";
+                        t = e;
                     }
-                    file.setError(message);
+
+                    String message = t.getMessage();
+                    textOutput.appendWarning(message, TextSelection.EMPTY);
+
                     file.setState(State.ERROR);
                     if (System.getProperty("devEnv") != null)
                     {
@@ -148,47 +176,5 @@ class PayloadbuilderService
                 }
             }
         });
-    }
-
-    /** Get named parameters from query. */
-    static Set<String> getVariables(String query)
-    {
-        QueryStatement parsedQuery;
-        try
-        {
-            parsedQuery = PARSER.parseQuery(query);
-        }
-        catch (Exception e)
-        {
-            // TODO: notify error parsing
-            return emptySet();
-        }
-        Set<String> parameters = new HashSet<>();
-        parsedQuery.getStatements()
-                .forEach(s -> s.accept(VARIABLES_VISITOR, parameters));
-        return parameters;
-    }
-
-    /** Variable visitor. */
-    private static class VariableVisitor extends AStatementVisitor<Void, Set<String>>
-    {
-        private static final ExpressionVisitor EXPRESSION_VISITOR = new ExpressionVisitor();
-
-        @Override
-        protected void visitExpression(Set<String> context, Expression expression)
-        {
-            expression.accept(EXPRESSION_VISITOR, context);
-        }
-
-        /** Expression visitor. */
-        private static class ExpressionVisitor extends AExpressionVisitor<Void, Set<String>>
-        {
-            @Override
-            public Void visit(VariableExpression expression, Set<String> context)
-            {
-                context.add(expression.getName());
-                return null;
-            }
-        }
     }
 }

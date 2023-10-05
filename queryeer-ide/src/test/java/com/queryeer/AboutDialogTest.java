@@ -2,8 +2,9 @@ package com.queryeer;
 
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.WindowConstants;
 
-public class AboutDialogTest
+class AboutDialogTest
 {
     public static void main(String[] args)
     {
@@ -16,6 +17,8 @@ public class AboutDialogTest
         {
             ex.printStackTrace();
         }
-        new AboutDialog(null, "1.0.0").setVisible(true);
+        AboutDialog d = new AboutDialog(null, "1.0.0");
+        d.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        d.setVisible(true);
     }
 }

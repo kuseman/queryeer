@@ -70,6 +70,10 @@ class CsvConfigurable implements IConfigurable
     @Override
     public void commitChanges()
     {
+        if (component == null)
+        {
+            return;
+        }
         settings = (CsvSettingsWrapper) component.getTarget();
         config.saveExtensionConfig(NAME, MAPPER.convertValue(settings, Map.class));
     }
@@ -77,6 +81,10 @@ class CsvConfigurable implements IConfigurable
     @Override
     public void revertChanges()
     {
+        if (component == null)
+        {
+            return;
+        }
         component.init(new CsvSettingsWrapper(settings));
     }
 

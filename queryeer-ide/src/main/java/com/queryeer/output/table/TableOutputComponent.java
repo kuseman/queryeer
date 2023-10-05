@@ -38,7 +38,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.fife.rsta.ui.search.FindDialog;
 import org.fife.rsta.ui.search.SearchEvent;
 import org.fife.rsta.ui.search.SearchListener;
-import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.SearchContext;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -47,6 +46,7 @@ import com.queryeer.Constants;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
+import com.queryeer.dialog.ValueDialog;
 
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
@@ -272,7 +272,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 {
                     if (row >= 0)
                     {
-                        TableContextMenuActionFactory.showValueDialog("Value viewer - " + table.getColumnName(col), lastClickedCell.value, SyntaxConstants.SYNTAX_STYLE_NONE);
+                        ValueDialog.showValueDialog("Value viewer - " + table.getColumnName(col), lastClickedCell.value, ValueDialog.Format.UNKOWN);
                     }
                 }
                 else if (e.getClickCount() == 1
@@ -290,7 +290,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     }
 
     /** Add new result set to this instance */
-    void addResult(final Model model)
+    synchronized void addResult(final Model model)
     {
         final Table resultTable = createTable();
         model.addTableModelListener(e ->

@@ -3,6 +3,8 @@ package com.queryeer.api.extensions;
 import java.awt.Component;
 import java.util.function.Consumer;
 
+import com.queryeer.api.service.ICryptoService;
+
 /** Definition of configurable component. */
 public interface IConfigurable extends IExtension
 {
@@ -40,10 +42,10 @@ public interface IConfigurable extends IExtension
     void addDirtyStateConsumer(Consumer<Boolean> consumer);
 
     /**
-     * Commits changes made to config component.
+     * Commits changes made to configurable.
      * 
      * <pre>
-     * Component is responsible for storing state to disk etc.
+     * Configurable is responsible for storing state to disk etc.
      * </pre>
      */
     default void commitChanges()
@@ -51,15 +53,37 @@ public interface IConfigurable extends IExtension
     }
 
     /**
-     * Revert any changes made to config component.
+     * Revert any changes made to configurable.
      */
     default void revertChanges()
     {
+    }
+
+    /**
+     * Re-encrypt secrets of this configurable using provided crypto service. Implementations of this method should first decrypt it's secrets using existing {@link ICryptoService} and then encrypt
+     * using provided new crypto service.
+     * <p>
+     * NOTE! Changes are stored/reverted as usual upon {@link #commitChanges()}/{@link IConfigurable#revertChanges()}
+     * </p>
+     *
+     * @return Returns Result of re-encryption
+     */
+    default EncryptionResult reEncryptSecrets(ICryptoService newCryptoService)
+    {
+        return EncryptionResult.NO_CHANGE;
     }
 
     /** Order of configurable */
     default int order()
     {
         return 0;
+    }
+
+    /** Result of re-encryption */
+    enum EncryptionResult
+    {
+        ABORT,
+        SUCCESS,
+        NO_CHANGE
     }
 }

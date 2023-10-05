@@ -17,21 +17,24 @@ import javax.swing.event.SwingPropertyChangeSupport;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.time.StopWatch;
-import org.apache.commons.lang3.tuple.Pair;
 
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.domain.Caret;
 import com.queryeer.domain.ICatalogModel;
 
-import se.kuseman.payloadbuilder.core.QuerySession;
+import se.kuseman.payloadbuilder.core.cache.InMemoryGenericCache;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 /**
  * Model of a query file. Has information about filename, execution state etc.
  **/
 class QueryFileModel
 {
+    /** All query tabs share a common cache to be able to reuse cached data etc. */
+    private static final InMemoryGenericCache GENERIC_CACHE = new InMemoryGenericCache("QuerySession", true);
+
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this, true);
     static final String DIRTY = "dirty";
     static final String FILENAME = "filename";
@@ -58,8 +61,6 @@ class QueryFileModel
 
     /** Execution fields */
     private StopWatch sw;
-    private String error;
-    private Pair<Integer, Integer> parseErrorLocation;
 
     /** Initialize a file from filename */
     QueryFileModel(List<ICatalogModel> catalogs, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file)
@@ -82,6 +83,7 @@ class QueryFileModel
             newFile = false;
             savedQuery = query;
         }
+        this.querySession.setGenericCache(GENERIC_CACHE);
 
         initCatalogs();
     }
@@ -103,7 +105,6 @@ class QueryFileModel
             // Set first extension as default
             // We pick the first catalog that has a UI component
             if (isAllBlank(querySession.getDefaultCatalogAlias())
-                    && !catalog.isDisabled()
                     && catalog.getCatalogExtension()
                             .getConfigurableClass() != null)
             {
@@ -167,8 +168,6 @@ class QueryFileModel
     void clearForExecution()
     {
         totalRowCount = 0;
-        error = "";
-        parseErrorLocation = null;
     }
 
     boolean isNew()
@@ -273,26 +272,6 @@ class QueryFileModel
     void setOutputFormat(IOutputFormatExtension outputFormat)
     {
         this.outputFormat = outputFormat;
-    }
-
-    String getError()
-    {
-        return error;
-    }
-
-    void setError(String error)
-    {
-        this.error = error;
-    }
-
-    Pair<Integer, Integer> getParseErrorLocation()
-    {
-        return parseErrorLocation;
-    }
-
-    void setParseErrorLocation(Pair<Integer, Integer> parseErrorLocation)
-    {
-        this.parseErrorLocation = parseErrorLocation;
     }
 
     QuerySession getQuerySession()

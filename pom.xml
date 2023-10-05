@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.queryeer</groupId>
     <artifactId>queryeer</artifactId>
-    <version>0.10.0-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Queryeer</name>
     <description>Query IDE based on Payloadbuilder</description>
@@ -10,8 +10,7 @@
 
     <properties>
         <!-- Build -->
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <main.basedir>${project.basedir}</main.basedir>
@@ -20,8 +19,8 @@
         <junit.version>4.13.1</junit.version>
         <mockito-core.version>4.3.1</mockito-core.version>
         <slf4j.version>1.7.30</slf4j.version>
-        <spotless.version>2.22.0</spotless.version>
-        <payloadbuilder.version>0.8.5</payloadbuilder.version>
+        <spotless.version>2.39.0</spotless.version>
+        <payloadbuilder.version>1.0.0</payloadbuilder.version>
     </properties>
 
     <issueManagement>
@@ -39,6 +38,20 @@
             <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
         </repository>
     </distributionManagement>
+
+    <repositories>
+        <repository>
+            <id>sonatype.snapshots</id>
+            <name>Sonatype Snapshot Repository</name>
+            <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <scm>
         <url>https://github.com/kuseman/queryeer</url>
@@ -99,20 +112,6 @@
                                 </manifest>
                             </archive>
                         </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-source-plugin</artifactId>
-                        <version>3.2.1</version>
-                        <executions>
-                            <execution>
-                                <id>attach-sources</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>jar-no-fork</goal>
-                                </goals>
-                            </execution>
-                        </executions>
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
@@ -225,6 +224,20 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.2.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <version>3.1.2</version>
                 <dependencies>
@@ -247,12 +260,28 @@
                         <phase>validate</phase>
                         <configuration>
                             <sourceDirectories>
-                                <sourceDirectory>src/</sourceDirectory>
+                                <sourceDirectory>src/main/</sourceDirectory>
                             </sourceDirectories>
                             <includeResources>true</includeResources>
                             <includeTestResources>false</includeTestResources>
                             <configLocation>checkstyle.xml</configLocation>
                             <outputFile>${project.build.directory}/checkstyle-result.xml</outputFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>checkstyle-test</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>validate</phase>
+                        <configuration>
+                            <sourceDirectories>
+                                <sourceDirectory>src/test/</sourceDirectory>
+                            </sourceDirectories>
+                            <includeResources>true</includeResources>
+                            <includeTestResources>true</includeTestResources>
+                            <configLocation>checkstyle-test.xml</configLocation>
+                            <outputFile>${project.build.directory}/checkstyle-test-result.xml</outputFile>
                         </configuration>
                     </execution>
                 </executions>

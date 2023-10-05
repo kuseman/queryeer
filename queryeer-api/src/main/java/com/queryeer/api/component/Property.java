@@ -31,12 +31,9 @@ public @interface Property
     /** Shoule this property be ignored from UI */
     boolean ignore() default false;
 
-    // /**
-    // * Is this property type aware. Meaning that this property's model type is determined from the model implementing {@link IPropertyAware#type(String)}.
-    // *
-    // * <pre>
-    // * NOTE! Is only applicable on {@link Map} types.
-    // * </pre>
-    // */
-    // boolean typeAware() default false;
+    /** Is this a password property */
+    boolean password() default false;
+
+    /** Return tooltip that should be displayed on this property */
+    String tooltip() default "";
 }

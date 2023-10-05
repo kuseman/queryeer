@@ -2,8 +2,8 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Collections.singletonMap;
 import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
-import java.awt.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.api.component.ListPropertiesComponent;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.service.IConfig;
+import com.queryeer.api.service.ICryptoService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsModel.Connection;
 
@@ -27,12 +28,14 @@ class JdbcCatalogConfigurable implements IConfigurable
     private final JdbcConnectionsModel connectionsModel;
     private final List<Consumer<Boolean>> dirstyStateConsumers = new ArrayList<>();
     private final IConfig config;
+    private final ICryptoService cryptoService;
     private ListPropertiesComponent<Connection> configComponent;
 
-    JdbcCatalogConfigurable(IConfig config, JdbcConnectionsModel connectionsModel)
+    JdbcCatalogConfigurable(IConfig config, JdbcConnectionsModel connectionsModel, ICryptoService cryptoService)
     {
         this.config = requireNonNull(config, "config");
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
+        this.cryptoService = requireNonNull(cryptoService, "cryptoService");
         loadSettings();
     }
 
@@ -42,7 +45,7 @@ class JdbcCatalogConfigurable implements IConfigurable
     }
 
     @Override
-    public Component getComponent()
+    public ListPropertiesComponent<Connection> getComponent()
     {
         if (configComponent == null)
         {
@@ -55,14 +58,62 @@ class JdbcCatalogConfigurable implements IConfigurable
     @Override
     public void revertChanges()
     {
-        configComponent.init(connectionsModel.copyConnections());
+        getComponent().init(connectionsModel.copyConnections());
     }
 
     @Override
     public void commitChanges()
     {
-        connectionsModel.setConnections(configComponent.getResult());
-        config.saveExtensionConfig(NAME, singletonMap(CONNECTIONS, connectionsModel.getConnections()));
+        connectionsModel.setConnections(getComponent().getResult());
+        boolean save = true;
+        // Encrypt passwords before saving
+        for (Connection con : connectionsModel.getConnections())
+        {
+            String pass = con.getPassword();
+            if (isBlank(pass))
+            {
+                continue;
+            }
+
+            String encryptedPass = cryptoService.encryptString(pass);
+            if (encryptedPass == null)
+            {
+                save = false;
+                continue;
+            }
+
+            con.setPassword(encryptedPass);
+        }
+
+        if (save)
+        {
+            config.saveExtensionConfig(NAME, singletonMap(CONNECTIONS, connectionsModel.getConnections()));
+        }
+    }
+
+    @Override
+    public EncryptionResult reEncryptSecrets(ICryptoService newCryptoService)
+    {
+        boolean change = false;
+        for (Connection con : getComponent().getResult())
+        {
+            String pass = con.getPassword();
+            if (isBlank(pass))
+            {
+                continue;
+            }
+
+            if ((pass = cryptoService.decryptString(pass)) == null)
+            {
+                return EncryptionResult.ABORT;
+            }
+
+            con.setPassword(newCryptoService.encryptString(pass));
+            change = true;
+        }
+
+        return change ? EncryptionResult.SUCCESS
+                : EncryptionResult.NO_CHANGE;
     }
 
     @Override

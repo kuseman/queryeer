@@ -12,7 +12,7 @@ import org.apache.commons.io.FilenameUtils;
 
 import com.queryeer.QueryFileModel.State;
 import com.queryeer.api.service.IEventBus;
-import com.queryeer.components.TabComponent;
+import com.queryeer.component.TabComponent;
 import com.queryeer.event.QueryFileClosingEvent;
 
 /** Tabbed pane for query files */

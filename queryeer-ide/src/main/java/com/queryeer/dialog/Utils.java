@@ -1,4 +1,4 @@
-package com.queryeer.output.table;
+package com.queryeer.dialog;
 
 import java.io.IOException;
 import java.io.StringReader;
@@ -6,6 +6,7 @@ import java.io.StringReader;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import org.apache.commons.lang3.StringUtils;
 import org.w3c.dom.Node;
 import org.w3c.dom.bootstrap.DOMImplementationRegistry;
 import org.w3c.dom.ls.DOMImplementationLS;
@@ -13,6 +14,7 @@ import org.w3c.dom.ls.LSSerializer;
 import org.xml.sax.InputSource;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter.Indenter;
@@ -20,7 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
-/** Table output utils */
+/** Dialog utils */
 class Utils
 {
     static final ObjectWriter WRITER;
@@ -58,6 +60,19 @@ class Utils
         ObjectMapper mapper = new ObjectMapper();
         WRITER = mapper.writer(printer);
         READER = mapper.readerFor(Object.class);
+    }
+
+    /** Return pretty json for provided value */
+    static String formatJson(Object value)
+    {
+        try
+        {
+            return Utils.WRITER.writeValueAsString(value);
+        }
+        catch (JsonProcessingException e)
+        {
+            return StringUtils.EMPTY;
+        }
     }
 
     /** Format provided xml */

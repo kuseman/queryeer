@@ -4,6 +4,7 @@ import static java.util.Arrays.asList;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -43,14 +44,20 @@ class TableOutputWriter implements OutputWriter
         if (model != null)
         {
             model.internCache = null;
-            int rowCount = model.getRowCount();
-            queryFile.getMessagesWriter()
-                    .println(String.valueOf(rowCount) + " row(s) selected" + System.lineSeparator());
         }
 
         this.model = new Model();
         this.model.setColumns(asList(columns));
-        SwingUtilities.invokeLater(() -> getTablesOutputComponent().addResult(this.model));
+
+        // Need a sync call here else we will have races on fast queries where we append wrong models
+        try
+        {
+            SwingUtilities.invokeAndWait(() -> getTablesOutputComponent().addResult(model));
+        }
+        catch (InvocationTargetException | InterruptedException e)
+        {
+            e.printStackTrace();
+        }
     }
 
     @Override

@@ -4,38 +4,47 @@ import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
+import static org.apache.commons.lang3.StringUtils.defaultString;
+import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
-import static se.kuseman.payloadbuilder.catalog.es.ESOperator.MAPPER;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.swing.AbstractListModel;
 import javax.swing.JButton;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.core5.http.ClassicHttpRequest;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpStatus;
+import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.IPropertyAware;
 import com.queryeer.api.component.Properties;
 import com.queryeer.api.component.Property;
 import com.queryeer.api.extensions.Inject;
+import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IQueryFileProvider;
+import com.queryeer.api.utils.ArrayUtils;
+import com.queryeer.api.utils.CredentialUtils;
+import com.queryeer.api.utils.CredentialUtils.Credentials;
 
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
-import se.kuseman.payloadbuilder.api.session.IQuerySession;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
+import se.kuseman.payloadbuilder.catalog.Common;
 
 /**
  * Model for {@link ESCatalogExtension}'s connections
@@ -47,10 +56,12 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
     private final List<Connection> connections = new ArrayList<>();
     /** {@link ESCatalogExtension} register it's reload button here so they all can be disabled upon load to avoid multiple reloads simultaneously */
     private final List<JButton> reloadButtons = new ArrayList<>();
+    private final ICryptoService cryptoService;
 
-    ESConnectionsModel(IQueryFileProvider queryFileProvider)
+    ESConnectionsModel(IQueryFileProvider queryFileProvider, ICryptoService cryptoService)
     {
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        this.cryptoService = requireNonNull(cryptoService, "cryptoService");
     }
 
     void registerReloadButton(JButton button)
@@ -90,16 +101,93 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         fireContentsChanged(this, 0, getSize() - 1);
     }
 
+    /** Finds a connection in model from session properties */
+    Connection findConnection(IQuerySession querySession, String catalogAlias)
+    {
+        String endpoint = querySession.getCatalogProperty(catalogAlias, ESCatalog.ENDPOINT_KEY)
+                .valueAsString(0);
+
+        int size = getSize();
+        for (int i = 0; i < size; i++)
+        {
+            Connection connection = getElementAt(i);
+            if (equalsIgnoreCase(connection.endpoint, endpoint))
+            {
+                return connection;
+            }
+        }
+
+        return null;
+    }
+
+    protected Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername)
+    {
+        return CredentialUtils.getCredentials(connectionDescription, prefilledUsername, readOnlyUsername);
+    }
+
+    /**
+     * Prepares connection before usage. Decrypts encrypted passwords or ask for credentials if missing etc. NOTE! Pops UI dialogs if needed
+     *
+     * @param silent Prepare silent ie. prepare without dialogs
+     * @return Returns true if connection is prepared otherwise false
+     */
+    boolean prepare(Connection connection, boolean silent)
+    {
+        if (connection == null)
+        {
+            return false;
+        }
+
+        // All setup
+        if (connection.hasCredentials())
+        {
+            return true;
+        }
+
+        // Connection with empty, password => ask for it
+        if (isBlank(connection.authPassword))
+        {
+            if (silent)
+            {
+                return false;
+            }
+
+            Credentials credentials = getCredentials(connection.toString(), connection.authUsername, true);
+            if (credentials == null)
+            {
+                return false;
+            }
+
+            connection.runtimeAuthPassword = credentials.getPassword();
+            return true;
+        }
+
+        if (silent
+                && !cryptoService.isInitalized())
+        {
+            return false;
+        }
+
+        String decrypted = cryptoService.decryptString(connection.authPassword);
+        // Failed to decrypt password
+        if (decrypted == null)
+        {
+            return false;
+        }
+        connection.runtimeAuthPassword = decrypted.toCharArray();
+        return true;
+    }
+
     /** Get indices for provided connection. */
     @SuppressWarnings("unchecked")
-    List<String> getIndices(Connection connection, boolean forceReload)
+    List<Index> getIndices(Connection connection, boolean forceReload)
     {
         reloadButtons.forEach(b -> b.setEnabled(false));
         try
         {
             synchronized (connection)
             {
-                List<String> indices = connection.indices;
+                List<Index> indices = connection.indices;
                 // Don't try to load connections that obviously won't work
                 if ((!forceReload
                         && indices != null)
@@ -116,18 +204,53 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
                 }
 
                 HttpGet getIndices = new HttpGet(connection.endpoint + "/_aliases");
-                HttpEntity entity = null;
-                try (CloseableHttpResponse response = execute(connection, getIndices))
+                try
                 {
-                    entity = response.getEntity();
-                    if (response.getStatusLine()
-                            .getStatusCode() != HttpStatus.SC_OK)
+                    connection.indices = execute(connection, getIndices, response ->
                     {
-                        throw new RuntimeException("Error query Elastic. " + IOUtils.toString(entity.getContent(), StandardCharsets.UTF_8));
-                    }
-                    connection.indices = new ArrayList<>(MAPPER.readValue(entity.getContent(), Map.class)
-                            .keySet());
-                    connection.indices.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a, b));
+                        HttpEntity entity = response.getEntity();
+                        if (response.getCode() != HttpStatus.SC_OK)
+                        {
+                            throw new RuntimeException("Error query Elastic. " + IOUtils.toString(entity.getContent(), StandardCharsets.UTF_8));
+                        }
+
+                        Map<String, Object> map = ESDatasource.MAPPER.readValue(entity.getContent(), Map.class);
+                        List<Index> result = new ArrayList<>(map.size());
+
+                        Set<String> seenAliases = new HashSet<>();
+
+                        for (Entry<String, Object> e : map.entrySet())
+                        {
+                            result.add(new Index(e.getKey()));
+                            // Collect aliases
+                            if (e.getValue() instanceof Map
+                                    && ((Map<String, Object>) e.getValue()).containsKey("aliases"))
+                            {
+                                Map<String, Object> aliasesMap = (Map<String, Object>) ((Map<String, Object>) e.getValue()).get("aliases");
+                                for (String key : aliasesMap.keySet())
+                                {
+                                    if (seenAliases.add(key.toLowerCase()))
+                                    {
+                                        result.add(new Index(key, Index.Type.ALIAS));
+                                    }
+                                }
+                            }
+                        }
+
+                        populateDataStreams(connection, result);
+
+                        result.sort((a, b) ->
+                        {
+                            int c = Integer.compare(a.type.order, b.type.order);
+                            if (c != 0)
+                            {
+                                return c;
+                            }
+
+                            return String.CASE_INSENSITIVE_ORDER.compare(a.name, b.name);
+                        });
+                        return result;
+                    });
                 }
                 catch (Exception e)
                 {
@@ -153,10 +276,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
                         e.printStackTrace();
                     }
                 }
-                finally
-                {
-                    EntityUtils.consumeQuietly(entity);
-                }
+
                 return connection.indices;
             }
         }
@@ -166,10 +286,88 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         }
     }
 
-    static CloseableHttpResponse execute(Connection connection, HttpRequestBase request) throws IOException
+    static void populateDataStreams(Connection connection, List<Index> result)
+    {
+        HttpGet getDataStreams = new HttpGet(connection.endpoint + "/_data_stream");
+        try
+        {
+            execute(connection, getDataStreams, response ->
+            {
+                HttpEntity entity = response.getEntity();
+                if (response.getCode() == 200)
+                {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> map = ESDatasource.MAPPER.readValue(entity.getContent(), Map.class);
+
+                    if (map.containsKey("data_streams"))
+                    {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> streams = (List<Map<String, Object>>) map.get("data_streams");
+                        for (Map<String, Object> stream : streams)
+                        {
+                            String name = (String) stream.get("name");
+                            if (name != null)
+                            {
+                                result.add(new Index(name, Index.Type.DATASTREAM));
+                            }
+                        }
+                    }
+                }
+                return null;
+            });
+        }
+        catch (Exception e)
+        {
+            // Swallow this
+        }
+    }
+
+    static <T> T execute(Connection connection, ClassicHttpRequest request, HttpClientResponseHandler<T> handler) throws IOException
     {
         return HttpClientUtils.execute(null, request, connection.trustCertificate, connection.connectTimeout, connection.receiveTimeout, connection.authType, connection.authUsername,
-                connection.authPassword);
+                connection.runtimeAuthPassword, handler);
+    }
+
+    static class Index
+    {
+        final String name;
+        final Type type;
+
+        Index(String name)
+        {
+            this(name, Type.INDEX);
+        }
+
+        Index(String name, Type type)
+        {
+            this.name = name;
+            this.type = type;
+        }
+
+        @Override
+        public String toString()
+        {
+            if (type == Type.INDEX)
+            {
+                return name;
+            }
+
+            return name + " (" + type + ")";
+        }
+
+        enum Type
+        {
+            INDEX(2),
+            ALIAS(0),
+            DATASTREAM(1);
+
+            private final int order;
+
+            Type(int order)
+            {
+                this.order = order;
+            }
+        }
     }
 
     /** Connection domain */
@@ -178,21 +376,30 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
     static class Connection implements IPropertyAware
     {
         @JsonProperty
-        String endpoint;
+        private String name;
         @JsonProperty
-        boolean trustCertificate;
+        private String endpoint;
         @JsonProperty
-        Integer connectTimeout;
+        private boolean trustCertificate;
         @JsonProperty
-        Integer receiveTimeout;
+        private Integer connectTimeout;
         @JsonProperty
-        AuthType authType = AuthType.NONE;
+        private Integer receiveTimeout;
         @JsonProperty
-        String authUsername;
+        private AuthType authType = AuthType.NONE;
+        @JsonProperty
+        private String authUsername;
+        /** Stored password for this connection. Is encrypted if set */
+        @JsonProperty
+        private String authPassword;
 
-        // Runtime data that is not persisted
-        char[] authPassword;
-        List<String> indices;
+        // Ignore runtime values
+        @JsonIgnore
+        private List<Index> indices;
+
+        /** This is the de-crypted/entered password for this connection */
+        @JsonIgnore
+        private char[] runtimeAuthPassword;
 
         Connection()
         {
@@ -200,14 +407,18 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
 
         Connection(Connection source)
         {
+            this.name = source.name;
             this.endpoint = source.endpoint;
             this.trustCertificate = source.trustCertificate;
             this.connectTimeout = source.connectTimeout;
             this.receiveTimeout = source.receiveTimeout;
             this.authType = source.authType;
             this.authUsername = source.authUsername;
-            this.authPassword = ArrayUtils.clone(source.authPassword);
+            this.authPassword = source.authPassword;
             this.indices = source.indices != null ? new ArrayList<>(source.indices)
+                    : null;
+
+            this.runtimeAuthPassword = source.runtimeAuthPassword != null ? Arrays.copyOf(source.runtimeAuthPassword, source.runtimeAuthPassword.length)
                     : null;
         }
 
@@ -219,7 +430,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
             querySession.setCatalogProperty(catalogAlias, ESCatalog.RECEIVE_TIMEOUT_KEY, receiveTimeout);
             querySession.setCatalogProperty(catalogAlias, ESCatalog.AUTH_TYPE_KEY, authType.toString());
             querySession.setCatalogProperty(catalogAlias, ESCatalog.AUTH_USERNAME_KEY, authUsername);
-            querySession.setCatalogProperty(catalogAlias, ESCatalog.AUTH_PASSWORD_KEY, authPassword);
+            querySession.setCatalogProperty(catalogAlias, ESCatalog.AUTH_PASSWORD_KEY, runtimeAuthPassword);
         }
 
         boolean hasCredentials()
@@ -233,10 +444,23 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
             {
                 case BASIC:
                     return !isBlank(authUsername)
-                            && !ArrayUtils.isEmpty(authPassword);
+                            && !ArrayUtils.isEmpty(runtimeAuthPassword);
                 default:
                     throw new RuntimeException("Unsupported auth type " + authType);
             }
+        }
+
+        @Property(
+                order = -1,
+                title = "Name")
+        public String getName()
+        {
+            return name;
+        }
+
+        public void setName(String name)
+        {
+            this.name = name;
         }
 
         @Property(
@@ -318,6 +542,32 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
             this.authUsername = authUsername;
         }
 
+        @Property(
+                order = 6,
+                title = "Auth Password",
+                visibleAware = true,
+                password = true,
+                tooltip = Common.AUTH_PASSWORD_TOOLTIP)
+        public String getAuthPassword()
+        {
+            return authPassword;
+        }
+
+        public void setAuthPassword(String authPassword)
+        {
+            this.authPassword = authPassword;
+        }
+
+        char[] getRuntimeAuthPassword()
+        {
+            return runtimeAuthPassword;
+        }
+
+        void setRuntimeAuthPassword(char[] runtimeAuthPassword)
+        {
+            this.runtimeAuthPassword = runtimeAuthPassword;
+        }
+
         @Override
         public boolean visible(String property)
         {
@@ -328,10 +578,20 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
             return true;
         }
 
+        List<Index> getIndices()
+        {
+            return indices;
+        }
+
+        void setIndices(List<Index> indices)
+        {
+            this.indices = indices;
+        }
+
         @Override
         public String toString()
         {
-            return endpoint;
+            return defaultString(name, endpoint);
         }
 
         @Override
@@ -343,10 +603,10 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         @Override
         public boolean equals(Object obj)
         {
-            if (obj instanceof Connection)
+            if (obj instanceof Connection that)
             {
-                Connection that = (Connection) obj;
-                return endpoint.equals(that.endpoint)
+                return Objects.equals(name, that.name)
+                        && Objects.equals(endpoint, that.endpoint)
                         && trustCertificate == that.trustCertificate
                         && Objects.equals(authType, that.authType)
                         && Objects.equals(authUsername, that.authUsername)

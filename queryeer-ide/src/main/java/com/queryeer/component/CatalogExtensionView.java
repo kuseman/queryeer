@@ -1,4 +1,4 @@
-package com.queryeer.components;
+package com.queryeer.component;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -25,7 +25,7 @@ import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.event.ShowOptionsEvent;
 
-import se.kuseman.payloadbuilder.core.QuerySession;
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 /** View for extension */
 class CatalogExtensionView extends JPanel
