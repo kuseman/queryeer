@@ -3,7 +3,7 @@
     <parent>
         <groupId>com.queryeer</groupId>
         <artifactId>queryeer</artifactId>
-        <version>0.10.0-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>queryeer-dist</artifactId>
     <name>Queryeer :: Distribution</name>
@@ -59,17 +59,16 @@
                                     <templateContent>
                                         <![CDATA[
            Changelog
-
 {{#tags}}
 {{#ifReleaseTag .}}
-## [{{name}}](https://gitservice/{{name}}) ({{tagDate .}})
+## [{{name}}](https://github.com/kuseman/queryeer/releases/tag/{{name}}) ({{tagDate .}})
 
   {{#ifContainsType commits type='feat'}}
 ### Features
 
     {{#commits}}
       {{#ifCommitType . type='feat'}}
- - {{#eachCommitScope .}} **{{.}}** {{/eachCommitScope}} {{{commitDescription .}}} ([{{hash}}](https://gitservice/commit/{{hashFull}}))
+ - {{#eachCommitScope .}} **{{.}}** {{/eachCommitScope}} {{{commitDescription .}}} ([{{hash}}](https://github.com/kuseman/queryeer/commit/{{hashFull}}))
       {{/ifCommitType}}
     {{/commits}}
   {{/ifContainsType}}
@@ -79,7 +78,7 @@
 
     {{#commits}}
       {{#ifCommitType . type='fix'}}
- - {{#eachCommitScope .}} **{{.}}** {{/eachCommitScope}} {{{commitDescription .}}} ([{{hash}}](https://gitservice/commit/{{hashFull}}))
+ - {{#eachCommitScope .}} **{{.}}** {{/eachCommitScope}} {{{commitDescription .}}} ([{{hash}}](https://github.com/kuseman/queryeer/commit/{{hashFull}}))
       {{/ifCommitType}}
     {{/commits}}
   {{/ifContainsType}}

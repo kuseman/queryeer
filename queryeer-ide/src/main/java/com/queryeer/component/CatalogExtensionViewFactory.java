@@ -1,4 +1,4 @@
-package com.queryeer.components;
+package com.queryeer.component;
 
 import static java.util.Objects.requireNonNull;
 

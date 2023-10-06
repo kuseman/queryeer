@@ -1,6 +1,6 @@
 package com.queryeer.api.utils;
 
-import static se.kuseman.payloadbuilder.api.utils.StringUtils.isBlank;
+import static com.queryeer.api.utils.StringUtils.isBlank;
 
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -14,8 +14,6 @@ import javax.swing.JTextField;
 import javax.swing.event.AncestorEvent;
 import javax.swing.event.AncestorListener;
 
-import se.kuseman.payloadbuilder.api.utils.ArrayUtils;
-
 /** CredentialUtils */
 public final class CredentialUtils
 {
@@ -23,6 +21,12 @@ public final class CredentialUtils
 
     /** Show dialog that ask for credentials */
     public static Credentials getCredentials(String connectionDescription, String prefilledUsername)
+    {
+        return getCredentials(connectionDescription, prefilledUsername, false);
+    }
+
+    /** Show dialog that ask for credentials */
+    public static Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername)
     {
         JPanel panel = new JPanel();
         panel.setLayout(new GridBagLayout());
@@ -36,6 +40,7 @@ public final class CredentialUtils
         panel.add(passwordField, new GridBagConstraints(1, 2, 1, 1, 1.0, 1.0, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
 
         usernameField.setText(prefilledUsername);
+        usernameField.setEditable(!readOnlyUsername);
         JTextField focusCompoennt = isBlank(usernameField.getText()) ? usernameField
                 : passwordField;
 
@@ -83,7 +88,7 @@ public final class CredentialUtils
         private final String username;
         private final char[] password;
 
-        Credentials(String username, char[] password)
+        public Credentials(String username, char[] password)
         {
             this.username = username;
             this.password = password;

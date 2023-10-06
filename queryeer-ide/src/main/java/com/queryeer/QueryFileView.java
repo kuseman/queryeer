@@ -60,6 +60,7 @@ import org.fife.ui.rtextarea.SearchResult;
 
 import com.queryeer.QueryFileModel.State;
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.TextSelection;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
@@ -67,20 +68,19 @@ import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
-import com.queryeer.components.TabComponent;
+import com.queryeer.completion.CompletionInstaller;
+import com.queryeer.component.TabComponent;
 import com.queryeer.event.CaretChangedEvent;
 
-import se.kuseman.payloadbuilder.api.session.IQuerySession;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
+import se.kuseman.payloadbuilder.core.parser.Location;
 
 /** Content of a query editor. Text editor and a result panel separated with a split panel */
 class QueryFileView extends JPanel implements IQueryFile, SearchListener
 {
     private static final String GOTO = "GOTO";
-
     private static final String REPLACE = "REPLACE";
-
     private static final String FIND = "FIND";
-
     private static final String PASTE_SPECIAL = "PASTE_SPECIAL";
 
     private final QueryFileModel file;
@@ -105,7 +105,7 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
     private boolean resultCollapsed;
     private int prevDividerLocation;
 
-    QueryFileView(QueryFileModel file, IEventBus eventBus, List<IOutputComponent> outputComponents, List<IOutputToolbarActionFactory> toolbarActionFactories)
+    QueryFileView(QueryFileModel file, IEventBus eventBus, List<IOutputComponent> outputComponents, List<IOutputToolbarActionFactory> toolbarActionFactories, CompletionInstaller completionInstaller)
     {
         this.file = file;
         this.outputComponents = requireNonNull(outputComponents, "outputComponents");
@@ -116,6 +116,7 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
 
         // CSOFF
         textEditor = new TextEditorPane();
+        textEditor.addParser(null);
         textEditor.setColumns(80);
         textEditor.setRows(40);
         textEditor.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_SQL);
@@ -124,6 +125,8 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
         textEditor.setTabSize(2);
         textEditor.setTabsEmulated(true);
         textEditor.setText(file.getQuery(false));
+
+        requireNonNull(completionInstaller, "completionInstaller").install(file.getQuerySession(), file.getCatalogs(), textEditor);
 
         JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
 
@@ -180,6 +183,19 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
         resultTabs.setAlignmentX(1.0f);
         resultTabs.setAlignmentY(0.0f);
 
+        FlowLayout toolBarLayout = new FlowLayout(FlowLayout.TRAILING, 0, 0);
+        toolBarLayout.setAlignOnBaseline(true);
+
+        outputComponentToolbar.setMaximumSize(new Dimension(500, 30));
+        outputComponentToolbar.setLayout(toolBarLayout);
+        outputComponentToolbar.setFloatable(false);
+        outputComponentToolbar.setOpaque(false);
+        outputComponentToolbar.setAlignmentX(1.0f);
+        outputComponentToolbar.setAlignmentY(0.0f);
+
+        tabPanel.add(outputComponentToolbar);
+        tabPanel.add(resultTabs);
+
         int index = 0;
         for (IOutputComponent ouputComponent : outputComponents)
         {
@@ -195,13 +211,6 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
         }
 
         resultTabs.addChangeListener(l -> outputComponentChanged());
-
-        outputComponentToolbar.setOpaque(false);
-        outputComponentToolbar.setAlignmentX(1.0f);
-        outputComponentToolbar.setAlignmentY(0.0f);
-
-        tabPanel.add(outputComponentToolbar);
-        tabPanel.add(resultTabs);
 
         splitPane = new JSplitPane();
         splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
@@ -328,14 +337,6 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
                 break;
             case ERROR:
                 focusMessages();
-                getMessagesWriter().println(file.getError());
-                if (file.getParseErrorLocation() != null)
-                {
-                    highLight(file.getParseErrorLocation()
-                            .getKey(),
-                            file.getParseErrorLocation()
-                                    .getValue());
-                }
                 break;
         }
 
@@ -411,7 +412,75 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
         labelRowCount.setText("");
     }
 
+    @Override
+    public void select(TextSelection textSelection)
+    {
+        if (textSelection.isEmpty())
+        {
+            return;
+        }
+
+        textEditor.select(textSelection.start(), textSelection.end());
+    }
+
     /* END IQueryFile */
+
+    /** Create a selection from provided location. Translating ev. selected text */
+    TextSelection getSelection(Location location)
+    {
+        if (location == null)
+        {
+            return TextSelection.EMPTY;
+        }
+
+        int selectionStart = 0;
+        if (textEditor.getSelectionEnd() - textEditor.getSelectionStart() > 0)
+        {
+            selectionStart = textEditor.getSelectionStart();
+        }
+
+        int start = selectionStart + location.startOffset();
+        int end = selectionStart + location.endOffset();
+        return new TextSelection(start, end);
+    }
+
+    void highlight(TextSelection selection, Color color)
+    {
+        Runnable r = () ->
+        {
+            try
+            {
+                // Clear selection before highlighting and re-add it after
+                int selStart = textEditor.getSelectionStart();
+                int selEnd = textEditor.getSelectionEnd();
+                if (selEnd - selStart > 0)
+                {
+                    textEditor.select(0, 0);
+                }
+
+                textEditor.getHighlighter()
+                        .addHighlight(selection.start(), selection.end(), new SquiggleUnderlineHighlightPainter(color));
+
+                if (selEnd - selStart > 0)
+                {
+                    textEditor.select(selStart, selEnd);
+                }
+            }
+            catch (BadLocationException e)
+            {
+            }
+        };
+
+        if (SwingUtilities.isEventDispatchThread())
+        {
+            r.run();
+        }
+        else
+        {
+            SwingUtilities.invokeLater(r);
+        }
+
+    }
 
     void close()
     {
@@ -680,19 +749,6 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
     void saved()
     {
         textEditor.discardAllEdits();
-    }
-
-    private void highLight(int line, int column)
-    {
-        try
-        {
-            int pos = Math.max(textEditor.getLineStartOffset(line - 1) + column - 1, 0);
-            textEditor.getHighlighter()
-                    .addHighlight(pos, pos + 3, new SquiggleUnderlineHighlightPainter(Color.RED));
-        }
-        catch (BadLocationException e)
-        {
-        }
     }
 
     private void clearHighLights()

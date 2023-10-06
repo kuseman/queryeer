@@ -11,6 +11,7 @@ import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.completion.CompletionInstaller;
 
 /** Factory for creating query files. */
 class QueryFileViewFactory
@@ -18,12 +19,14 @@ class QueryFileViewFactory
     private final List<IOutputExtension> outputExtensions;
     private final List<IOutputToolbarActionFactory> outputToolbarActionFactories;
     private final IEventBus eventBus;
+    private final CompletionInstaller completionInstaller;
 
-    QueryFileViewFactory(List<IOutputExtension> outputExtensions, List<IOutputToolbarActionFactory> outputToolbarActionFactories, IEventBus eventBus)
+    QueryFileViewFactory(List<IOutputExtension> outputExtensions, List<IOutputToolbarActionFactory> outputToolbarActionFactories, IEventBus eventBus, CompletionInstaller completionInstaller)
     {
         this.outputExtensions = requireNonNull(outputExtensions, "outputExtensions");
         this.outputToolbarActionFactories = requireNonNull(outputToolbarActionFactories, "outputToolbarActionFactories");
         this.eventBus = requireNonNull(eventBus, "eventBus");
+        this.completionInstaller = requireNonNull(completionInstaller, "completionInstaller");
     }
 
     QueryFileView create(QueryFileModel model)
@@ -34,6 +37,6 @@ class QueryFileViewFactory
                 .filter(Objects::nonNull)
                 .collect(toList());
 
-        return new QueryFileView(model, eventBus, outputComponents, outputToolbarActionFactories);
+        return new QueryFileView(model, eventBus, outputComponents, outputToolbarActionFactories, completionInstaller);
     }
 }

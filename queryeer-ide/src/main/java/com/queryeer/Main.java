@@ -12,9 +12,12 @@ import javax.swing.UnsupportedLookAndFeelException;
 
 import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
 import com.queryeer.api.service.IConfig;
+import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
-import com.queryeer.components.CatalogExtensionViewFactory;
+import com.queryeer.completion.CompletionInstaller;
+import com.queryeer.component.CatalogExtensionViewFactory;
 
 /** Main of Queryeer */
 public class Main
@@ -26,7 +29,13 @@ public class Main
 
         if (isBlank(etcProp))
         {
-            throw new IllegalArgumentException("No etc folder property defined");
+            etcProp = System.getProperty("user.home");
+            if (isBlank(etcProp))
+            {
+                throw new IllegalArgumentException("No etc folder property defined");
+            }
+
+            etcProp += "/.queryeer";
         }
 
         try
@@ -65,6 +74,9 @@ public class Main
         serviceLoader.register(IEventBus.class, eventBus);
         serviceLoader.register(eventBus);
 
+        CryptoService cryptoService = new CryptoService(serviceLoader);
+        serviceLoader.register(ICryptoService.class, cryptoService);
+
         Config config = new Config(etcFolder);
         serviceLoader.register(IConfig.class, config);
         serviceLoader.register(config);
@@ -81,7 +93,8 @@ public class Main
         serviceLoader.register(QueryFileTabbedPane.class);
         serviceLoader.register(QueryFileViewFactory.class);
         serviceLoader.register(CatalogExtensionViewFactory.class);
-        //
+        serviceLoader.register(new CompletionInstaller(eventBus));
+        serviceLoader.register(IIconFactory.class, new IconFactory());
 
         // Inject plugins last
         serviceLoader.injectExtensions();

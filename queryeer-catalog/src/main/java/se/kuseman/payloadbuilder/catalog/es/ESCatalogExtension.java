@@ -13,6 +13,7 @@ import java.awt.Insets;
 import java.util.List;
 
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -28,33 +29,42 @@ import com.queryeer.api.event.QueryFileStateEvent.State;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
+import com.queryeer.api.extensions.catalog.ICompletionProvider;
+import com.queryeer.api.service.IIconFactory;
+import com.queryeer.api.service.IIconFactory.Provider;
 import com.queryeer.api.service.IQueryFileProvider;
-import com.queryeer.api.utils.CredentialUtils;
 import com.queryeer.api.utils.CredentialUtils.Credentials;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
-import se.kuseman.payloadbuilder.api.session.IQuerySession;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
+import se.kuseman.payloadbuilder.api.execution.UTF8String;
+import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.CredentialsException;
 import se.kuseman.payloadbuilder.catalog.es.ESConnectionsModel.Connection;
+import se.kuseman.payloadbuilder.catalog.es.ESConnectionsModel.Index;
 
 /** Queryeer extension for {@link ESCatalog}. */
 class ESCatalogExtension implements ICatalogExtension
 {
     private static final String TITLE = "Elasticsearch";
-    private static final ESCatalog CATALOG = new ESCatalog();
+    static final ESCatalog CATALOG = new ESCatalog();
 
     private final IQueryFileProvider queryFileProvider;
     private final String catalogAlias;
     private final ESConnectionsModel connectionsModel;
     private final QuickPropertiesPanel quickPropertiesPanel;
+    private final ESCompletionProvider completionProvider;
+    private final IIconFactory iconFactory;
 
-    ESCatalogExtension(IQueryFileProvider queryFileProvider, ESConnectionsModel connectionsModel, String catalogAlias)
+    ESCatalogExtension(IQueryFileProvider queryFileProvider, ESConnectionsModel connectionsModel, ESCompletionProvider completionProvider, String catalogAlias, IIconFactory iconFactory)
     {
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.catalogAlias = catalogAlias;
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
+        this.iconFactory = requireNonNull(iconFactory, "iconFactory");
         this.quickPropertiesPanel = new QuickPropertiesPanel();
+        this.completionProvider = completionProvider;
     }
 
     @Override
@@ -82,40 +92,55 @@ class ESCatalogExtension implements ICatalogExtension
         // Credentials exception thrown, ask for credentials
         if (exception instanceof CredentialsException)
         {
-            Connection connection = (Connection) quickPropertiesPanel.connections.getSelectedItem();
-            String endpoint = querySession.getCatalogProperty(catalogAlias, ESCatalog.ENDPOINT_KEY);
+            Connection selectedConnection = (Connection) quickPropertiesPanel.connections.getSelectedItem();
 
-            boolean isSelectedConnection = connection != null
-                    && equalsIgnoreCase(endpoint, connection.endpoint);
+            // Try to find the connection from session
+            Connection connection = connectionsModel.findConnection(querySession, catalogAlias);
 
-            String connectionDescription = isSelectedConnection ? connection.toString()
-                    : endpoint;
-            String prefilledUsername = isSelectedConnection ? connection.authUsername
-                    : querySession.getCatalogProperty(catalogAlias, ESCatalog.AUTH_USERNAME_KEY);
-
-            Credentials credentials = CredentialUtils.getCredentials(connectionDescription, prefilledUsername);
-            if (credentials != null)
+            // We have another connection in session than the one selected, populate session and re-run
+            if (connection != null
+                    && selectedConnection != null
+                    && selectedConnection != connection)
             {
-                // CSOFF
-                if (isSelectedConnection)
-                // CSON
+                if (!connectionsModel.prepare(connection, false))
                 {
-                    // Only change password on if the endpoint is the selected connection
-                    connection.authPassword = credentials.getPassword();
+                    return ExceptionAction.NONE;
+                }
 
-                    // Utilize connection to reload databases if not already done
-                    // CSOFF
-                    if (connection.indices == null)
-                    // CSON
-                    {
-                        quickPropertiesPanel.loadIndices(connection, true);
-                    }
+                connection.setup(querySession, catalogAlias);
+                return ExceptionAction.RERUN;
+            }
+
+            // Session contains data that don't exists in our connections model, ask for user pass
+            // and populate session
+            if (connection == null)
+            {
+                String endpoint = querySession.getCatalogProperty(catalogAlias, ESCatalog.ENDPOINT_KEY)
+                        .valueAsString(0);
+                String username = querySession.getCatalogProperty(catalogAlias, ESCatalog.AUTH_USERNAME_KEY)
+                        .valueAsString(0);
+                Credentials credentials = connectionsModel.getCredentials(endpoint, username, false);
+                if (credentials == null)
+                {
+                    return ExceptionAction.NONE;
                 }
 
                 querySession.setCatalogProperty(catalogAlias, ESCatalog.AUTH_USERNAME_KEY, credentials.getUsername());
                 querySession.setCatalogProperty(catalogAlias, ESCatalog.AUTH_PASSWORD_KEY, credentials.getPassword());
                 return ExceptionAction.RERUN;
             }
+
+            // Clear the runtime password since we have a credentials exception
+            connection.setRuntimeAuthPassword(null);
+            // Prepare connection and rerun query
+            if (!connectionsModel.prepare(connection, false))
+            {
+                return ExceptionAction.NONE;
+            }
+
+            connection.setup(querySession, catalogAlias);
+            quickPropertiesPanel.updateAuthStatus(connection);
+            return ExceptionAction.RERUN;
         }
 
         return ExceptionAction.NONE;
@@ -133,10 +158,16 @@ class ESCatalogExtension implements ICatalogExtension
         return ESCatalogConfigurable.class;
     }
 
+    @Override
+    public ICompletionProvider getAutoCompletionProvider()
+    {
+        return completionProvider;
+    }
+
     @Subscribe
     private void queryFileChanged(QueryFileChangedEvent event)
     {
-        update();
+        update(event.getQueryFile());
     }
 
     @Subscribe
@@ -144,21 +175,18 @@ class ESCatalogExtension implements ICatalogExtension
     {
         IQueryFile queryFile = event.getQueryFile();
 
+        // Update quick properties with changed properties from query session
+        // change file is the currently opened one
         if (queryFileProvider.getCurrentFile() == queryFile)
         {
-            // Update quick properties with changed properties from query session
             if (event.getState() == State.AFTER_QUERY_EXECUTE)
             {
-                update();
-            }
-            else if (event.getState() == State.BEFORE_QUERY_EXECUTE)
-            {
-                setup();
+                update(queryFile);
             }
         }
     }
 
-    private void setup()
+    void setupConnection(Connection connection)
     {
         IQueryFile queryFile = queryFileProvider.getCurrentFile();
         if (queryFile == null)
@@ -166,48 +194,49 @@ class ESCatalogExtension implements ICatalogExtension
             return;
         }
         IQuerySession session = queryFile.getSession();
-        Connection connection = (Connection) quickPropertiesPanel.connections.getSelectedItem();
         if (connection != null)
         {
             connection.setup(session, catalogAlias);
         }
-        String index = (String) quickPropertiesPanel.indices.getSelectedItem();
-        session.setCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY, index);
     }
 
-    private void update()
+    void setupIndex(Index index)
     {
         IQueryFile queryFile = queryFileProvider.getCurrentFile();
         if (queryFile == null)
         {
             return;
         }
-        IQuerySession querySession = queryFile.getSession();
-        // Try to find correct connection to select if changed
-        String endpoint = querySession.getCatalogProperty(catalogAlias, ESCatalog.ENDPOINT_KEY);
-        String index = querySession.getCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY);
-        Connection connectionToSet = null;
-        String indexToSet = null;
+        IQuerySession session = queryFile.getSession();
+        session.setCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY, index != null ? index.name
+                : null);
+    }
 
-        int size = connectionsModel.getSize();
-        for (int i = 0; i < size; i++)
+    void update(IQueryFile queryFile)
+    {
+        if (queryFile == null)
         {
-            Connection connection = connectionsModel.getElementAt(i);
-            if (equalsIgnoreCase(connection.endpoint, endpoint))
-            {
-                connectionToSet = connection;
-                List<String> indices = defaultIfNull(connectionsModel.getIndices(connection, false), emptyList());
-                for (String idx : indices)
-                {
-                    if (equalsIgnoreCase(index, idx))
-                    {
-                        indexToSet = idx;
-                        break;
-                    }
-                }
+            return;
+        }
+        IQuerySession querySession = queryFile.getSession();
 
-                if (indexToSet != null)
+        // Find connection from session
+        Connection connectionToSet = connectionsModel.findConnection(querySession, catalogAlias);
+
+        String index = querySession.getCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY)
+                .valueAsString(0);
+        Object password = querySession.getCatalogProperty(catalogAlias, ESCatalog.AUTH_PASSWORD_KEY)
+                .valueAsObject(0);
+
+        Index indexToSet = null;
+        if (connectionToSet != null)
+        {
+            List<Index> indices = defaultIfNull(connectionsModel.getIndices(connectionToSet, false), emptyList());
+            for (Index idx : indices)
+            {
+                if (equalsIgnoreCase(index, idx.name))
                 {
+                    indexToSet = idx;
                     break;
                 }
             }
@@ -217,6 +246,32 @@ class ESCatalogExtension implements ICatalogExtension
                 && connectionsModel.getSize() > 0)
         {
             connectionToSet = connectionsModel.getElementAt(0);
+        }
+        // If we have a connection that requires credentials and doesn't have any and there is a password
+        // in session, set it to the connection
+        // Use case for this is when there are two different connections that share password then we can
+        // set the password from the other connection, this might turn up wrong but then a credentials input will popup
+        // if it's correct we saved the user from a password input
+        else if (connectionToSet != null
+                && !connectionToSet.hasCredentials()
+                && password != null)
+        {
+            char[] pass = null;
+            if (password instanceof char[])
+            {
+                pass = (char[]) password;
+            }
+            else if (password instanceof UTF8String
+                    || password instanceof String)
+            {
+                pass = String.valueOf(password)
+                        .toCharArray();
+            }
+
+            if (pass != null)
+            {
+                connectionToSet.setRuntimeAuthPassword(pass);
+            }
         }
 
         if (SwingUtilities.isEventDispatchThread())
@@ -229,7 +284,7 @@ class ESCatalogExtension implements ICatalogExtension
         else
         {
             final Connection tempA = connectionToSet;
-            final String tempB = indexToSet;
+            final Index tempB = indexToSet;
 
             SwingUtilities.invokeLater(() ->
             {
@@ -242,31 +297,41 @@ class ESCatalogExtension implements ICatalogExtension
     }
 
     /** Quick properties panel. */
-    private class QuickPropertiesPanel extends JPanel
+    class QuickPropertiesPanel extends JPanel
     {
+        private final Icon lock = iconFactory.getIcon(Provider.FONTAWESOME, "LOCK");
+        private final Icon unlock = iconFactory.getIcon(Provider.FONTAWESOME, "UNLOCK");
+
         private final Connection connectionPrototype = Connection.of("http://elasticsearch.domain.internal.com");
-        private final String indexPrototype = "somelongindexname";
-        private final JComboBox<Connection> connections;
-        private final JComboBox<String> indices;
-        private final DefaultComboBoxModel<String> indicesModel = new DefaultComboBoxModel<>();
+        private final Index indexPrototype = new Index("somelongindexname");
+        private final DefaultComboBoxModel<Index> indicesModel = new DefaultComboBoxModel<>();
         private final JButton reloadIndices;
+        private final JLabel authStatus;
+        private boolean suppressSetupIndex = false;
+        final JComboBox<Connection> connections;
+        final JComboBox<Index> indices;
 
         QuickPropertiesPanel()
         {
             setLayout(new GridBagLayout());
 
             // CSOFF
+            authStatus = new JLabel();
             add(new JLabel("Endpoint"), new GridBagConstraints(0, 0, 1, 1, 0.0, 0.0, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.NONE, new Insets(0, 0, 0, 5), 0, 0));
             connections = new JComboBox<>(new ConnectionsSelectionModel());
             connections.addItemListener(l ->
             {
-                setup();
                 Connection connection = (Connection) connections.getSelectedItem();
                 indicesModel.removeAllElements();
                 if (connection != null)
                 {
+                    // Prepare connection silent
+                    connectionsModel.prepare(connection, true);
+                    setupConnection(connection);
                     loadIndices(connection, false);
                 }
+
+                updateAuthStatus(connection);
             });
             connections.setPrototypeDisplayValue(connectionPrototype);
             connections.setMaximumRowCount(25);
@@ -277,13 +342,18 @@ class ESCatalogExtension implements ICatalogExtension
             indices = new JComboBox<>(indicesModel);
             indices.addItemListener(l ->
             {
-                setup();
+                if (!suppressSetupIndex)
+                {
+                    setupIndex((Index) quickPropertiesPanel.indices.getSelectedItem());
+                }
             });
 
             indices.setPrototypeDisplayValue(indexPrototype);
             indices.setMaximumRowCount(25);
             AutoCompletionComboBox.enable(indices);
             add(indices, new GridBagConstraints(1, 1, 1, 1, 1.0, 0.0, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
+
+            add(authStatus, new GridBagConstraints(0, 2, 1, 1, 0.0, 1.0, GridBagConstraints.NORTH, GridBagConstraints.HORIZONTAL, new Insets(3, 0, 0, 0), 0, 0));
 
             reloadIndices = new JButton("Reload");
             connectionsModel.registerReloadButton(reloadIndices);
@@ -294,7 +364,16 @@ class ESCatalogExtension implements ICatalogExtension
                 {
                     return;
                 }
+
+                // Preparation aborted, don't load indices
+                if (!connectionsModel.prepare(connection, false))
+                {
+                    return;
+                }
+
                 loadIndices(connection, true);
+                setupConnection(connection);
+                updateAuthStatus(connection);
             });
             add(reloadIndices, new GridBagConstraints(1, 2, 1, 1, 1.0, 1.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
 
@@ -302,34 +381,48 @@ class ESCatalogExtension implements ICatalogExtension
             // CSON
         }
 
+        private void updateAuthStatus(Connection connection)
+        {
+            // Only update if the provided connection is the selected one
+            if (connection == connections.getSelectedItem())
+            {
+                authStatus.setIcon(null);
+                authStatus.setToolTipText(null);
+                if (connection != null
+                        && connection.getAuthType() != AuthType.NONE)
+                {
+                    boolean hasCredentials = connection.hasCredentials();
+                    authStatus.setIcon(hasCredentials ? unlock
+                            : lock);
+                    authStatus.setToolTipText(hasCredentials ? null
+                            : Common.AUTH_STATUS_LOCKED_TOOLTIP);
+                }
+            }
+        }
+
         private void loadIndices(Connection connection, boolean forceReload)
         {
-            if (forceReload
-                    && !connection.hasCredentials())
+            if (!connection.hasCredentials())
             {
-                Credentials credentials = CredentialUtils.getCredentials(connection.toString(), connection.authUsername);
-                if (credentials == null)
-                {
-                    return;
-                }
-                // connection.authUsername = credentials.getUsername();
-                connection.authPassword = credentials.getPassword();
+                return;
             }
 
-            Thread thread = new Thread(() ->
+            Runnable load = () ->
             {
                 try
                 {
-                    final List<String> indices = defaultIfNull(connectionsModel.getIndices(connection, forceReload), emptyList());
+                    final List<Index> indices = defaultIfNull(connectionsModel.getIndices(connection, forceReload), emptyList());
                     SwingUtilities.invokeLater(() ->
                     {
+                        suppressSetupIndex = true;
                         final Object selectedIndex = quickPropertiesPanel.indices.getSelectedItem();
                         quickPropertiesPanel.indicesModel.removeAllElements();
-                        for (String index : indices)
+                        for (Index index : indices)
                         {
                             quickPropertiesPanel.indicesModel.addElement(index);
                         }
                         quickPropertiesPanel.indices.setSelectedItem(selectedIndex);
+                        suppressSetupIndex = false;
                     });
                 }
                 catch (Exception e)
@@ -345,8 +438,9 @@ class ESCatalogExtension implements ICatalogExtension
                         e.printStackTrace();
                     }
                 }
-            });
-            thread.start();
+            };
+
+            new Thread(load).start();
         }
     }
 

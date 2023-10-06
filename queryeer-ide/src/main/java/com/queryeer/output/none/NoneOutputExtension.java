@@ -30,7 +30,6 @@ class NoneOutputExtension implements IOutputExtension
     private static class NoneOutputWriter implements OutputWriter
     {
         private final IQueryFile file;
-        private int rowCount;
 
         NoneOutputWriter(IQueryFile file)
         {
@@ -38,17 +37,9 @@ class NoneOutputExtension implements IOutputExtension
         }
 
         @Override
-        public void close()
-        {
-            file.getMessagesWriter()
-                    .println(String.valueOf(rowCount) + " row(s) selected" + System.lineSeparator());
-        }
-
-        @Override
         public void endRow()
         {
             file.incrementTotalRowCount();
-            rowCount++;
         }
 
         @Override

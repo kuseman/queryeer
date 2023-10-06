@@ -71,6 +71,10 @@ class JsonConfigurable implements IConfigurable
     @Override
     public void commitChanges()
     {
+        if (component == null)
+        {
+            return;
+        }
         settings = (JsonSettingsWrapper) component.getTarget();
         config.saveExtensionConfig(NAME, MAPPER.convertValue(settings, Map.class));
     }
@@ -78,6 +82,10 @@ class JsonConfigurable implements IConfigurable
     @Override
     public void revertChanges()
     {
+        if (component == null)
+        {
+            return;
+        }
         component.init(new JsonSettingsWrapper(settings));
     }
 

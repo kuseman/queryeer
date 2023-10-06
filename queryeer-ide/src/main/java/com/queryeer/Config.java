@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 
+import javax.swing.JOptionPane;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 
@@ -33,7 +35,6 @@ import com.queryeer.domain.ICatalogModel;
 class Config implements IConfig
 {
     private static final String CONFIG = "queryeer.cfg";
-    private static final String CONFIG_DEFAULT = CONFIG + ".default";
 
     private static final int MAX_RECENT_FILES = 10;
     @JsonProperty
@@ -49,11 +50,20 @@ class Config implements IConfig
     Config(File etcFolder) throws IOException
     {
         this.etcFolder = etcFolder;
-
         File file = new File(etcFolder, CONFIG);
         if (!file.exists())
         {
-            file = new File(etcFolder, CONFIG_DEFAULT);
+            JOptionPane.showMessageDialog(null, """
+                    Config folder: '%s' doesn't exist, creating.
+                    NOTE! If this was an upgrade you can copy the config
+                    from the previous distribution. Config is now defaulted to your home
+                    folder to make upgrades easier.
+                    This behaviour can be changed by altering the startup script by passing an explicit 'etc'
+                    JVM argument.
+                    """.formatted(etcFolder.getAbsolutePath()), "Config folder", JOptionPane.INFORMATION_MESSAGE);
+
+            etcFolder.mkdirs();
+            file.createNewFile();
         }
         else
         {

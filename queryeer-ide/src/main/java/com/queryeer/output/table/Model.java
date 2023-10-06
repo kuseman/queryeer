@@ -15,9 +15,6 @@ import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 
-import org.apache.commons.lang3.StringUtils;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.queryeer.output.table.TableOutputWriter.RowList;
 
 /** Resulting model of a query */
@@ -150,19 +147,6 @@ class Model implements TableModel
                 SwingUtilities.invokeLater(() -> fireTableChanged(event));
             }
             lastNotifyRowIndex = size;
-        }
-    }
-
-    /** Return pretty json for provided value */
-    static String getPrettyJson(Object value)
-    {
-        try
-        {
-            return Utils.WRITER.writeValueAsString(value);
-        }
-        catch (JsonProcessingException e)
-        {
-            return StringUtils.EMPTY;
         }
     }
 

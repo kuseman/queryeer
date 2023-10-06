@@ -1,31 +1,52 @@
 package com.queryeer.output.text;
 
+import static java.util.Objects.requireNonNull;
+
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
 
 import javax.swing.Icon;
 import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
+import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Document;
+import javax.swing.text.Element;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import com.queryeer.api.IQueryFile;
+import com.queryeer.api.TextSelection;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
+import com.queryeer.api.service.IQueryFileProvider;
 
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
 {
-    private final JTextArea text;
+    private static final String WARNING_LOCATION = "warningLocation";
+    private final IQueryFileProvider queryFileProvider;
+    private final JTextPane text;
     private final PrintWriter printWriter;
 
-    TextOutputComponent()
+    TextOutputComponent(IQueryFileProvider queryFileProvider)
     {
-        super(new JTextArea());
-        this.text = (JTextArea) getViewport().getComponent(0);
-        printWriter = createPrintWriter();
+        super(new JTextPane());
+        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        this.text = (JTextPane) getViewport().getComponent(0);
+        this.text.setFont(new Font("Consolas", Font.PLAIN, 13));
+        this.text.addMouseListener(new TextMouseListener());
+        this.printWriter = createPrintWriter();
     }
 
     @Override
@@ -58,6 +79,16 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         return printWriter;
     }
 
+    @Override
+    public void appendWarning(String text, TextSelection textSelection)
+    {
+        SimpleAttributeSet warning = new SimpleAttributeSet();
+        StyleConstants.setForeground(warning, Color.RED);
+        warning.addAttribute(WARNING_LOCATION, textSelection);
+
+        appendText(text + System.lineSeparator(), warning);
+    }
+
     private PrintWriter createPrintWriter()
     {
         // CSOFF
@@ -68,15 +99,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
             public void write(char[] cbuf, int off, int len) throws IOException
             {
                 final String string = new String(cbuf, off, len);
-                Runnable r = () -> text.append(string);
-                if (SwingUtilities.isEventDispatchThread())
-                {
-                    r.run();
-                }
-                else
-                {
-                    SwingUtilities.invokeLater(r);
-                }
+                appendText(string, null);
             }
 
             @Override
@@ -98,5 +121,57 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                 // DO nothing on close
             }
         };
+    }
+
+    private void appendText(String string, AttributeSet attributeSet)
+    {
+        Runnable r = () ->
+        {
+            Document doc = text.getDocument();
+            try
+            {
+                doc.insertString(doc.getLength(), string, attributeSet);
+            }
+            catch (BadLocationException e)
+            {
+            }
+        };
+        if (SwingUtilities.isEventDispatchThread())
+        {
+            r.run();
+        }
+        else
+        {
+            SwingUtilities.invokeLater(r);
+        }
+    }
+
+    private class TextMouseListener extends MouseAdapter
+    {
+        @Override
+        public void mouseClicked(MouseEvent e)
+        {
+            if (e.getClickCount() == 2)
+            {
+                int character = text.viewToModel2D(e.getPoint());
+                if (character >= 0)
+                {
+                    Element element = ((StyledDocument) text.getDocument()).getCharacterElement(character);
+                    TextSelection warningLocation = (TextSelection) element.getAttributes()
+                            .getAttribute(WARNING_LOCATION);
+                    if (warningLocation != null)
+                    {
+                        // Mark whole warning text
+                        text.setSelectionStart(element.getStartOffset());
+                        text.setSelectionEnd(element.getEndOffset());
+                        IQueryFile currentFile = queryFileProvider.getCurrentFile();
+                        if (currentFile != null)
+                        {
+                            currentFile.select(warningLocation);
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -20,8 +20,10 @@ import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
@@ -41,7 +43,11 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.border.EtchedBorder;
 
+import org.kordamp.ikonli.fontawesome.FontAwesome;
+import org.kordamp.ikonli.swing.FontIcon;
+
 import com.queryeer.QueryeerController.ViewAction;
+import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
@@ -58,7 +64,8 @@ class QueryeerView extends JFrame
     private static final String NEW_QUERY = "NewQuery";
     private static final String EXECUTE = "Execute";
     private static final String STOP = "Stop";
-    private static final String EDIT_VARIABLES = "EditVariables";
+    private static final Icon TASKS_ICON = FontIcon.of(FontAwesome.TASKS);
+    private static final AnimatedIcon SPINNER = new AnimatedIcon(Utils.getResouceIcon("/icons/spinner.gif"));
 
     private final JPanel topPanel;
 
@@ -68,6 +75,8 @@ class QueryeerView extends JFrame
     private final JLabel labelMemory;
     private final JLabel labelCaret;
     private final JLabel labelVersion;
+    private final JLabel labelTasks;
+    private final JLabel labelTasksSpinner;
 
     private final JMenuItem openItem;
     private final JMenuItem saveItem;
@@ -82,6 +91,7 @@ class QueryeerView extends JFrame
     private boolean catalogsCollapsed;
     private int prevCatalogsDividerLocation;
     private final QueryFileTabbedPane tabbedPane;
+    private final TasksDialog tasksDialog;
 
     // CSOFF
     QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, IEventBus eventBus, List<IOutputExtension> outputExtensions, List<IOutputFormatExtension> outputFormatExtensions)
@@ -125,8 +135,40 @@ class QueryeerView extends JFrame
         labelCaret.setPreferredSize(new Dimension(100, 20));
         labelCaret.setToolTipText("Caret position (Line, column, position)");
         labelVersion = new JLabel();
+        labelTasks = new JLabel();
+        labelTasks.setMaximumSize(new Dimension(16, 16));
+        labelTasks.setIcon(TASKS_ICON);
 
         // CSON
+        JPanel panelTasks = new JPanel();
+        panelTasks.setLayout(new BoxLayout(panelTasks, BoxLayout.X_AXIS));
+        panelTasks.setToolTipText("Click to see tasks");
+        panelTasks.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseClicked(MouseEvent e)
+            {
+                if (tasksDialog.isShowing())
+                {
+                    tasksDialog.toFront();
+                }
+                else
+                {
+                    tasksDialog.setVisible(true);
+                }
+            }
+        });
+        panelTasks.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
+        panelTasks.setMaximumSize(new Dimension(34, 16));
+        panelTasks.add(labelTasks);
+
+        labelTasksSpinner = new JLabel(SPINNER);
+        labelTasksSpinner.setVisible(false);
+        labelTasksSpinner.setMaximumSize(new Dimension(16, 16));
+
+        panelTasks.add(labelTasksSpinner);
+
+        panelStatus.add(panelTasks);
         panelStatus.add(labelMemory);
         panelStatus.add(labelCaret);
         panelStatus.add(labelVersion);
@@ -141,11 +183,11 @@ class QueryeerView extends JFrame
         openItem = new JMenuItem(openAction);
         openItem.setText("Open");
         openItem.setAccelerator(KeyStroke.getKeyStroke('O', Toolkit.getDefaultToolkit()
-                .getMenuShortcutKeyMask()));
+                .getMenuShortcutKeyMaskEx()));
         saveItem = new JMenuItem(saveAction);
         saveItem.setText("Save");
         saveItem.setAccelerator(KeyStroke.getKeyStroke('S', Toolkit.getDefaultToolkit()
-                .getMenuShortcutKeyMask()));
+                .getMenuShortcutKeyMaskEx()));
         saveAsItem = new JMenuItem(saveAsAction);
         saveAsItem.setText("Save As ...");
         recentFiles = new JMenu("Recent Files");
@@ -261,8 +303,6 @@ class QueryeerView extends JFrame
                 .setToolTipText("Toggle result pane (" + getAcceleratorText(toggleResultKeyStroke) + ")");
         toolBar.add(toggleCommentAction)
                 .setToolTipText("Toggle comment on selected lines (" + getAcceleratorText(toggleCommentKeyStroke) + ")");
-        toolBar.add(editVariablesAction)
-                .setToolTipText("Edit parameters");
 
         comboOutput = new JComboBox<>();
         comboOutput.setRenderer(new DefaultListCellRenderer()
@@ -358,6 +398,8 @@ class QueryeerView extends JFrame
                 exitAction.actionPerformed(null);
             }
         });
+
+        tasksDialog = new TasksDialog(this, eventBus, running -> labelTasksSpinner.setVisible(running));
 
         eventBus.register(this);
         bindOutputExtensions(outputExtensions);
@@ -518,15 +560,6 @@ class QueryeerView extends JFrame
         public void actionPerformed(ActionEvent e)
         {
             actionHandler.accept(ViewAction.TOGGLE_COMMENT);
-        }
-    };
-
-    private final Action editVariablesAction = new AbstractAction(EDIT_VARIABLES, Constants.EDIT)
-    {
-        @Override
-        public void actionPerformed(ActionEvent e)
-        {
-            actionHandler.accept(ViewAction.EDIT_VARIABLES);
         }
     };
 

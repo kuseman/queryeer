@@ -1,6 +1,6 @@
 package com.queryeer.api.component;
 
-import static se.kuseman.payloadbuilder.api.utils.StringUtils.isBlank;
+import static com.queryeer.api.utils.StringUtils.isBlank;
 
 import java.awt.Component;
 import java.awt.GridBagConstraints;
@@ -20,15 +20,21 @@ import java.util.function.Consumer;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 import javax.swing.JTextField;
+
+import com.queryeer.api.component.PropertyFields.PropertyField;
 
 /**
  * Component that inspects a class for {@link Property} and builds a plain table of title and components from it's property types
  */
 public class PropertiesComponent extends JPanel
 {
+    /** Property field for this component if any, is set when this component is a nested field */
+    private final PropertyField propertyField;
     final PropertyFields propertyFields;
     private final Consumer<Boolean> dirtyConsumer;
     private final List<Consumer<Object>> componentSetters;
@@ -46,6 +52,12 @@ public class PropertiesComponent extends JPanel
 
     PropertiesComponent(Class<?> clazz, Consumer<Boolean> dirtyConsumer, boolean showPropertiesHeader)
     {
+        this(null, clazz, dirtyConsumer, showPropertiesHeader);
+    }
+
+    PropertiesComponent(PropertyField propertyField, Class<?> clazz, Consumer<Boolean> dirtyConsumer, boolean showPropertiesHeader)
+    {
+        this.propertyField = propertyField;
         this.showPropertiesHeader = showPropertiesHeader;
         this.propertyFields = Utils.collectPropertyFields(clazz);
         this.componentSetters = new ArrayList<>(propertyFields.getFields()
@@ -63,6 +75,13 @@ public class PropertiesComponent extends JPanel
     @Override
     public void setEnabled(boolean enabled)
     {
+        // Don't change enabled state if ready only
+        if (propertyField != null
+                && propertyField.isReadOnly())
+        {
+            return;
+        }
+
         super.setEnabled(enabled);
         for (Component cmp : getComponents())
         {
@@ -121,7 +140,13 @@ public class PropertiesComponent extends JPanel
 
         for (PropertyFields.PropertyField pf : propertyFields.getFields())
         {
-            final Component component = createPropertyComponent(pf);
+            final JComponent component = createPropertyComponent(pf);
+            if (!isBlank(pf.getProperty()
+                    .tooltip()))
+            {
+                component.setToolTipText(pf.getProperty()
+                        .tooltip());
+            }
             final JLabel label = new JLabel();
             if (component instanceof PropertiesComponent)
             {
@@ -186,29 +211,22 @@ public class PropertiesComponent extends JPanel
         }
     }
 
-    private Component createPropertyComponent(PropertyFields.PropertyField field)
+    private JComponent createPropertyComponent(PropertyFields.PropertyField field)
     {
+        boolean readyOnly = (propertyField != null
+                && propertyField.isReadOnly())
+                || field.isReadOnly();
         final Class<?> type = field.getType();
         if (Boolean.class == type
                 || boolean.class == type)
         {
-            final JCheckBox checkbox = new JCheckBox()
-            {
-                @Override
-                protected void fireActionPerformed(ActionEvent event)
-                {
-                    if (this.hasFocus())
-                    {
-                        super.fireActionPerformed(event);
-                    }
-                }
-            };
+            final JCheckBox checkbox = new PCheckBox();
             checkbox.addActionListener(l ->
             {
                 setValue(field, checkbox.isSelected());
             });
             componentSetters.add(o -> checkbox.setSelected(booleanValue(o)));
-            checkbox.setEnabled(!field.isReadOnly());
+            checkbox.setEnabled(!readyOnly);
 
             if (!field.isReadOnly()
                     && field.getProperty()
@@ -222,17 +240,7 @@ public class PropertiesComponent extends JPanel
         else if (Integer.class == type
                 || int.class == type)
         {
-            final JTextField textField = new JTextField()
-            {
-                @Override
-                protected void processKeyEvent(KeyEvent e)
-                {
-                    if (this.hasFocus())
-                    {
-                        super.processKeyEvent(e);
-                    }
-                };
-            };
+            final JTextField textField = new PTextField();
             textField.addKeyListener(new KeyAdapter()
             {
                 @Override
@@ -256,7 +264,7 @@ public class PropertiesComponent extends JPanel
                 }
             });
             componentSetters.add(o -> textField.setText(stringValue(o)));
-            textField.setEditable(!field.isReadOnly());
+            textField.setEditable(!readyOnly);
 
             if (!field.isReadOnly()
                     && field.getProperty()
@@ -269,17 +277,9 @@ public class PropertiesComponent extends JPanel
         }
         else if (String.class == type)
         {
-            final JTextField textField = new JTextField()
-            {
-                @Override
-                protected void processKeyEvent(KeyEvent e)
-                {
-                    if (this.hasFocus())
-                    {
-                        super.processKeyEvent(e);
-                    }
-                };
-            };
+            final JTextField textField = field.getProperty()
+                    .password() ? new PPasswordField()
+                            : new PTextField();
             textField.addKeyListener(new KeyAdapter()
             {
                 @Override
@@ -289,7 +289,7 @@ public class PropertiesComponent extends JPanel
                 }
             });
             componentSetters.add(o -> textField.setText(stringValue(o)));
-            textField.setEditable(!field.isReadOnly());
+            textField.setEditable(!readyOnly);
 
             if (!field.isReadOnly()
                     && field.getProperty()
@@ -303,17 +303,7 @@ public class PropertiesComponent extends JPanel
         else if (char.class == type
                 || Character.class == type)
         {
-            final JTextField textField = new JTextField()
-            {
-                @Override
-                protected void processKeyEvent(KeyEvent e)
-                {
-                    if (this.hasFocus())
-                    {
-                        super.processKeyEvent(e);
-                    }
-                };
-            };
+            final JTextField textField = new PTextField();
             textField.addKeyListener(new KeyAdapter()
             {
                 @Override
@@ -335,7 +325,7 @@ public class PropertiesComponent extends JPanel
                 }
             });
             componentSetters.add(o -> textField.setText(stringValue(o)));
-            textField.setEnabled(!field.isReadOnly());
+            textField.setEditable(!readyOnly);
 
             if (!field.isReadOnly()
                     && field.getProperty()
@@ -348,21 +338,11 @@ public class PropertiesComponent extends JPanel
         }
         else if (type.isEnum())
         {
-            final JComboBox<Object> combobox = new JComboBox<Object>()
-            {
-                @Override
-                protected void fireActionEvent()
-                {
-                    if (this.hasFocus())
-                    {
-                        super.fireActionEvent();
-                    }
-                }
-            };
+            final JComboBox<Object> combobox = new PComboBox<Object>();
             combobox.setModel(new DefaultComboBoxModel<>(type.getEnumConstants()));
             combobox.addActionListener(l -> setValue(field, combobox.getSelectedItem()));
             componentSetters.add(o -> combobox.setSelectedItem(o));
-            combobox.setEnabled(!field.isReadOnly());
+            combobox.setEnabled(!readyOnly);
 
             if (!field.isReadOnly()
                     && field.getProperty()
@@ -375,13 +355,14 @@ public class PropertiesComponent extends JPanel
         }
         else
         {
-            final PropertiesComponent component = new PropertiesComponent(type, d ->
+            final PropertiesComponent component = new PropertiesComponent(field, type, d ->
             {
                 PropertiesComponent.this.dirtyConsumer.accept(d);
                 processAwareProperties();
-            });
+            }, true);
             // Remove the last padding panel
             component.remove(component.getComponentCount() - 1);
+
             componentSetters.add(o ->
             {
                 // Create value on model when null
@@ -400,6 +381,8 @@ public class PropertiesComponent extends JPanel
             {
                 enableAwareProperties.put(field.getName(), e -> component.setEnabled(e));
             }
+
+            component.setEnabled(!readyOnly);
 
             return component;
         }
@@ -422,5 +405,53 @@ public class PropertiesComponent extends JPanel
         }
 
         return (Boolean) o;
+    }
+
+    static class PComboBox<M> extends JComboBox<M>
+    {
+        @Override
+        protected void fireActionEvent()
+        {
+            if (this.hasFocus())
+            {
+                super.fireActionEvent();
+            }
+        }
+    }
+
+    static class PCheckBox extends JCheckBox
+    {
+        @Override
+        protected void fireActionPerformed(ActionEvent event)
+        {
+            if (this.hasFocus())
+            {
+                super.fireActionPerformed(event);
+            }
+        }
+    }
+
+    static class PTextField extends JTextField
+    {
+        @Override
+        protected void processKeyEvent(KeyEvent e)
+        {
+            if (this.hasFocus())
+            {
+                super.processKeyEvent(e);
+            }
+        };
+    }
+
+    static class PPasswordField extends JPasswordField
+    {
+        @Override
+        protected void processKeyEvent(KeyEvent e)
+        {
+            if (this.hasFocus())
+            {
+                super.processKeyEvent(e);
+            }
+        };
     }
 }

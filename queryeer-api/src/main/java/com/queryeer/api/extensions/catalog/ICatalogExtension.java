@@ -6,13 +6,16 @@ import com.queryeer.api.extensions.IConfigurable;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
-import se.kuseman.payloadbuilder.api.session.IQuerySession;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 
 /** Definition of a catalog extension */
 public interface ICatalogExtension
 {
     /** Get title of extension */
     String getTitle();
+
+    /** Get the actual catalog implementation for this extension */
+    Catalog getCatalog();
 
     /** Get the configurable class if this catalog extension supports configuration */
     default Class<? extends IConfigurable> getConfigurableClass()
@@ -34,8 +37,11 @@ public interface ICatalogExtension
         return null;
     }
 
-    /** Get the actual catalog implementation for this extension */
-    Catalog getCatalog();
+    /** Return a provider for auto completions for this extension */
+    default ICompletionProvider getAutoCompletionProvider()
+    {
+        return null;
+    }
 
     /**
      * Handle provided exception

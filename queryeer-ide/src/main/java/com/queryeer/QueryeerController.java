@@ -15,9 +15,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -38,11 +36,13 @@ import com.queryeer.api.extensions.catalog.ICatalogExtension;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.service.IEventBus;
-import com.queryeer.components.CatalogExtensionViewFactory;
+import com.queryeer.component.CatalogExtensionViewFactory;
 import com.queryeer.domain.ICatalogModel;
 import com.queryeer.event.CaretChangedEvent;
 import com.queryeer.event.QueryFileClosingEvent;
 import com.queryeer.event.ShowOptionsEvent;
+
+import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 /** Main controller for Queryeer */
 class QueryeerController implements PropertyChangeListener
@@ -53,7 +53,6 @@ class QueryeerController implements PropertyChangeListener
     private final QueryeerModel model;
     private final Config config;
     private final IEventBus eventBus;
-    private final VariablesDialog variablesDialog;
     private final OptionsDialog optionsDialog;
     private final AboutDialog aboutDialog;
 
@@ -71,7 +70,6 @@ class QueryeerController implements PropertyChangeListener
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.model = requireNonNull(model, "model");
         this.model.addPropertyChangeListener(this);
-        this.variablesDialog = new VariablesDialog(view);
         this.optionsDialog = requireNonNull(optionsDialog, "optionsDialog");
 
         if (!isBlank(QueryeerView.class.getPackage()
@@ -249,9 +247,6 @@ class QueryeerController implements PropertyChangeListener
         {
             case CANCEL:
                 cancelAction();
-                break;
-            case EDIT_VARIABLES:
-                editVariablesAction();
                 break;
             case EXECUTE:
                 executeAction();
@@ -441,12 +436,15 @@ class QueryeerController implements PropertyChangeListener
     private void cancelAction()
     {
         QueryFileView queryFile = view.getCurrentFile();
-        if (queryFile != null
-                && queryFile.getFile()
-                        .getState() == State.EXECUTING)
+        if (queryFile != null)
         {
-            queryFile.getFile()
-                    .setState(State.ABORTED);
+            ((QuerySession) queryFile.getSession()).fireAbortQueryListeners();
+            if (queryFile.getFile()
+                    .getState() == State.EXECUTING)
+            {
+                queryFile.getFile()
+                        .setState(State.ABORTED);
+            }
         }
     }
 
@@ -471,48 +469,6 @@ class QueryeerController implements PropertyChangeListener
         {
             eventBus.publish(new QueryFileStateEvent(fileView, QueryFileStateEvent.State.AFTER_QUERY_EXECUTE));
         });
-    }
-
-    /** Edit vars listener. */
-    public void editVariablesAction()
-    {
-        QueryFileView queryFile = view.getCurrentFile();
-        if (queryFile == null)
-        {
-            return;
-        }
-        String queryString = queryFile.getFile()
-                .getQuery(true);
-        if (isBlank(queryString))
-        {
-            return;
-        }
-
-        QueryFileModel fileModel = queryFile.getFile();
-
-        Set<String> variableNames = PayloadbuilderService.getVariables(queryString);
-
-        for (String name : variableNames)
-        {
-            if (!fileModel.getVariables()
-                    .containsKey(name))
-            {
-                fileModel.getVariables()
-                        .put(name, null);
-            }
-        }
-
-        variablesDialog.init(FilenameUtils.getName(fileModel.getFilename()), fileModel.getVariables());
-        variablesDialog.setVisible(true);
-
-        Map<String, Object> variables = variablesDialog.getVariables();
-        if (variables != null)
-        {
-            fileModel.getVariables()
-                    .clear();
-            fileModel.getVariables()
-                    .putAll(variables);
-        }
     }
 
     /** New query action. */
@@ -608,7 +564,6 @@ class QueryeerController implements PropertyChangeListener
         TOGGLE_COMMENT,
         OUTPUT_CHANGED,
         FORMAT_CHANGED,
-        EDIT_VARIABLES,
         OPTIONS,
         ABOUT
     }

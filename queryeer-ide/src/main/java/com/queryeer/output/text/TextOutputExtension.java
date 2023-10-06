@@ -1,5 +1,7 @@
 package com.queryeer.output.text;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
@@ -11,6 +13,7 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
@@ -19,6 +22,12 @@ class TextOutputExtension implements IOutputExtension
 {
     static final ObjectMapper MAPPER = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     static final String NAME = "com.queryeer.output.text.TextOutputExtension";
+    private final IQueryFileProvider queryFileProvider;
+
+    TextOutputExtension(IQueryFileProvider queryFileProvider)
+    {
+        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+    }
 
     @Override
     public String getTitle()
@@ -47,7 +56,7 @@ class TextOutputExtension implements IOutputExtension
     @Override
     public IOutputComponent createResultComponent()
     {
-        return new TextOutputComponent();
+        return new TextOutputComponent(queryFileProvider);
     }
 
     @Override

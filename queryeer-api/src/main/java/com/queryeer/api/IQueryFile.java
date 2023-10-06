@@ -5,7 +5,7 @@ import java.io.PrintWriter;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 
-import se.kuseman.payloadbuilder.api.session.IQuerySession;
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 
 /** Definition of a query file. The editor tab with query text and results etc. */
 public interface IQueryFile
@@ -35,4 +35,7 @@ public interface IQueryFile
 
     /** Clears the query files executions stats like runtime, number of rows etc. */
     void clearExecutionStats();
+
+    /** Marks the provided selection in query window */
+    void select(TextSelection textSelection);
 }

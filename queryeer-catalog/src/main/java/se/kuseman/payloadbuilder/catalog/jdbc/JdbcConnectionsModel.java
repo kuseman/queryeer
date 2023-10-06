@@ -1,10 +1,13 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Collections.emptyList;
+import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
+import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.swing.AbstractListModel;
@@ -18,6 +21,12 @@ import com.queryeer.api.component.IPropertyAware;
 import com.queryeer.api.component.Properties;
 import com.queryeer.api.component.Property;
 import com.queryeer.api.extensions.Inject;
+import com.queryeer.api.service.ICryptoService;
+import com.queryeer.api.utils.CredentialUtils;
+import com.queryeer.api.utils.CredentialUtils.Credentials;
+
+import se.kuseman.payloadbuilder.api.execution.IQuerySession;
+import se.kuseman.payloadbuilder.catalog.Common;
 
 /**
  * Model for {@link JdbcCatalogExtension}'s connections
@@ -28,6 +37,12 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
     private final List<Connection> connections = new ArrayList<>();
     /** {@link JdbcCatalogExtension} register it's reload button here so they all can be disabled upon load to avoid multiple reloads simultaneously */
     private final List<JButton> reloadButtons = new ArrayList<>();
+    private final ICryptoService cryptoService;
+
+    JdbcConnectionsModel(ICryptoService cryptoService)
+    {
+        this.cryptoService = requireNonNull(cryptoService, "cryptoService");
+    }
 
     void registerReloadButton(JButton button)
     {
@@ -71,6 +86,82 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         fireContentsChanged(this, 0, getSize() - 1);
     }
 
+    /** Finds a connection in model from session properties */
+    Connection findConnection(IQuerySession querySession, String catalogAlias)
+    {
+        String url = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.URL)
+                .valueAsString(0);
+
+        int size = getSize();
+        for (int i = 0; i < size; i++)
+        {
+            Connection connection = getElementAt(i);
+            if (equalsIgnoreCase(connection.getJdbcURL(), url))
+            {
+                return connection;
+            }
+        }
+
+        return null;
+    }
+
+    protected Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername)
+    {
+        return CredentialUtils.getCredentials(connectionDescription, prefilledUsername, readOnlyUsername);
+    }
+
+    /**
+     * Prepares connection before usage. Decrypts encrypted passwords or ask for credentials if missing etc. NOTE! Pops UI dialogs if needed
+     *
+     * @return Returns true if connection is prepared otherwise false
+     */
+    boolean prepare(Connection connection, boolean silent)
+    {
+        if (connection == null)
+        {
+            return false;
+        }
+
+        // All setup
+        if (connection.hasCredentials())
+        {
+            return true;
+        }
+
+        // Connection with empty, password => ask for it
+        if (isBlank(connection.password))
+        {
+            if (silent)
+            {
+                return false;
+            }
+
+            Credentials credentials = getCredentials(connection.toString(), connection.username, true);
+            if (credentials == null)
+            {
+                return false;
+            }
+
+            connection.runtimePassword = credentials.getPassword();
+            return true;
+        }
+
+        if (silent
+                && !cryptoService.isInitalized())
+        {
+            return false;
+        }
+
+        String decrypted = cryptoService.decryptString(connection.password);
+        // Failed to decrypt password
+        if (decrypted == null)
+        {
+            return false;
+        }
+        connection.runtimePassword = decrypted.toCharArray();
+        return true;
+    }
+
     /** Server connection. */
     @Properties(
             header = "<html><h2>JDBC Connections</h2><hr></html>")
@@ -83,12 +174,18 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         private JdbcProperties jdbcProperties;
         private SqlServerProperties sqlServerProperties;
 
-        @JsonIgnore
+        @JsonProperty
         private String username = System.getProperty("user.name");
-        @JsonIgnore
-        private char[] password;
+        @JsonProperty
+        private String password;
+
+        // Runtime values
         @JsonIgnore
         private List<String> databases = emptyList();
+        @JsonIgnore
+        private boolean usesSchemas = false;
+        @JsonIgnore
+        private char[] runtimePassword;
 
         Connection()
         {
@@ -100,8 +197,12 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
             this.type = source.type;
             this.sqlServerProperties = source.sqlServerProperties != null ? new SqlServerProperties(source.sqlServerProperties)
                     : null;
+            this.jdbcProperties = source.jdbcProperties != null ? new JdbcProperties(source.jdbcProperties)
+                    : null;
             this.username = source.username;
-            this.password = ArrayUtils.clone(source.password);
+            this.password = source.password;
+            this.runtimePassword = source.runtimePassword != null ? Arrays.copyOf(source.runtimePassword, source.runtimePassword.length)
+                    : null;
             this.databases = new ArrayList<>(source.databases);
         }
 
@@ -109,6 +210,14 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         {
             this.name = name;
             this.type = type;
+        }
+
+        void setup(IQuerySession querySession, String catalogAlias)
+        {
+            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.URL, getJdbcURL());
+            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.DRIVER_CLASSNAME, getJdbcDriverClassName());
+            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.USERNAME, username);
+            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD, runtimePassword);
         }
 
         @Property(
@@ -139,6 +248,21 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
 
         @Property(
                 order = 2,
+                title = "Password",
+                password = true,
+                tooltip = Common.AUTH_PASSWORD_TOOLTIP)
+        public String getPassword()
+        {
+            return password;
+        }
+
+        public void setPassword(String password)
+        {
+            this.password = password;
+        }
+
+        @Property(
+                order = 3,
                 title = "Type")
         public SqlType getType()
         {
@@ -151,7 +275,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         }
 
         @Property(
-                order = 3,
+                order = 4,
                 title = "Raw JDBC",
                 visibleAware = true)
         public JdbcProperties getJdbcProperties()
@@ -159,13 +283,13 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
             return jdbcProperties;
         }
 
-        public void setRawJdbcProperties(JdbcProperties jdbcProperties)
+        public void setJdbcProperties(JdbcProperties jdbcProperties)
         {
             this.jdbcProperties = jdbcProperties;
         }
 
         @Property(
-                order = 4,
+                order = 5,
                 title = "SQL Server Properties",
                 visibleAware = true)
         public SqlServerProperties getSqlServerProperties()
@@ -178,16 +302,6 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
             this.sqlServerProperties = sqlServerProperties;
         }
 
-        char[] getPassword()
-        {
-            return password;
-        }
-
-        void setPassword(char[] password)
-        {
-            this.password = password;
-        }
-
         List<String> getDatabases()
         {
             return databases;
@@ -198,10 +312,30 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
             this.databases = databases;
         }
 
+        void setUsesSchemas(boolean usesSchemas)
+        {
+            this.usesSchemas = usesSchemas;
+        }
+
+        boolean isUsesSchemas()
+        {
+            return usesSchemas;
+        }
+
+        char[] getRuntimePassword()
+        {
+            return runtimePassword;
+        }
+
+        void setRuntimePassword(char[] runtimePassword)
+        {
+            this.runtimePassword = runtimePassword;
+        }
+
         @Override
         public boolean visible(String property)
         {
-            if ("rawJdbcProperties".equals(property))
+            if ("jdbcProperties".equals(property))
             {
                 return type == SqlType.JDBC_URL;
             }
@@ -245,7 +379,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         boolean hasCredentials()
         {
             return !isBlank(username)
-                    && !ArrayUtils.isEmpty(password);
+                    && !ArrayUtils.isEmpty(runtimePassword);
         }
 
         @Override
