@@ -3,7 +3,7 @@
     <parent>
         <groupId>com.queryeer</groupId>
         <artifactId>queryeer</artifactId>
-        <version>1.0.1-SNAPSHOT</version>
+        <version>1.0.1</version>
     </parent>
     <artifactId>queryeer-api</artifactId>
     <name>Queryeer :: API</name>
