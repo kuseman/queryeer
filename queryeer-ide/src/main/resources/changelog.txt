@@ -2,6 +2,17 @@ CHANGELOG
 
 Queryeer
 
+v1.0.0
+feat: Bumping Payloadbuilder to v1.0.0
+feat: Auto completions framework for Catalog extensions. Added support for ES and JDBC
+feat: Tasks dialog to get an overview of background tasks (such as auto completions)
+feat: Added support Jasypt encryption/decryption to let Catalog extensions store secrets encrypted
+feat: Improvements in error handling. Coloring and clickable errors/warnings in text output
+fix: A lot of UI fixes
+
+BREAKING CHANGE:
+  - Java 17 Baseline
+
 v0.9.0
 fix: Bump payloadbuilder 
 fix: Add changelog in about dialog
@@ -22,6 +33,108 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.0.0
+fix: Guard against NPE when comparing QualifiedName's
+fix: Add support for turning CLOB's into Strings in JDBC-catalog
+feat: Add support for handling kown exceptions from catalogs
+feat: Handle SQLException as a known exception in JdbcCatalog to properly catch ie. raiserrors in SQLServer
+fix: Fixed JDBC catalog to handle warnings multiple result sets. Propert closing of connection, statement and resultset etc.
+fix: Add support for running actions when query is aborted. For JDBC we terminate any running statements
+fix: Fixed issue where all projection expression for a subquery pushdown was aliased when only the first column should have been.
+fix: Only check current level for asterisk schema for expression scans
+fix: Change ORDER BY/GROUP BY tokens to separate tokens rather than single token to not require one space between them
+fix: Fix issue with temporary table with indices where table don't have any rows
+fix(ESCatalog): Fix issue with index scans didn't work when casing of index column didn't match
+feat(core): Total rewrite of core module. (#41)
+
+- Vector based execution engine. Now all expressions are executed vector by vector and not row by row
+  - New data model between operators. Now there is a flat column based model like a regular DBMS'es has
+  - Schema and type system. Now all columns/expressions have a proper type. Catalog
+    implementations can provide a fully typed Schema for tables/functions to allow for better compilation
+    support and execution performance
+
+feat(core): New operators
+  - distinct
+    Produces the distinct set of input rows
+  - having
+    Filters a group by input
+
+feat(core): New functions
+  See https://github.com/kuseman/payloadbuilder/wiki/Functions for more information
+  - abs
+  - isjson
+  - isjsonarray
+  - isjsonobject
+  - reverse
+  - string_split
+  - toarray
+  - array
+  - ceiling
+  - char
+  - charindex
+  - floor
+  - current_timezone
+  - format
+  - least
+  - greatest
+  - left
+  - right
+  - object
+  - object_array
+  - totable
+  - avg
+
+DEPRECATIONS:
+  - SQL
+    - 'Populate' query hint is deprecated and a regular keyword should be used instead: "INNER POPULATE JOIN <tableSource>"
+  - Functions
+    - CAST function when having a string expression as data type is deprecated and a string literal should be used instead: "CAST(<expression> AS <data type literal>)"
+    - DATEPART/DATEADD function when having a string expression as date part is deprecated and a string literal should be used: "DATEPART(<date part literal>, <date expression>)"
+
+BREAKING CHANGE:
+  - Java 17 Baseline
+  - Catalog API is totally rewritten in favor of Vector exeution and Schemas. See built in Catalogs for examples
+  - Changed behaviours
+    - Before when casting an expression to data type DATETIME it was auto transformed into system local time zone and that is not the case anymore because a DATETIME
+      has no time zone and casting it into a zoned DATETIME makes no sense and is simply wrong.
+
+      Example:
+      Before an expression like this "CAST('2010-10-10T10:10:10Z', 'datetime')" would result in a value like "2020-10-10T12:10:10" (assuming this was executed on a system with +02:00 offset)
+      And after this change that expression would simply return the string casted to a DATETIME type who's string representation would be "2010-10-10T10:10:10".
+      To get back the old behaviour we need to cast this to a DATETIMEOFFSET and then switch the
+      timezone like this: "CAST('2010-10-10T10:10:10Z' AS datetimeoffset) AT TIME ZONE <time zone expression>"
+  - Removed functions
+    - attimezone
+      - replace by "AT TIME ZONE" expression
+    - convert
+      - was only an alias to CAST
+    - union
+      - complex function that did more harm than good
+    - listof
+      - replace by ARRAY function
+    - open_map_collection
+      - Used when turning a list of JDK maps to a table. Replaced by TOTABLE function in combination with expression table source
+        Ie.
+        select *
+        from (totable(<expression convertable to table>)
+
+        example:
+        select *
+        from (totable(json_value('[ { "Key": 123 }, { "Key": 456 } ]'))) t
+    - open_rows
+        Used to turn a populated alias into a selectale table source. Replace by expression table source
+        Ie.
+
+        select (
+           select *
+           from (b) t    <----- select from populated column 'b'
+           for object
+        ) values
+        from tableA a
+        inner populate join tableB b
+         on ....
+
 
 v0.8.5
 feat(ESCatalog): Add support for version 8.x of Elastic where type is removed
