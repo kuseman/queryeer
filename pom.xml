@@ -60,6 +60,21 @@
         <tag>HEAD</tag>
     </scm>
 
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Marcus Henriksson</name>
+            <email>kuseman80@gmail.com</email>
+            <url>https://github.com/kuseman</url>
+        </developer>
+    </developers>
+
     <modules>
         <module>queryeer-api</module>
         <module>queryeer-ide</module>
