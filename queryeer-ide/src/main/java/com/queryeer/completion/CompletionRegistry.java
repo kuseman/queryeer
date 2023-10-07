@@ -169,6 +169,11 @@ class CompletionRegistry
         List<Pair<String, Catalog>> catalogPairs = new ArrayList<>(catalogs.size() + 1);
         for (ICatalogModel model : catalogs)
         {
+            if (model.getCatalogExtension() == null)
+            {
+                continue;
+            }
+
             catalogPairs.add(Pair.of(model.getAlias(), model.getCatalogExtension()
                     .getCatalog()));
         }
