@@ -50,6 +50,7 @@ class QueryFileModel
     private boolean dirty;
     private boolean newFile = true;
     private String filename = "";
+    private long lastModified = 0;
     private State state = State.COMPLETED;
     /** Query before modifications */
     private String savedQuery = "";
@@ -71,16 +72,8 @@ class QueryFileModel
         if (file != null)
         {
             this.filename = file.getAbsolutePath();
-            try
-            {
-                query = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeException(e);
-            }
-            dirty = false;
-            newFile = false;
+            this.newFile = false;
+            reloadFromFile();
             savedQuery = query;
         }
         this.querySession.setGenericCache(GENERIC_CACHE);
@@ -180,6 +173,11 @@ class QueryFileModel
         this.newFile = newFile;
     }
 
+    long getLastModified()
+    {
+        return lastModified;
+    }
+
     String getFilename()
     {
         return filename;
@@ -201,7 +199,9 @@ class QueryFileModel
     {
         try
         {
-            FileUtils.write(new File(filename), query, StandardCharsets.UTF_8);
+            File file = new File(filename);
+            FileUtils.write(file, query, StandardCharsets.UTF_8);
+            lastModified = file.lastModified();
         }
         catch (IOException e)
         {
@@ -303,6 +303,32 @@ class QueryFileModel
     List<ICatalogModel> getCatalogs()
     {
         return catalogs;
+    }
+
+    void reloadFromFile()
+    {
+        if (newFile)
+        {
+            return;
+        }
+
+        try
+        {
+            File file = new File(filename);
+
+            String query = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
+            // Set saved query before setting the query to avoid firing the dirty state
+            savedQuery = query;
+
+            // Set query to fire property change
+            setQuery(query);
+            lastModified = file.lastModified();
+            dirty = false;
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
     }
 
     /** Execution state of this file */

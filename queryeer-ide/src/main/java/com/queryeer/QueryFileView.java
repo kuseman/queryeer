@@ -99,6 +99,8 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
     private final JToolBar outputComponentToolbar = new JToolBar();
     private final QueryFileChangeListener queryFileChangeListener = new QueryFileChangeListener();
 
+    private boolean suppressDocumentUpdateEvent = false;
+
     /** Reuse the same event to avoid creating new objects on every change */
     private final CaretChangedEvent caretEvent;
 
@@ -166,7 +168,10 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
                     @Override
                     protected void update()
                     {
-                        file.setQuery(textEditor.getText());
+                        if (!suppressDocumentUpdateEvent)
+                        {
+                            file.setQuery(textEditor.getText());
+                        }
                     }
                 });
         textEditor.addCaretListener(evt ->
@@ -779,6 +784,13 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
             if (QueryFileModel.STATE.equals(evt.getPropertyName()))
             {
                 handleStateChanged(file, (State) evt.getNewValue());
+            }
+            else if (QueryFileModel.QUERY.equals(evt.getPropertyName()))
+            {
+                // Turn off document change listener while we change enditor content
+                suppressDocumentUpdateEvent = true;
+                textEditor.setText(file.getQuery(false));
+                suppressDocumentUpdateEvent = false;
             }
         }
     }

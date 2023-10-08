@@ -159,6 +159,39 @@ class QueryeerController implements PropertyChangeListener
         if (QueryeerModel.SELECTED_FILE.equals(evt.getPropertyName()))
         {
             QueryFileView file = view.getCurrentFile();
+
+            // See if the file has been modified outside of application
+            if (!file.getFile()
+                    .isNew())
+            {
+                long lastModified = file.getFile()
+                        .getLastModified();
+                File ioFile = new File(file.getFile()
+                        .getFilename());
+
+                if (lastModified != ioFile.lastModified())
+                {
+                    int result = JOptionPane.showConfirmDialog(view, """
+                            '%s'
+                            has been modified by another application.
+                            Replace editor content?
+                            """.formatted(ioFile.getAbsolutePath()), "Reload", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE);
+
+                    // Reload content
+                    if (result == JOptionPane.YES_OPTION)
+                    {
+                        file.getFile()
+                                .reloadFromFile();
+                    }
+                    // ... mark the file as dirty
+                    else
+                    {
+                        file.getFile()
+                                .setDirty(true);
+                    }
+                }
+            }
+
             queryFileProvider.setQueryFile(file);
             eventBus.publish(new QueryFileChangedEvent(file));
             /* Publish caret change to update the current since there is no editor change when switching tab */
