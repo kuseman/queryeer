@@ -1,5 +1,10 @@
 package se.kuseman.payloadbuilder.catalog;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
+import org.apache.commons.io.IOUtils;
+
 /** Common for catalogs */
 public class Common
 {
@@ -23,4 +28,17 @@ public class Common
             connection. (It's stored in memory during application life time).
             </pre>
             """;
+
+    /** Read resource as string */
+    public static String readResource(String resource)
+    {
+        try
+        {
+            return IOUtils.toString(Common.class.getResourceAsStream(resource), StandardCharsets.UTF_8);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException("Error loading resource: " + resource, e);
+        }
+    }
 }

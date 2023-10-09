@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
@@ -103,6 +104,11 @@ public class PropertiesComponent extends JPanel
         int index = 0;
         for (PropertyFields.PropertyField pf : propertyFields.getFields())
         {
+            if (pf.isOperation())
+            {
+                continue;
+            }
+
             Object value = pf.getValue(target);
             originalState.put(pf.getName(), value);
             componentSetters.get(index++)
@@ -148,10 +154,15 @@ public class PropertiesComponent extends JPanel
                         .tooltip());
             }
             final JLabel label = new JLabel();
-            if (component instanceof PropertiesComponent)
+            // No label when having a nested properties component or operation
+            if (component instanceof PropertiesComponent
+                    || pf.isOperation())
             {
-                // No label when having a nested properties component
-                add(component, new GridBagConstraints(0, y, 2, 1, 1.0, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.BOTH, new Insets(0, 0, 3, 0), 0, 0));
+                int fill = pf.isOperation() ? GridBagConstraints.NONE
+                        : GridBagConstraints.BOTH;
+                int anchor = pf.isOperation() ? GridBagConstraints.BASELINE_LEADING
+                        : GridBagConstraints.BASELINE;
+                add(component, new GridBagConstraints(0, y, 2, 1, 1.0, 0.0, anchor, fill, new Insets(0, 0, 3, 0), 0, 0));
             }
             else
             {
@@ -217,7 +228,25 @@ public class PropertiesComponent extends JPanel
                 && propertyField.isReadOnly())
                 || field.isReadOnly();
         final Class<?> type = field.getType();
-        if (Boolean.class == type
+        if (field.isOperation())
+        {
+            final JButton button = new JButton(field.getTitle());
+            button.addActionListener(l ->
+            {
+                field.call(target);
+
+                if (field.getProperty()
+                        .reloadParentOnChange())
+                {
+                    // Re-read all properties
+                    init(target);
+                    // We assume that the dirty state changes
+                    dirtyConsumer.accept(true);
+                }
+            });
+            return button;
+        }
+        else if (Boolean.class == type
                 || boolean.class == type)
         {
             final JCheckBox checkbox = new PCheckBox();
@@ -340,7 +369,16 @@ public class PropertiesComponent extends JPanel
         {
             final JComboBox<Object> combobox = new PComboBox<Object>();
             combobox.setModel(new DefaultComboBoxModel<>(type.getEnumConstants()));
-            combobox.addActionListener(l -> setValue(field, combobox.getSelectedItem()));
+            combobox.addActionListener(l ->
+            {
+                setValue(field, combobox.getSelectedItem());
+                if (field.getProperty() != null
+                        && field.getProperty()
+                                .reloadParentOnChange())
+                {
+                    init(target);
+                }
+            });
             componentSetters.add(o -> combobox.setSelectedItem(o));
             combobox.setEnabled(!readyOnly);
 

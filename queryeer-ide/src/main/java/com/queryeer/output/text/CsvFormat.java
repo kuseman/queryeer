@@ -5,6 +5,7 @@ import static java.util.Objects.requireNonNull;
 import java.io.Writer;
 
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
@@ -37,6 +38,12 @@ class CsvFormat implements IOutputFormatExtension
     public OutputWriter createOutputWriter(IQueryFile file, Writer writer)
     {
         return new CsvTextOutputWriter(writer, file, configurable.getSettings());
+    }
+
+    @Override
+    public IConfigurable getFileChooserConfigurableComponent()
+    {
+        return configurable;
     }
 
     /** CSV Output writer */

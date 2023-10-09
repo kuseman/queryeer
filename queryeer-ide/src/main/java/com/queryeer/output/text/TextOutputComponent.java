@@ -31,7 +31,9 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.IQueryFile;
-import com.queryeer.api.TextSelection;
+import com.queryeer.api.editor.IEditor;
+import com.queryeer.api.editor.ITextEditor;
+import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
@@ -265,7 +267,11 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                         // Mark whole warning text
                         text.setSelectionStart(element.getStartOffset());
                         text.setSelectionEnd(element.getEndOffset());
-                        queryFile.select(warningLocation);
+                        IEditor editor = queryFile.getEditor();
+                        if (editor instanceof ITextEditor)
+                        {
+                            ((ITextEditor) editor).select(warningLocation);
+                        }
                     }
                 }
             }

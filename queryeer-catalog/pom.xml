@@ -13,8 +13,7 @@
         <main.basedir>${project.parent.basedir}</main.basedir>
         <maven.deploy.skip>true</maven.deploy.skip>
 
-        <schemacrawler.version>16.20.4</schemacrawler.version>
-        <thymeleaf.version>3.1.2.RELEASE</thymeleaf.version>
+        <antlr4.version>4.13.0</antlr4.version>
     </properties>
 
     <dependencies>
@@ -36,24 +35,27 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>us.fatehi</groupId>
-            <artifactId>schemacrawler</artifactId>
-            <version>${schemacrawler.version}</version>
+            <groupId>org.antlr</groupId>
+            <artifactId>antlr4-runtime</artifactId>
+            <version>${antlr4.version}</version>
         </dependency>
         <dependency>
-            <groupId>us.fatehi</groupId>
-            <artifactId>schemacrawler-sqlserver</artifactId>
-            <version>${schemacrawler.version}</version>
+            <groupId>com.vmware.antlr4-c3</groupId>
+            <artifactId>antlr4-c3</artifactId>
+            <version>1.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.antlr</groupId>
+                    <artifactId>antlr4</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
+        <!-- Provided driver to be able to handle exceptions etc. -->
         <dependency>
-            <groupId>us.fatehi</groupId>
-            <artifactId>schemacrawler-oracle</artifactId>
-            <version>${schemacrawler.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.thymeleaf</groupId>
-            <artifactId>thymeleaf</artifactId>
-            <version>${thymeleaf.version}</version>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>12.2.0.jre8</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- TEST -->
@@ -94,6 +96,25 @@
                         <goals>
                             <goal>single</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4-maven-plugin</artifactId>
+                <version>${antlr4.version}</version>
+                <executions>
+                    <execution>
+                        <id>antlr</id>
+                        <goals>
+                            <goal>antlr4</goal>
+                        </goals>
+                        <configuration>
+                            <visitor>true</visitor>
+                            <listener>false</listener>
+                            <sourceDirectory>${basedir}/src/main/resources/antlr4</sourceDirectory>
+                            <outputDirectory>${project.build.directory}/generated-sources/antlr4</outputDirectory>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

@@ -1,62 +1,50 @@
 package com.queryeer;
 
-import static java.util.Collections.unmodifiableList;
-import static org.apache.commons.lang3.StringUtils.isAllBlank;
+import static java.util.Objects.requireNonNull;
 
+import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+import javax.swing.SwingUtilities;
 import javax.swing.event.SwingPropertyChangeSupport;
 
-import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.time.StopWatch;
 
+import com.queryeer.api.QueryFileMetaData;
+import com.queryeer.api.editor.IEditor;
+import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
-import com.queryeer.domain.Caret;
-import com.queryeer.domain.ICatalogModel;
-
-import se.kuseman.payloadbuilder.core.cache.InMemoryGenericCache;
-import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
-import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
 /**
  * Model of a query file. Has information about filename, execution state etc.
  **/
 class QueryFileModel
 {
-    /** All query tabs share a common cache to be able to reuse cached data etc. */
-    private static final InMemoryGenericCache GENERIC_CACHE = new InMemoryGenericCache("QuerySession", true);
-
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this, true);
     static final String DIRTY = "dirty";
-    static final String FILENAME = "filename";
-    static final String QUERY = "query";
-    static final String CARET = "carret";
+    static final String FILE = "file";
     static final String STATE = "state";
+    static final String METADATA = "metaData";
 
-    private final Map<String, Object> variables = new HashMap<>();
-    private final QuerySession querySession = new QuerySession(new CatalogRegistry(), variables);
-    private final List<ICatalogModel> catalogs;
-    private final Caret caret = new Caret();
+    private final IQueryEngine queryEngine;
+    private final IQueryEngine.IState engineState;
+    private final IEditor editor;
 
     private boolean dirty;
     private boolean newFile = true;
-    private String filename = "";
+    private File file;
     private long lastModified = 0;
     private State state = State.COMPLETED;
-    /** Query before modifications */
-    private String savedQuery = "";
-    private String query = "";
+    private QueryFileMetaData metaData;
     private int totalRowCount;
-
     private IOutputExtension outputExtension;
     private IOutputFormatExtension outputFormat;
 
@@ -64,46 +52,29 @@ class QueryFileModel
     private StopWatch sw;
 
     /** Initialize a file from filename */
-    QueryFileModel(List<ICatalogModel> catalogs, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file)
+    QueryFileModel(IQueryEngine queryEngine, IQueryEngine.IState engineState, IEditor editor, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file, boolean newFile)
     {
-        this.catalogs = unmodifiableList(catalogs);
+        this.queryEngine = requireNonNull(queryEngine, "queryEngine");
+        this.engineState = engineState;
+        this.editor = requireNonNull(editor, "editor");
         this.outputExtension = outputExtension;
         this.outputFormat = outputFormat;
-        if (file != null)
+        this.file = requireNonNull(file, "file");
+        this.lastModified = file.lastModified();
+        this.newFile = newFile;
+
+        // Propagate dirty from editor to this
+        editor.addPropertyChangeListener(new PropertyChangeListener()
         {
-            this.filename = file.getAbsolutePath();
-            this.newFile = false;
-            reloadFromFile();
-            savedQuery = query;
-        }
-        this.querySession.setGenericCache(GENERIC_CACHE);
-
-        initCatalogs();
-    }
-
-    private void initCatalogs()
-    {
-        for (ICatalogModel catalog : catalogs)
-        {
-            if (catalog.isDisabled())
+            @Override
+            public void propertyChange(PropertyChangeEvent evt)
             {
-                continue;
+                if (IEditor.DIRTY.equals(evt.getPropertyName()))
+                {
+                    setDirty((boolean) evt.getNewValue());
+                }
             }
-
-            // Register catalogs
-            querySession.getCatalogRegistry()
-                    .registerCatalog(catalog.getAlias(), catalog.getCatalogExtension()
-                            .getCatalog());
-
-            // Set first extension as default
-            // We pick the first catalog that has a UI component
-            if (isAllBlank(querySession.getDefaultCatalogAlias())
-                    && catalog.getCatalogExtension()
-                            .getConfigurableClass() != null)
-            {
-                querySession.setDefaultCatalogAlias(catalog.getAlias());
-            }
-        }
+        });
     }
 
     boolean isDirty()
@@ -136,7 +107,7 @@ class QueryFileModel
             this.state = state;
 
             // Reset execution fields when starting
-            if (state == State.EXECUTING)
+            if (state.isExecuting())
             {
                 sw = new StopWatch();
                 sw.start();
@@ -151,6 +122,27 @@ class QueryFileModel
         }
     }
 
+    QueryFileMetaData getMetaData()
+    {
+        if (metaData == null)
+        {
+            return QueryFileMetaData.EMPTY;
+        }
+
+        return metaData;
+    }
+
+    void setMetaData(QueryFileMetaData metaData)
+    {
+        QueryFileMetaData oldValue = this.metaData;
+        QueryFileMetaData newValue = metaData;
+        if (!Objects.equals(oldValue, newValue))
+        {
+            this.metaData = metaData;
+            pcs.firePropertyChange(METADATA, oldValue, newValue);
+        }
+    }
+
     /** Get current execution time in millis */
     long getExecutionTime()
     {
@@ -161,6 +153,7 @@ class QueryFileModel
     void clearForExecution()
     {
         totalRowCount = 0;
+        SwingUtilities.invokeLater(() -> editor.clearBeforeExecution());
     }
 
     boolean isNew()
@@ -178,75 +171,43 @@ class QueryFileModel
         return lastModified;
     }
 
-    String getFilename()
+    boolean isModified()
     {
-        return filename;
+        return lastModified != file.lastModified();
     }
 
-    void setFilename(String filename)
+    File getFile()
     {
-        String newValue = filename;
-        String oldValue = this.filename;
+        return file;
+    }
+
+    void setFile(File file)
+    {
+        String newValue = file.getAbsolutePath();
+        String oldValue = this.file.getAbsolutePath();
         if (!newValue.equals(oldValue))
         {
-            this.filename = filename;
-            pcs.firePropertyChange(FILENAME, oldValue, newValue);
+            this.file = file;
+            pcs.firePropertyChange(FILE, file, this.file);
         }
     }
 
     /** Saves file to disk */
     void save()
     {
-        try
-        {
-            File file = new File(filename);
-            FileUtils.write(file, query, StandardCharsets.UTF_8);
-            lastModified = file.lastModified();
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException("Unable to save file " + filename, e);
-        }
+        editor.saveToFile(file);
+        lastModified = file.lastModified();
         newFile = false;
-        savedQuery = query;
         setDirty(false);
     }
 
-    String getQuery(boolean selected)
+    /** Load file from disk */
+    void load()
     {
-        if (selected)
-        {
-            return caret.getSelectionLength() > 0 ? query.substring(caret.getSelectionStart(), caret.getSelectionStart() + caret.getSelectionLength())
-                    : query;
-        }
-
-        return query;
-    }
-
-    void setQuery(String query)
-    {
-        String newValue = query;
-        String oldValue = this.query;
-        if (!newValue.equals(oldValue))
-        {
-            this.query = query;
-            pcs.firePropertyChange(QUERY, oldValue, newValue);
-            setDirty(!Objects.equals(query, savedQuery));
-        }
-    }
-
-    Caret getCaret()
-    {
-        return caret;
-    }
-
-    void setCaret(int lineNumber, int offset, int position, int selectionStart, int selectionLength)
-    {
-        caret.setLineNumber(lineNumber);
-        caret.setOffset(offset);
-        caret.setPosition(position);
-        caret.setSelectionStart(selectionStart);
-        caret.setSelectionLength(selectionLength);
+        editor.loadFromFile(file);
+        lastModified = file.lastModified();
+        newFile = false;
+        setDirty(false);
     }
 
     void addPropertyChangeListener(PropertyChangeListener listener)
@@ -264,24 +225,9 @@ class QueryFileModel
         return outputExtension;
     }
 
-    void setOutput(IOutputExtension outputExtension)
+    void setOutputExtension(IOutputExtension outputExtension)
     {
         this.outputExtension = outputExtension;
-    }
-
-    void setOutputFormat(IOutputFormatExtension outputFormat)
-    {
-        this.outputFormat = outputFormat;
-    }
-
-    QuerySession getQuerySession()
-    {
-        return querySession;
-    }
-
-    void incrementTotalRowCount()
-    {
-        totalRowCount++;
     }
 
     IOutputFormatExtension getOutputFormat()
@@ -289,9 +235,24 @@ class QueryFileModel
         return outputFormat;
     }
 
-    Map<String, Object> getVariables()
+    void setOutputFormat(IOutputFormatExtension outputFormat)
     {
-        return variables;
+        this.outputFormat = outputFormat;
+    }
+
+    IQueryEngine getQueryEngine()
+    {
+        return queryEngine;
+    }
+
+    IEditor getEditor()
+    {
+        return editor;
+    }
+
+    void incrementTotalRowCount()
+    {
+        totalRowCount++;
     }
 
     /** Total row count of current execution including all result sets */
@@ -300,35 +261,37 @@ class QueryFileModel
         return totalRowCount;
     }
 
-    List<ICatalogModel> getCatalogs()
+    IQueryEngine.IState getEngineState()
     {
-        return catalogs;
+        return engineState;
     }
 
-    void reloadFromFile()
+    /**
+     * Executor for query file dispose. This can be time consuming if connections etc. are slow to close. NOTE! Non daemon to let all dispose calls finish
+     */
+    static final ExecutorService DISPOSE_EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(false)
+            .namingPattern("QueryFileDisposer#%d")
+            .build());
+
+    /** Dispose file. Closing all stored states etc */
+    void dispose()
     {
-        if (newFile)
+        if (engineState == null)
         {
             return;
         }
 
-        try
+        DISPOSE_EXECUTOR.execute(() ->
         {
-            File file = new File(filename);
-
-            String query = FileUtils.readFileToString(file, StandardCharsets.UTF_8);
-            // Set saved query before setting the query to avoid firing the dirty state
-            savedQuery = query;
-
-            // Set query to fire property change
-            setQuery(query);
-            lastModified = file.lastModified();
-            dirty = false;
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+            try
+            {
+                engineState.close();
+            }
+            catch (IOException e)
+            {
+                // SWALLOW
+            }
+        });
     }
 
     /** Execution state of this file */
@@ -336,6 +299,7 @@ class QueryFileModel
     {
         COMPLETED("Stopped"),
         EXECUTING("Executing"),
+        EXECUTING_BY_EVENT("Executing"),
         ABORTED("Aborted"),
         ERROR("Error");
 
@@ -349,6 +313,12 @@ class QueryFileModel
         public String getToolTip()
         {
             return tooltip;
+        }
+
+        boolean isExecuting()
+        {
+            return this == EXECUTING
+                    || this == EXECUTING_BY_EVENT;
         }
     }
 }

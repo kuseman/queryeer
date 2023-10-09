@@ -30,7 +30,8 @@ public interface ICatalogExtension
     }
 
     /**
-     * Get quick properties component. Will be showed in extensions side bar with quick properties. Ie. selected. database/index.
+     * Get quick properties component. Will be showed in extensions side bar with quick properties. Ie. selected. database/index. Component can implement {@link ICatalogExtensionView} to get
+     * notifications after execution etc.
      */
     default Component getQuickPropertiesComponent()
     {

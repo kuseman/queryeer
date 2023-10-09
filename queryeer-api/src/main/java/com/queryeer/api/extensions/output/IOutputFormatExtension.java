@@ -3,6 +3,7 @@ package com.queryeer.api.extensions.output;
 import java.io.Writer;
 
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.IExtension;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
@@ -27,4 +28,12 @@ public interface IOutputFormatExtension extends IExtension
      * @return Created output writer
      */
     OutputWriter createOutputWriter(IQueryFile file, Writer writer);
+
+    /**
+     * Return a configurable component that is used when this output format is used when exporting to a file. To let the user customize output before exporting.
+     */
+    default IConfigurable getFileChooserConfigurableComponent()
+    {
+        return null;
+    }
 }

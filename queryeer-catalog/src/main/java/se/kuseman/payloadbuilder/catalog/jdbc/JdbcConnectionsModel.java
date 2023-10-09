@@ -6,42 +6,44 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import javax.swing.AbstractListModel;
 import javax.swing.JButton;
+import javax.swing.JOptionPane;
 
-import org.apache.commons.lang3.ArrayUtils;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.queryeer.api.component.IPropertyAware;
-import com.queryeer.api.component.Properties;
-import com.queryeer.api.component.Property;
+import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.ICryptoService;
+import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.utils.CredentialUtils;
 import com.queryeer.api.utils.CredentialUtils.Credentials;
 
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
-import se.kuseman.payloadbuilder.catalog.Common;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 
 /**
  * Model for {@link JdbcCatalogExtension}'s connections
  */
 @Inject
-class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connection>
+class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 {
-    private final List<Connection> connections = new ArrayList<>();
+    private final List<JdbcConnection> connections = new ArrayList<>();
     /** {@link JdbcCatalogExtension} register it's reload button here so they all can be disabled upon load to avoid multiple reloads simultaneously */
     private final List<JButton> reloadButtons = new ArrayList<>();
     private final ICryptoService cryptoService;
+    private final IQueryFileProvider queryFileProvider;
+    private final DatabaseProvider databaseProvider;
 
-    JdbcConnectionsModel(ICryptoService cryptoService)
+    JdbcConnectionsModel(ICryptoService cryptoService, IQueryFileProvider queryFileProvider, DatabaseProvider databaseProvider)
     {
         this.cryptoService = requireNonNull(cryptoService, "cryptoService");
+        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
     }
 
     void registerReloadButton(JButton button)
@@ -61,25 +63,25 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
     }
 
     @Override
-    public Connection getElementAt(int index)
+    public JdbcConnection getElementAt(int index)
     {
         return connections.get(index);
     }
 
     /** Return a deep copy of connections */
-    List<Connection> copyConnections()
+    List<JdbcConnection> copyConnections()
     {
         return connections.stream()
-                .map(Connection::new)
+                .map(JdbcConnection::new)
                 .collect(toList());
     }
 
-    List<Connection> getConnections()
+    List<JdbcConnection> getConnections()
     {
         return connections;
     }
 
-    void setConnections(List<Connection> connections)
+    void setConnections(List<JdbcConnection> connections)
     {
         this.connections.clear();
         this.connections.addAll(connections);
@@ -87,7 +89,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
     }
 
     /** Finds a connection in model from session properties */
-    Connection findConnection(IQuerySession querySession, String catalogAlias)
+    JdbcConnection findConnection(IQuerySession querySession, String catalogAlias)
     {
         String url = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.URL)
                 .valueAsString(0);
@@ -95,7 +97,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         int size = getSize();
         for (int i = 0; i < size; i++)
         {
-            Connection connection = getElementAt(i);
+            JdbcConnection connection = getElementAt(i);
             if (equalsIgnoreCase(connection.getJdbcURL(), url))
             {
                 return connection;
@@ -115,7 +117,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
      *
      * @return Returns true if connection is prepared otherwise false
      */
-    boolean prepare(Connection connection, boolean silent)
+    boolean prepare(JdbcConnection connection, boolean silent)
     {
         if (connection == null)
         {
@@ -129,20 +131,37 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
         }
 
         // Connection with empty, password => ask for it
-        if (isBlank(connection.password))
+        if (isBlank(connection.getPassword()))
         {
             if (silent)
             {
                 return false;
             }
 
-            Credentials credentials = getCredentials(connection.toString(), connection.username, true);
+            Credentials credentials = getCredentials(connection.toString(), connection.getUsername(), true);
             if (credentials == null)
             {
                 return false;
             }
 
-            connection.runtimePassword = credentials.getPassword();
+            connection.setRuntimePassword(credentials.getPassword());
+            // Try creating connection
+            try (java.sql.Connection con = createConnection(connection))
+            {
+            }
+            catch (Exception e)
+            {
+                IQueryFile queryFile = queryFileProvider.getCurrentFile();
+                if (queryFile != null)
+                {
+                    e.printStackTrace(queryFile.getMessagesWriter());
+                    queryFile.focusMessages();
+                }
+                JOptionPane.showInternalMessageDialog(null, "Could not create connection, check credentials!", "Failure", JOptionPane.ERROR_MESSAGE);
+                connection.setRuntimePassword(null);
+                return false;
+            }
+
             return true;
         }
 
@@ -152,265 +171,110 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnectionsModel.Connec
             return false;
         }
 
-        String decrypted = cryptoService.decryptString(connection.password);
+        String decrypted = cryptoService.decryptString(connection.getPassword());
         // Failed to decrypt password
         if (decrypted == null)
         {
             return false;
         }
-        connection.runtimePassword = decrypted.toCharArray();
+
+        connection.setRuntimePassword(decrypted.toCharArray());
         return true;
     }
 
-    /** Server connection. */
-    @Properties(
-            header = "<html><h2>JDBC Connections</h2><hr></html>")
-    static class Connection implements IPropertyAware
+    java.sql.Connection createConnection(JdbcConnection connection) throws SQLException
     {
-        @JsonProperty
-        private String name;
-        @JsonProperty
-        private SqlType type = SqlType.JDBC_URL;
-        private JdbcProperties jdbcProperties;
-        private SqlServerProperties sqlServerProperties;
-
-        @JsonProperty
-        private String username = System.getProperty("user.name");
-        @JsonProperty
-        private String password;
-
-        // Runtime values
-        @JsonIgnore
-        private List<String> databases = emptyList();
-        @JsonIgnore
-        private boolean usesSchemas = false;
-        @JsonIgnore
-        private char[] runtimePassword;
-
-        Connection()
+        JdbcDatabase queryeerDatabase = databaseProvider.getDatabase(connection.getJdbcURL());
+        try
         {
+            return queryeerDatabase.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(connection.getRuntimePassword()));
         }
-
-        Connection(Connection source)
+        catch (Exception e)
         {
-            this.name = source.name;
-            this.type = source.type;
-            this.sqlServerProperties = source.sqlServerProperties != null ? new SqlServerProperties(source.sqlServerProperties)
-                    : null;
-            this.jdbcProperties = source.jdbcProperties != null ? new JdbcProperties(source.jdbcProperties)
-                    : null;
-            this.username = source.username;
-            this.password = source.password;
-            this.runtimePassword = source.runtimePassword != null ? Arrays.copyOf(source.runtimePassword, source.runtimePassword.length)
-                    : null;
-            this.databases = new ArrayList<>(source.databases);
-        }
-
-        Connection(String name, SqlType type)
-        {
-            this.name = name;
-            this.type = type;
-        }
-
-        void setup(IQuerySession querySession, String catalogAlias)
-        {
-            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.URL, getJdbcURL());
-            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.DRIVER_CLASSNAME, getJdbcDriverClassName());
-            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.USERNAME, username);
-            querySession.setCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD, runtimePassword);
-        }
-
-        @Property(
-                order = 0,
-                title = "Name")
-        public String getName()
-        {
-            return name;
-        }
-
-        public void setName(String name)
-        {
-            this.name = name;
-        }
-
-        @Property(
-                order = 1,
-                title = "Username")
-        public String getUsername()
-        {
-            return username;
-        }
-
-        public void setUsername(String username)
-        {
-            this.username = username;
-        }
-
-        @Property(
-                order = 2,
-                title = "Password",
-                password = true,
-                tooltip = Common.AUTH_PASSWORD_TOOLTIP)
-        public String getPassword()
-        {
-            return password;
-        }
-
-        public void setPassword(String password)
-        {
-            this.password = password;
-        }
-
-        @Property(
-                order = 3,
-                title = "Type")
-        public SqlType getType()
-        {
-            return type;
-        }
-
-        public void setType(SqlType type)
-        {
-            this.type = type;
-        }
-
-        @Property(
-                order = 4,
-                title = "Raw JDBC",
-                visibleAware = true)
-        public JdbcProperties getJdbcProperties()
-        {
-            return jdbcProperties;
-        }
-
-        public void setJdbcProperties(JdbcProperties jdbcProperties)
-        {
-            this.jdbcProperties = jdbcProperties;
-        }
-
-        @Property(
-                order = 5,
-                title = "SQL Server Properties",
-                visibleAware = true)
-        public SqlServerProperties getSqlServerProperties()
-        {
-            return sqlServerProperties;
-        }
-
-        public void setSqlServerProperties(SqlServerProperties sqlServerProperties)
-        {
-            this.sqlServerProperties = sqlServerProperties;
-        }
-
-        List<String> getDatabases()
-        {
-            return databases;
-        }
-
-        void setDatabases(List<String> databases)
-        {
-            this.databases = databases;
-        }
-
-        void setUsesSchemas(boolean usesSchemas)
-        {
-            this.usesSchemas = usesSchemas;
-        }
-
-        boolean isUsesSchemas()
-        {
-            return usesSchemas;
-        }
-
-        char[] getRuntimePassword()
-        {
-            return runtimePassword;
-        }
-
-        void setRuntimePassword(char[] runtimePassword)
-        {
-            this.runtimePassword = runtimePassword;
-        }
-
-        @Override
-        public boolean visible(String property)
-        {
-            if ("jdbcProperties".equals(property))
-            {
-                return type == SqlType.JDBC_URL;
-            }
-            else if ("sqlServerProperties".equals(property))
-            {
-                return type == SqlType.SQLSERVER;
-            }
-            return true;
-        }
-
-        String getJdbcURL()
-        {
-            switch (type)
-            {
-                case JDBC_URL:
-                    return jdbcProperties != null ? jdbcProperties.getUrl()
-                            : "";
-                case SQLSERVER:
-                    return sqlServerProperties != null ? sqlServerProperties.getJdbcUrl()
-                            : "";
-                default:
-                    throw new IllegalArgumentException("Unknown type " + type);
-            }
-        }
-
-        String getJdbcDriverClassName()
-        {
-            switch (type)
-            {
-                case JDBC_URL:
-                    return jdbcProperties != null ? jdbcProperties.getClassName()
-                            : "";
-                case SQLSERVER:
-                    return sqlServerProperties != null ? sqlServerProperties.getJdbcDriverClassName()
-                            : "";
-                default:
-                    throw new IllegalArgumentException("Unknown type " + type);
-            }
-        }
-
-        boolean hasCredentials()
-        {
-            return !isBlank(username)
-                    && !ArrayUtils.isEmpty(runtimePassword);
-        }
-
-        @Override
-        public String toString()
-        {
-            return name + " (" + type.title + ")";
+            // Clear password upon error
+            connection.setRuntimePassword(null);
+            throw e;
         }
     }
 
-    /** Type of sql. */
-    enum SqlType
+    /** Gets and/or loads databases for provided connection */
+    List<String> getDatabases(JdbcConnection connection, String catalogAlias, boolean forceReload, boolean reThrowError)
     {
-        JDBC_URL("JDBC URL"),
-        SQLSERVER("MSSql Server");
-
-        private final String title;
-
-        SqlType(String title)
+        if (!connection.hasCredentials())
         {
-            this.title = title;
+            return emptyList();
         }
 
-        String getTitle()
+        // Lock here to avoid that we load the database multiple times for the same connection
+        synchronized (connection)
         {
-            return title;
-        }
+            List<String> databases = connection.getDatabases();
 
-        @Override
-        public String toString()
-        {
-            return title;
+            if (!forceReload
+                    && databases != null)
+            {
+                return databases;
+            }
+
+            JdbcDatabase database = databaseProvider.getDatabase(connection.getJdbcURL());
+            setEnableRealod(false);
+            try (java.sql.Connection sqlConnection = database.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(connection.getRuntimePassword())))
+            {
+                List<String> loadedDatabases = new ArrayList<>();
+                if (database.usesSchemaAsDatabase())
+                {
+                    try (ResultSet rs = sqlConnection.getMetaData()
+                            .getSchemas())
+                    {
+                        while (rs.next())
+                        {
+                            loadedDatabases.add(rs.getString(1));
+                        }
+                    }
+                }
+                else
+                {
+                    try (ResultSet rs = sqlConnection.getMetaData()
+                            .getCatalogs())
+                    {
+                        while (rs.next())
+                        {
+                            loadedDatabases.add(rs.getString(1));
+                        }
+                    }
+                }
+
+                loadedDatabases.sort((a, b) -> a.compareTo(b));
+                connection.setDatabases(loadedDatabases);
+            }
+            catch (Exception e)
+            {
+                // Set databases here to avoid loading over and over again. A force reload is needed
+                connection.setDatabases(emptyList());
+                // Clear runtime password to be able to let user input again upon error
+                connection.setRuntimePassword(null);
+
+                IQueryFile queryFile = queryFileProvider.getCurrentFile();
+                if (queryFile != null)
+                {
+                    e.printStackTrace(queryFile.getMessagesWriter());
+                    queryFile.focusMessages();
+                }
+                else
+                {
+                    e.printStackTrace();
+                }
+
+                if (reThrowError)
+                {
+                    throw new RuntimeException(e);
+                }
+            }
+            finally
+            {
+                setEnableRealod(true);
+            }
         }
+        return connection.getDatabases();
     }
 }

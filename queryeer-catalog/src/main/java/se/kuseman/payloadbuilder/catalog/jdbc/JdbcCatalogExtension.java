@@ -9,17 +9,13 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 import javax.swing.DefaultComboBoxModel;
-import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ListDataListener;
@@ -28,15 +24,11 @@ import org.apache.commons.lang3.mutable.MutableObject;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.AutoCompletionComboBox;
-import com.queryeer.api.event.QueryFileChangedEvent;
-import com.queryeer.api.event.QueryFileStateEvent;
-import com.queryeer.api.event.QueryFileStateEvent.State;
-import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
+import com.queryeer.api.extensions.catalog.ICatalogExtensionView;
 import com.queryeer.api.extensions.catalog.ICompletionProvider;
-import com.queryeer.api.service.IIconFactory;
-import com.queryeer.api.service.IIconFactory.Provider;
+import com.queryeer.api.extensions.catalog.IPayloadbuilderState;
 import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.utils.CredentialUtils.Credentials;
 
@@ -45,33 +37,39 @@ import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.CredentialsException;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
 
 /** Queryeer extension for {@link JdbcCatalog}. */
 class JdbcCatalogExtension implements ICatalogExtension
 {
-    static final String TITLE = "Jdbc";
     static final JdbcCatalog CATALOG = new JdbcCatalog();
     private final JdbcConnectionsModel connectionsModel;
     private final JdbcCompletionProvider completionProvider;
     private final IQueryFileProvider queryFileProvider;
     private final String catalogAlias;
     private final PropertiesComponent propertiesComponent;
-    private final IIconFactory iconFactory;
 
-    JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, String catalogAlias, IIconFactory iconFactory)
+    JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, CatalogCrawlService crawlService, Icons icons, DatabaseProvider databaseProvider,
+            String catalogAlias)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
-        this.completionProvider = new JdbcCompletionProvider(connectionsModel);
+        this.completionProvider = new JdbcCompletionProvider(connectionsModel, requireNonNull(crawlService, "crawlService"), requireNonNull(databaseProvider, "databaseProvider"));
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.catalogAlias = catalogAlias;
-        this.iconFactory = requireNonNull(iconFactory, "iconFactory");
-        this.propertiesComponent = new PropertiesComponent();
+        this.propertiesComponent = new PropertiesComponent(catalogAlias, icons, connectionsModel, (con) -> setupConnection(con), (con, database) -> setupDatabase(con, database), queryFile ->
+        {
+            // Update properties if was the current file that completed execution
+            if (queryFileProvider.getCurrentFile() == queryFile)
+            {
+                update(queryFile);
+            }
+        }, queryFile -> update(queryFile));
     }
 
     @Override
     public String getTitle()
     {
-        return TITLE;
+        return Constants.TITLE;
     }
 
     @Override
@@ -83,7 +81,7 @@ class JdbcCatalogExtension implements ICatalogExtension
     @Override
     public Class<? extends IConfigurable> getConfigurableClass()
     {
-        return JdbcCatalogConfigurable.class;
+        return JdbcConnectionsConfigurable.class;
     }
 
     @Override
@@ -106,10 +104,10 @@ class JdbcCatalogExtension implements ICatalogExtension
 
         if (askForCredentials)
         {
-            JdbcConnectionsModel.Connection selectedConnection = (JdbcConnectionsModel.Connection) propertiesComponent.connections.getSelectedItem();
+            JdbcConnection selectedConnection = (JdbcConnection) propertiesComponent.connections.getSelectedItem();
 
             // Try to find the connection from session
-            JdbcConnectionsModel.Connection connection = connectionsModel.findConnection(querySession, catalogAlias);
+            JdbcConnection connection = connectionsModel.findConnection(querySession, catalogAlias);
 
             // We have another connection in session than the one selected, populate session and re-run
             if (connection != null
@@ -172,64 +170,52 @@ class JdbcCatalogExtension implements ICatalogExtension
         return completionProvider;
     }
 
-    @Subscribe
-    private void queryFileChanged(QueryFileChangedEvent event)
+    private void setupConnection(JdbcConnection connection)
     {
-        update();
-    }
-
-    @Subscribe
-    private void queryFileStateChanged(QueryFileStateEvent event)
-    {
-        IQueryFile queryFile = event.getQueryFile();
-        if (queryFileProvider.getCurrentFile() == queryFile)
+        IQueryFile queryFile = queryFileProvider.getCurrentFile();
+        if (queryFile == null)
         {
-            // Update quick properties with changed properties from query session
-            if (event.getState() == State.AFTER_QUERY_EXECUTE)
+            return;
+        }
+
+        if (connection != null)
+        {
+            if (queryFile.getEngineState() instanceof IPayloadbuilderState state)
             {
-                update();
+                connection.setup(state.getQuerySession(), catalogAlias);
+                state.getQuerySession()
+                        .setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, (String) null);
             }
         }
     }
 
-    private void setupConnection(JdbcConnectionsModel.Connection connection)
+    private void setupDatabase(JdbcConnection connection, String database)
     {
         IQueryFile queryFile = queryFileProvider.getCurrentFile();
         if (queryFile == null)
         {
             return;
         }
-        IQuerySession session = queryFile.getSession();
-        if (connection != null)
+        if (queryFile.getEngineState() instanceof IPayloadbuilderState state)
         {
-            connection.setup(session, catalogAlias);
-            session.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, (String) null);
+            if (connection != null
+                    && !isBlank(database))
+            {
+                state.getQuerySession()
+                        .setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, database);
+            }
         }
     }
 
-    private void setupDatabase(JdbcConnectionsModel.Connection connection, String database)
+    private void update(IQueryFile queryFile)
     {
-        IQueryFile queryFile = queryFileProvider.getCurrentFile();
-        if (queryFile == null)
+        IPayloadbuilderState state = (IPayloadbuilderState) queryFile.getEngineState();
+        if (state == null)
         {
             return;
         }
-        IQuerySession session = queryFile.getSession();
-        if (connection != null
-                && !isBlank(database))
-        {
-            session.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, database);
-        }
-    }
 
-    private void update()
-    {
-        IQueryFile queryFile = queryFileProvider.getCurrentFile();
-        if (queryFile == null)
-        {
-            return;
-        }
-        IQuerySession session = queryFile.getSession();
+        IQuerySession session = state.getQuerySession();
         String url = session.getCatalogProperty(catalogAlias, JdbcCatalog.URL)
                 .valueAsString(0);
         String database = session.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
@@ -237,15 +223,19 @@ class JdbcCatalogExtension implements ICatalogExtension
         String schema = session.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
 
-        MutableObject<JdbcConnectionsModel.Connection> connectionToSelect = new MutableObject<>();
+        MutableObject<JdbcConnection> connectionToSelect = new MutableObject<>();
         MutableObject<String> databaseToSelect = new MutableObject<>();
 
         int size = connectionsModel.getSize();
         for (int i = 0; i < size; i++)
         {
-            JdbcConnectionsModel.Connection connection = connectionsModel.getElementAt(i);
+            JdbcConnection connection = connectionsModel.getElementAt(i);
 
             if (!equalsIgnoreCase(url, connection.getJdbcURL()))
+            {
+                continue;
+            }
+            else if (connection.getDatabases() == null)
             {
                 continue;
             }
@@ -292,21 +282,33 @@ class JdbcCatalogExtension implements ICatalogExtension
     }
 
     /** Properties component. */
-    private class PropertiesComponent extends JPanel
+    static class PropertiesComponent extends JPanel implements ICatalogExtensionView
     {
-        private final Icon lock = iconFactory.getIcon(Provider.FONTAWESOME, "LOCK");
-        private final Icon unlock = iconFactory.getIcon(Provider.FONTAWESOME, "UNLOCK");
+        private final String catalogAlias;
+        private final JdbcConnectionsModel connectionsModel;
+        private final Consumer<IQueryFile> afterExecuteConsumer;
+        private final Consumer<IQueryFile> focusConsumer;
 
         private static final String PROTOTYPE_CATALOG = "somedatabasewithalongname";
-        private final JComboBox<JdbcConnectionsModel.Connection> connections;
+        private final JComboBox<JdbcConnection> connections;
         private final JComboBox<String> databases;
         private final DefaultComboBoxModel<String> databasesModel = new DefaultComboBoxModel<>();
         private final JButton reload;
         private final JLabel authStatus;
+        private final Icons icons;
         private boolean suppressEvents = false;
 
-        PropertiesComponent()
+        PropertiesComponent(String catalogAlias, Icons icons, JdbcConnectionsModel connectionsModel, Consumer<JdbcConnection> connectionConsumer, BiConsumer<JdbcConnection, String> databaseConsumer,
+                Consumer<IQueryFile> afterExecuteConsumer, Consumer<IQueryFile> focusConsumer)
         {
+            this.catalogAlias = catalogAlias;
+            this.afterExecuteConsumer = afterExecuteConsumer;
+            this.focusConsumer = focusConsumer;
+            this.icons = requireNonNull(icons, "icons");
+            this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
+            requireNonNull(connectionConsumer, "connectionConsumer");
+            requireNonNull(databaseConsumer, "databaseConsumer");
+
             setLayout(new GridBagLayout());
 
             authStatus = new JLabel();
@@ -316,20 +318,20 @@ class JdbcCatalogExtension implements ICatalogExtension
             connectionsModel.registerReloadButton(reload);
             reload.addActionListener(l ->
             {
-                JdbcConnectionsModel.Connection connection = (JdbcConnectionsModel.Connection) connections.getSelectedItem();
+                JdbcConnection connection = (JdbcConnection) connections.getSelectedItem();
                 if (connection == null)
                 {
                     return;
                 }
 
-                // Preparation aborted, don't load indices
+                // Preparation aborted, don't load databases
                 if (!connectionsModel.prepare(connection, false))
                 {
                     return;
                 }
 
-                reload(connection, false);
-                setupConnection(connection);
+                reload(connection, true);
+                connectionConsumer.accept(connection);
             });
 
             connections.addItemListener(l ->
@@ -342,14 +344,14 @@ class JdbcCatalogExtension implements ICatalogExtension
                 suppressEvents = true;
                 try
                 {
-                    JdbcConnectionsModel.Connection connection = (JdbcConnectionsModel.Connection) connections.getSelectedItem();
+                    JdbcConnection connection = (JdbcConnection) connections.getSelectedItem();
+                    databasesModel.removeAllElements();
                     if (connection != null)
                     {
                         // Prepare connection silent
                         connectionsModel.prepare(connection, true);
-                        setupConnection(connection);
-                        reload(connection, true);
-                        populateDatabases(connection);
+                        connectionConsumer.accept(connection);
+                        reload(connection, false);
                     }
                     updateAuthStatus(connection);
                 }
@@ -368,7 +370,7 @@ class JdbcCatalogExtension implements ICatalogExtension
                     return;
                 }
 
-                setupDatabase((JdbcConnectionsModel.Connection) connections.getSelectedItem(), (String) databases.getSelectedItem());
+                databaseConsumer.accept((JdbcConnection) connections.getSelectedItem(), (String) databases.getSelectedItem());
             });
             // CSOFF
             databases.setMaximumRowCount(25);
@@ -384,7 +386,25 @@ class JdbcCatalogExtension implements ICatalogExtension
             // CSON
         }
 
-        private void updateAuthStatus(JdbcConnectionsModel.Connection connection)
+        @Override
+        public void afterExecute(IQueryFile queryFile)
+        {
+            if (afterExecuteConsumer != null)
+            {
+                afterExecuteConsumer.accept(queryFile);
+            }
+        }
+
+        @Override
+        public void focus(IQueryFile queryFile)
+        {
+            if (focusConsumer != null)
+            {
+                focusConsumer.accept(queryFile);
+            }
+        }
+
+        private void updateAuthStatus(JdbcConnection connection)
         {
             // Only update if the provided connection is the selected one
             if (connection == connections.getSelectedItem())
@@ -392,91 +412,34 @@ class JdbcCatalogExtension implements ICatalogExtension
                 boolean hasCredentials = connection != null
                         && connection.hasCredentials();
 
-                authStatus.setIcon(hasCredentials ? unlock
-                        : lock);
+                authStatus.setIcon(hasCredentials ? icons.unlock
+                        : icons.lock);
                 authStatus.setToolTipText(hasCredentials ? null
                         : Common.AUTH_STATUS_LOCKED_TOOLTIP);
             }
         }
 
-        private void reload(JdbcConnectionsModel.Connection connection, boolean suppressError)
+        private void reload(JdbcConnection connection, boolean forceReload)
         {
             if (!connection.hasCredentials())
             {
                 return;
             }
 
-            connectionsModel.setEnableRealod(false);
-            Thread t = new Thread(() ->
+            Runnable load = () ->
             {
-                try (Connection sqlConnection = CATALOG.getConnection(connection.getJdbcDriverClassName(), connection.getJdbcURL(), connection.getUsername(),
-                        new String(connection.getRuntimePassword()), catalogAlias))
+                connectionsModel.getDatabases(connection, catalogAlias, forceReload, false);
+                SwingUtilities.invokeLater(() ->
                 {
-                    List<String> databases = new ArrayList<>();
-                    try (ResultSet rs = sqlConnection.getMetaData()
-                            .getCatalogs())
-                    {
-                        while (rs.next())
-                        {
-                            databases.add(rs.getString(1));
-                        }
-                    }
+                    populateDatabases(connection);
+                    updateAuthStatus(connection);
+                });
+            };
 
-                    // Try schemas
-                    if (databases.isEmpty())
-                    {
-                        try (ResultSet rs = sqlConnection.getMetaData()
-                                .getSchemas())
-                        {
-                            while (rs.next())
-                            {
-                                databases.add(rs.getString(1));
-                            }
-                        }
-
-                        if (!databases.isEmpty())
-                        {
-                            connection.setUsesSchemas(true);
-                        }
-                    }
-
-                    databases.sort((a, b) -> a.compareTo(b));
-                    connection.setDatabases(databases);
-                    SwingUtilities.invokeLater(() ->
-                    {
-                        populateDatabases(connection);
-                        updateAuthStatus(connection);
-                    });
-                }
-                catch (Exception e)
-                {
-                    if (!suppressError)
-                    {
-                        JOptionPane.showMessageDialog(null, e.getMessage(), "Error reloading databases", JOptionPane.ERROR_MESSAGE);
-                    }
-                    else
-                    {
-                        IQueryFile queryFile = queryFileProvider.getCurrentFile();
-                        if (queryFile != null)
-                        {
-                            e.printStackTrace(queryFile.getMessagesWriter());
-                            queryFile.focusMessages();
-                        }
-                        else
-                        {
-                            e.printStackTrace();
-                        }
-                    }
-                }
-                finally
-                {
-                    connectionsModel.setEnableRealod(true);
-                }
-            });
-            t.start();
+            new Thread(load).start();
         }
 
-        private void populateDatabases(JdbcConnectionsModel.Connection connection)
+        private void populateDatabases(JdbcConnection connection)
         {
             databasesModel.removeAllElements();
             if (connection == null
@@ -489,65 +452,65 @@ class JdbcCatalogExtension implements ICatalogExtension
                 databasesModel.addElement(database);
             }
         }
-    }
 
-    private class ConnectionsSelectionModel extends DefaultComboBoxModel<JdbcConnectionsModel.Connection>
-    {
-        private int selectedItemIndex;
-
-        @Override
-        public Object getSelectedItem()
+        private class ConnectionsSelectionModel extends DefaultComboBoxModel<JdbcConnection>
         {
-            if (selectedItemIndex >= 0
-                    && selectedItemIndex < connectionsModel.getConnections()
-                            .size())
-            {
-                return connectionsModel.getElementAt(selectedItemIndex);
-            }
-            return null;
-        }
+            private int selectedItemIndex;
 
-        @Override
-        public void setSelectedItem(Object connection)
-        {
-            int newIndex = connectionsModel.getConnections()
-                    .indexOf(connection);
-            if (newIndex == -1)
+            @Override
+            public Object getSelectedItem()
             {
-                return;
+                if (selectedItemIndex >= 0
+                        && selectedItemIndex < connectionsModel.getConnections()
+                                .size())
+                {
+                    return connectionsModel.getElementAt(selectedItemIndex);
+                }
+                return null;
             }
 
-            if (selectedItemIndex != newIndex)
+            @Override
+            public void setSelectedItem(Object connection)
             {
-                selectedItemIndex = newIndex;
-                fireContentsChanged(this, -1, -1);
+                int newIndex = connectionsModel.getConnections()
+                        .indexOf(connection);
+                if (newIndex == -1)
+                {
+                    return;
+                }
+
+                if (selectedItemIndex != newIndex)
+                {
+                    selectedItemIndex = newIndex;
+                    fireContentsChanged(this, -1, -1);
+                }
             }
-        }
 
-        @Override
-        public int getSize()
-        {
-            return connectionsModel.getSize();
-        }
+            @Override
+            public int getSize()
+            {
+                return connectionsModel.getSize();
+            }
 
-        @Override
-        public JdbcConnectionsModel.Connection getElementAt(int index)
-        {
-            return connectionsModel.getElementAt(index);
-        }
+            @Override
+            public JdbcConnection getElementAt(int index)
+            {
+                return connectionsModel.getElementAt(index);
+            }
 
-        @Override
-        public void addListDataListener(ListDataListener l)
-        {
-            super.addListDataListener(l);
-            connectionsModel.addListDataListener(l);
-        }
+            @Override
+            public void addListDataListener(ListDataListener l)
+            {
+                super.addListDataListener(l);
+                connectionsModel.addListDataListener(l);
+            }
 
-        @Override
-        public void removeListDataListener(ListDataListener l)
-        {
-            super.removeListDataListener(l);
-            connectionsModel.removeListDataListener(l);
+            @Override
+            public void removeListDataListener(ListDataListener l)
+            {
+                super.removeListDataListener(l);
+                connectionsModel.removeListDataListener(l);
+            }
         }
     }
 }

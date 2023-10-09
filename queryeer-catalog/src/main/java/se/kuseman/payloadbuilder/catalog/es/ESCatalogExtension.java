@@ -23,13 +23,11 @@ import javax.swing.event.ListDataListener;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.AutoCompletionComboBox;
-import com.queryeer.api.event.QueryFileChangedEvent;
-import com.queryeer.api.event.QueryFileStateEvent;
-import com.queryeer.api.event.QueryFileStateEvent.State;
-import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
+import com.queryeer.api.extensions.catalog.ICatalogExtensionView;
 import com.queryeer.api.extensions.catalog.ICompletionProvider;
+import com.queryeer.api.extensions.catalog.IPayloadbuilderState;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IIconFactory.Provider;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -164,28 +162,6 @@ class ESCatalogExtension implements ICatalogExtension
         return completionProvider;
     }
 
-    @Subscribe
-    private void queryFileChanged(QueryFileChangedEvent event)
-    {
-        update(event.getQueryFile());
-    }
-
-    @Subscribe
-    private void queryFileStateChanged(QueryFileStateEvent event)
-    {
-        IQueryFile queryFile = event.getQueryFile();
-
-        // Update quick properties with changed properties from query session
-        // change file is the currently opened one
-        if (queryFileProvider.getCurrentFile() == queryFile)
-        {
-            if (event.getState() == State.AFTER_QUERY_EXECUTE)
-            {
-                update(queryFile);
-            }
-        }
-    }
-
     void setupConnection(Connection connection)
     {
         IQueryFile queryFile = queryFileProvider.getCurrentFile();
@@ -193,10 +169,12 @@ class ESCatalogExtension implements ICatalogExtension
         {
             return;
         }
-        IQuerySession session = queryFile.getSession();
         if (connection != null)
         {
-            connection.setup(session, catalogAlias);
+            if (queryFile.getEngineState() instanceof IPayloadbuilderState state)
+            {
+                connection.setup(state.getQuerySession(), catalogAlias);
+            }
         }
     }
 
@@ -207,9 +185,13 @@ class ESCatalogExtension implements ICatalogExtension
         {
             return;
         }
-        IQuerySession session = queryFile.getSession();
-        session.setCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY, index != null ? index.name
-                : null);
+        IPayloadbuilderState state = (IPayloadbuilderState) queryFile.getEngineState();
+        if (state != null)
+        {
+            state.getQuerySession()
+                    .setCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY, index != null ? index.name
+                            : null);
+        }
     }
 
     void update(IQueryFile queryFile)
@@ -218,7 +200,13 @@ class ESCatalogExtension implements ICatalogExtension
         {
             return;
         }
-        IQuerySession querySession = queryFile.getSession();
+        IPayloadbuilderState state = (IPayloadbuilderState) queryFile.getEngineState();
+        if (state == null)
+        {
+            return;
+        }
+
+        IQuerySession querySession = state.getQuerySession();
 
         // Find connection from session
         Connection connectionToSet = connectionsModel.findConnection(querySession, catalogAlias);
@@ -297,7 +285,7 @@ class ESCatalogExtension implements ICatalogExtension
     }
 
     /** Quick properties panel. */
-    class QuickPropertiesPanel extends JPanel
+    class QuickPropertiesPanel extends JPanel implements ICatalogExtensionView
     {
         private final Icon lock = iconFactory.getIcon(Provider.FONTAWESOME, "LOCK");
         private final Icon unlock = iconFactory.getIcon(Provider.FONTAWESOME, "UNLOCK");
@@ -383,6 +371,23 @@ class ESCatalogExtension implements ICatalogExtension
 
             setPreferredSize(new Dimension(240, 75));
             // CSON
+        }
+
+        @Override
+        public void afterExecute(IQueryFile queryFile)
+        {
+            // Update quick properties with changed properties from query session
+            // change file is the currently opened one
+            if (queryFileProvider.getCurrentFile() == queryFile)
+            {
+                ESCatalogExtension.this.update(queryFile);
+            }
+        }
+
+        @Override
+        public void focus(IQueryFile queryFile)
+        {
+            ESCatalogExtension.this.update(queryFile);
         }
 
         private void updateAuthStatus(Connection connection)

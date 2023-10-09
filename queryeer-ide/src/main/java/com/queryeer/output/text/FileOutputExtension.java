@@ -2,6 +2,8 @@ package com.queryeer.output.text;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -11,16 +13,22 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
+import javax.swing.BorderFactory;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.KeyStroke;
+import javax.swing.border.CompoundBorder;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.CountingOutputStream;
+import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.queryeer.api.IQueryFile;
-import com.queryeer.api.TextSelection;
+import com.queryeer.api.editor.TextSelection;
+import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
@@ -67,17 +75,16 @@ class FileOutputExtension implements IOutputExtension
     @Override
     public OutputWriter createOutputWriter(IQueryFile file)
     {
-        String filename = getOutputFileName();
-
-        if (isBlank(filename))
-        {
-            return null;
-        }
-
         IOutputFormatExtension outputFormat = file.getOutputFormat();
         if (outputFormat == null)
         {
             throw new IllegalArgumentException("No output format selected");
+        }
+
+        String filename = getOutputFileName(outputFormat.getFileChooserConfigurableComponent());
+        if (isBlank(filename))
+        {
+            return null;
         }
 
         try
@@ -130,7 +137,7 @@ class FileOutputExtension implements IOutputExtension
         }
     }
 
-    private String getOutputFileName()
+    private String getOutputFileName(IConfigurable configurable)
     {
         JFileChooser fileChooser = new JFileChooser()
         {
@@ -162,11 +169,47 @@ class FileOutputExtension implements IOutputExtension
             }
         };
         fileChooser.setDialogTitle("Select output filename");
-        int result = fileChooser.showSaveDialog(null);
-        if (result == JFileChooser.APPROVE_OPTION)
+
+        MutableBoolean dirty = new MutableBoolean(false);
+        Consumer<Boolean> dirtyConsumer = b -> dirty.setValue(b);
+
+        if (configurable != null)
         {
-            return fileChooser.getSelectedFile()
-                    .getAbsolutePath();
+            configurable.addDirtyStateConsumer(dirtyConsumer);
+
+            JPanel panel = new JPanel();
+            CompoundBorder border = new CompoundBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1), BorderFactory.createLineBorder(Color.BLACK, 1));
+            panel.setBorder(border);
+            panel.setLayout(new BorderLayout());
+            panel.add(configurable.getComponent(), BorderLayout.CENTER);
+            fileChooser.setAccessory(panel);
+        }
+
+        int result = fileChooser.showSaveDialog(null);
+        try
+        {
+            if (result == JFileChooser.APPROVE_OPTION)
+            {
+                // Commit the configurable before returning to apply any changes
+                if (dirty.booleanValue())
+                {
+                    configurable.commitChanges();
+                }
+
+                return fileChooser.getSelectedFile()
+                        .getAbsolutePath();
+            }
+            else if (dirty.booleanValue())
+            {
+                configurable.revertChanges();
+            }
+        }
+        finally
+        {
+            if (configurable != null)
+            {
+                configurable.removeDirtyStateConsumer(dirtyConsumer);
+            }
         }
 
         return null;

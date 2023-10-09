@@ -16,6 +16,7 @@ import org.mockito.internal.stubbing.answers.ReturnsArgumentAt;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.catalog.ICatalogExtension;
+import com.queryeer.api.extensions.catalog.IPayloadbuilderState;
 import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -199,10 +200,11 @@ public class ESCatalogExtensionTest extends Assert
         IQueryFile queryFile = Mockito.mock(IQueryFile.class);
         IIconFactory iconFactory = Mockito.mock(IIconFactory.class);
         ICryptoService cryptoService = Mockito.mock(ICryptoService.class);
-        // when(encryptService.decrypt(anyString())).thenAnswer(new ReturnsArgumentAt(0));
+        IPayloadbuilderState state = Mockito.mock(IPayloadbuilderState.class);
+        when(state.getQuerySession()).thenReturn(session);
 
         when(queryFileProvider.getCurrentFile()).thenReturn(queryFile);
-        when(queryFile.getSession()).thenReturn(session);
+        when(queryFile.getEngineState()).thenReturn(state);
 
         MutableObject<String> username = new MutableObject<>();
         MutableObject<char[]> password = new MutableObject<>();
@@ -272,10 +274,10 @@ public class ESCatalogExtensionTest extends Assert
         IQueryFile queryFile = Mockito.mock(IQueryFile.class);
         IIconFactory iconFactory = Mockito.mock(IIconFactory.class);
         ICryptoService cryptoService = Mockito.mock(ICryptoService.class);
-        // when(cryptoService.decrypt(anyString())).thenAnswer(new ReturnsArgumentAt(0));
-
+        IPayloadbuilderState state = Mockito.mock(IPayloadbuilderState.class);
+        when(state.getQuerySession()).thenReturn(session);
         when(queryFileProvider.getCurrentFile()).thenReturn(queryFile);
-        when(queryFile.getSession()).thenReturn(session);
+        when(queryFile.getEngineState()).thenReturn(state);
 
         MutableObject<String> username = new MutableObject<>();
         MutableObject<char[]> password = new MutableObject<>();

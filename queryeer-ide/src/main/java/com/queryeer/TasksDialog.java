@@ -50,7 +50,7 @@ class TasksDialog extends JFrame
 {
     private static final Icon CHECK_CIRCLE = FontIcon.of(FontAwesome.CHECK_CIRCLE);
     private static final Icon EXCLAMATION_CIRCLE = FontIcon.of(FontAwesome.EXCLAMATION_CIRCLE);
-    private static final AnimatedIcon SPINNER = new AnimatedIcon(Utils.getResouceIcon("/icons/spinner.gif"));
+    private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
     private JTable tasksTable;
     private TasksTableModel tasksTableModel;

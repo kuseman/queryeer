@@ -22,6 +22,8 @@
         <rstaui.version>3.3.1</rstaui.version>
         <jasypt.version>1.9.3</jasypt.version>
         <jfreechart.version>1.5.5</jfreechart.version>
+        <freemarker.version> 2.3.32</freemarker.version>
+        <commons-lang3.version>3.14.0</commons-lang3.version>
     </properties>
 
     <dependencies>
@@ -37,6 +39,11 @@
             <version>${project.version}</version>
         </dependency>
         <!-- External -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+            <version>${commons-lang3.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-reload4j</artifactId>
@@ -62,6 +69,11 @@
             <groupId>org.jasypt</groupId>
             <artifactId>jasypt</artifactId>
             <version>${jasypt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>${freemarker.version}</version>
         </dependency>
 
         <!--  UI -->

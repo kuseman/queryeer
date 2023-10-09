@@ -67,6 +67,12 @@ class JsonConfigurable implements IConfigurable
         dirstyStateConsumers.add(consumer);
     }
 
+    @Override
+    public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
+    {
+        dirstyStateConsumers.remove(consumer);
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public void commitChanges()
