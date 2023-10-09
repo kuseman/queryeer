@@ -4,20 +4,19 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 
-import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
+import com.queryeer.api.action.IActionRegistry;
+import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
-import com.queryeer.completion.CompletionInstaller;
-import com.queryeer.component.CatalogExtensionViewFactory;
+import com.queryeer.api.service.ITemplateService;
 
 /** Main of Queryeer */
 public class Main
@@ -52,10 +51,6 @@ public class Main
         ServiceLoader serviceLoader = new ServiceLoader();
         wire(etcFolder, serviceLoader);
 
-        List<ICatalogExtensionFactory> catalogExtensionFactories = serviceLoader.getAll(ICatalogExtensionFactory.class);
-        Config config = serviceLoader.get(Config.class);
-        config.loadCatalogExtensions(catalogExtensionFactories);
-
         QueryeerController controller = serviceLoader.get(QueryeerController.class);
 
         // Start all Swing applications on the EDT.
@@ -76,6 +71,7 @@ public class Main
 
         CryptoService cryptoService = new CryptoService(serviceLoader);
         serviceLoader.register(ICryptoService.class, cryptoService);
+        serviceLoader.register(ITemplateService.class, new TemplateService());
 
         Config config = new Config(etcFolder);
         serviceLoader.register(IConfig.class, config);
@@ -85,6 +81,9 @@ public class Main
         serviceLoader.register(IQueryFileProvider.class, queryFileProvider);
         serviceLoader.register(queryFileProvider);
 
+        ActionRegistry actionRegistry = new ActionRegistry();
+        serviceLoader.register(IActionRegistry.class, actionRegistry);
+
         // UI
         serviceLoader.register(new QueryeerModel());
         serviceLoader.register(QueryeerView.class);
@@ -92,12 +91,13 @@ public class Main
         serviceLoader.register(OptionsDialog.class);
         serviceLoader.register(QueryFileTabbedPane.class);
         serviceLoader.register(QueryFileViewFactory.class);
-        serviceLoader.register(CatalogExtensionViewFactory.class);
-        serviceLoader.register(new CompletionInstaller(eventBus));
+
         serviceLoader.register(IIconFactory.class, new IconFactory());
 
         // Inject plugins last
         serviceLoader.injectExtensions();
-    }
 
+        // Initalize config with all query engines
+        config.init(serviceLoader.getAll(IQueryEngine.class));
+    }
 }

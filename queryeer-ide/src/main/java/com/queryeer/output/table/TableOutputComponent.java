@@ -47,11 +47,14 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.dialog.ValueDialog;
+
+import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
@@ -97,6 +100,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             findDialog.setVisible(true);
         }
     };
+
+    @Override
+    public OutputWriter createOutputWriter(IQueryFile queryFile)
+    {
+        return new TableOutputWriter(queryFile);
+    }
 
     @Override
     public String getSelectedText()
@@ -157,6 +166,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         {
                             for (int col = startCol; col < colCount; col++)
                             {
+                                // Don't search in row number
+                                if (col == 0)
+                                {
+                                    continue;
+                                }
+
                                 Object value = table.getValueAt(row, col);
                                 if (!match(value, context, pattern))
                                 {
@@ -547,12 +562,17 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         {
             super((JFrame) SwingUtilities.getWindowAncestor(TableOutputComponent.this), TableOutputComponent.this);
             setIconImages(Constants.APPLICATION_ICONS);
-            wrapCheckBox.setSelected(true);
+
+            context.setSearchWrap(true);
+            context.setMarkAll(false);
+
             markAllCheckBox.setSelected(false);
             markAllCheckBox.setEnabled(false);
             wholeWordCheckBox.setEnabled(false);
             upButton.setEnabled(false);
             downButton.setEnabled(false);
+
+            refreshUIFromContext();
             setLocationRelativeTo(getParent());
         }
 

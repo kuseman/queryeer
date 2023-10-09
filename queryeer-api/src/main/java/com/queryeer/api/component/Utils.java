@@ -5,6 +5,7 @@ import static java.util.Collections.emptyMap;
 import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
+import java.beans.MethodDescriptor;
 import java.beans.PropertyDescriptor;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -15,11 +16,18 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import javax.swing.ImageIcon;
+
 import com.queryeer.api.component.PropertyFields.PropertyField;
 
 /** Component utils */
 class Utils
 {
+    static ImageIcon getResouceIcon(String name)
+    {
+        return new ImageIcon(Utils.class.getResource(name));
+    }
+
     /**
      * Collect property fields from provided class. First tries to find {@link Property} on get methods if no methods is found try {@link java.beans.Introspector}.
      */
@@ -73,7 +81,21 @@ class Utils
                     throw new IllegalArgumentException(clazz + " must implement " + IPropertyAware.class + " to be able to have properties with enable/visible awareness");
                 }
 
-                result.add(new PropertyField(pd, property, null));
+                result.add(new PropertyField(pd, property));
+            }
+
+            for (MethodDescriptor method : beanInfo.getMethodDescriptors())
+            {
+                Property property = method.getMethod()
+                        .getAnnotation(Property.class);
+                if (property == null
+                        || method.getMethod()
+                                .getReturnType() != Void.class)
+                {
+                    continue;
+                }
+
+                result.add(new PropertyField(method, property));
             }
 
             result.sort((a, b) ->

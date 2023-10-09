@@ -2,8 +2,9 @@ package com.queryeer.api.component;
 
 import static java.util.Objects.requireNonNull;
 
-import java.awt.Component;
+import java.beans.MethodDescriptor;
 import java.beans.PropertyDescriptor;
+import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
@@ -33,19 +34,20 @@ class PropertyFields
     /** A resolved property field */
     static class PropertyField
     {
-        final Component component;
-        final boolean isPrimitive;
         private final Property property;
         private final Method readMethod;
         private final Method writeMethod;
         private final Class<?> type;
-        private PropertyDescriptor propertyDescriptor;
+        private final String name;
+        private final String title;
 
-        PropertyField(PropertyDescriptor propertyDescriptor, Property property, Component component)
+        PropertyField(PropertyDescriptor propertyDescriptor, Property property)
         {
-            this.propertyDescriptor = requireNonNull(propertyDescriptor, "propertyDescriptor");
             this.readMethod = propertyDescriptor.getReadMethod();
             this.writeMethod = propertyDescriptor.getWriteMethod();
+            this.name = propertyDescriptor.getName();
+            this.title = property != null ? property.title()
+                    : propertyDescriptor.getName();
 
             this.readMethod.setAccessible(true);
             if (this.writeMethod != null)
@@ -53,10 +55,18 @@ class PropertyFields
                 this.writeMethod.setAccessible(true);
             }
             this.property = property;
-            this.component = component;
             this.type = readMethod.getReturnType();
-            this.isPrimitive = readMethod.getReturnType()
-                    .isPrimitive();
+        }
+
+        PropertyField(MethodDescriptor methodDescriptor, Property property)
+        {
+            this.readMethod = methodDescriptor.getMethod();
+            this.readMethod.setAccessible(true);
+            this.writeMethod = null;
+            this.property = requireNonNull(property, "property");
+            this.name = this.readMethod.getName();
+            this.title = property.title();
+            this.type = Void.class;
         }
 
         Property getProperty()
@@ -66,13 +76,12 @@ class PropertyFields
 
         String getName()
         {
-            return propertyDescriptor.getName();
+            return name;
         }
 
         String getTitle()
         {
-            return property != null ? property.title()
-                    : propertyDescriptor.getName();
+            return title;
         }
 
         String getDescription()
@@ -86,6 +95,11 @@ class PropertyFields
             return writeMethod == null;
         }
 
+        boolean isOperation()
+        {
+            return type == Void.class;
+        }
+
         Class<?> getType()
         {
             return type;
@@ -93,6 +107,11 @@ class PropertyFields
 
         Object getValue(Object target)
         {
+            if (isOperation())
+            {
+                return null;
+            }
+
             try
             {
                 return readMethod.invoke(target);
@@ -112,6 +131,13 @@ class PropertyFields
 
             try
             {
+                // Convert null to default primitive value
+                if (type.isPrimitive()
+                        && value == null)
+                {
+                    value = Array.get(Array.newInstance(type, 1), 0);
+                }
+
                 writeMethod.invoke(target, value);
             }
             catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e)
@@ -120,61 +146,21 @@ class PropertyFields
             }
         }
 
-        void popualteComponent(Object target)
+        void call(Object target)
         {
-            // if (component instanceof JCheckBox)
-            // {
-            // JCheckBox checkbox = (JCheckBox) component;
-            // checkbox.setSelected(false);
-            // if (target != null)
-            // {
-            // try
-            // {
-            // checkbox.setSelected(field.getBoolean(target));
-            // }
-            // catch (Exception e)
-            // {
-            // throw new RuntimeException("Error getting value from property bean", e);
-            // }
-            // }
-            // }
-            // else if (component instanceof JTextField)
-            // {
-            // JTextField textField = (JTextField) component;
-            // textField.setText("");
-            // if (target != null)
-            // {
-            // Object value = null;
-            // try
-            // {
-            // value = field.get(target);
-            // }
-            // catch (Exception e)
-            // {
-            // throw new RuntimeException("Error getting value from property bean", e);
-            // }
-            // if (value != null)
-            // {
-            // textField.setText(String.valueOf(value));
-            // }
-            // }
-            // }
-            // else if (component instanceof JComboBox)
-            // {
-            // JComboBox<?> combobox = (JComboBox<?>) component;
-            // combobox.setSelectedIndex(0);
-            // if (target != null)
-            // {
-            // try
-            // {
-            // combobox.setSelectedItem(field.get(target));
-            // }
-            // catch (Exception e)
-            // {
-            // throw new RuntimeException("Error getting value from property bean", e);
-            // }
-            // }
-            // }
+            if (target == null)
+            {
+                return;
+            }
+
+            try
+            {
+                readMethod.invoke(target);
+            }
+            catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e)
+            {
+                throw new RuntimeException("Error calling operation", e);
+            }
         }
     }
 }
