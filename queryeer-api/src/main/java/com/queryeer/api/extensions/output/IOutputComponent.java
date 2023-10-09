@@ -34,4 +34,9 @@ public interface IOutputComponent
     default void clearState()
     {
     }
+
+    /** Dispose any resources etc. Called when a query tab is closed. */
+    default void dispose()
+    {
+    }
 }

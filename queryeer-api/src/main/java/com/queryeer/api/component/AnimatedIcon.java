@@ -221,4 +221,10 @@ public class AnimatedIcon implements Icon
             return (flags & (ALLBITS | ABORT)) == 0;
         }
     }
+
+    /** Create a small animated spinner icon. */
+    public static Icon createSmallSpinner()
+    {
+        return new AnimatedIcon(Utils.getResouceIcon("/icons/spinner.gif"));
+    }
 }

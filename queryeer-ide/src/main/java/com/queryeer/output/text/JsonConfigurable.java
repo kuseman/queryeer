@@ -56,6 +56,12 @@ class JsonConfigurable implements IConfigurable
     }
 
     @Override
+    public String getLongTitle()
+    {
+        return "Settings for JSON Output Writer";
+    }
+
+    @Override
     public String groupName()
     {
         return IConfigurable.OUTPUT_FORMAT;
@@ -65,6 +71,12 @@ class JsonConfigurable implements IConfigurable
     public void addDirtyStateConsumer(Consumer<Boolean> consumer)
     {
         dirstyStateConsumers.add(consumer);
+    }
+
+    @Override
+    public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
+    {
+        dirstyStateConsumers.remove(consumer);
     }
 
     @SuppressWarnings("unchecked")
@@ -113,7 +125,6 @@ class JsonConfigurable implements IConfigurable
     }
 
     @Properties(
-            header = "<html><h2>Settings for JSON Output Writer</h2><hr></html>",
             properties = {
                     @Property(
                             propertyName = "rowSeparator",

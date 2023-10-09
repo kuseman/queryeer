@@ -20,6 +20,7 @@ import java.util.Set;
 
 import javax.swing.AbstractListModel;
 import javax.swing.JButton;
+import javax.swing.SwingUtilities;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.hc.client5.http.classic.methods.HttpGet;
@@ -32,7 +33,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.IPropertyAware;
-import com.queryeer.api.component.Properties;
 import com.queryeer.api.component.Property;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.ICryptoService;
@@ -178,10 +178,10 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
     }
 
     /** Get indices for provided connection. */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({ "unchecked", "resource" })
     List<Index> getIndices(Connection connection, boolean forceReload)
     {
-        reloadButtons.forEach(b -> b.setEnabled(false));
+        SwingUtilities.invokeLater(() -> reloadButtons.forEach(b -> b.setEnabled(false)));
         try
         {
             synchronized (connection)
@@ -281,7 +281,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         }
         finally
         {
-            reloadButtons.forEach(b -> b.setEnabled(true));
+            SwingUtilities.invokeLater(() -> reloadButtons.forEach(b -> b.setEnabled(true)));
         }
     }
 
@@ -370,8 +370,6 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
     }
 
     /** Connection domain */
-    @Properties(
-            header = "<html><h2>Connections to Elasticsearch</h2><hr></html>")
     static class Connection implements IPropertyAware
     {
         @JsonProperty

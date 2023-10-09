@@ -13,6 +13,11 @@ import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import javax.swing.Icon;
 import javax.swing.JScrollPane;
@@ -20,30 +25,39 @@ import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
-import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.IQueryFile;
-import com.queryeer.api.TextSelection;
+import com.queryeer.api.editor.IEditor;
+import com.queryeer.api.editor.ITextEditor;
+import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
 {
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+            .namingPattern("TextOutputComponentAppender-%d")
+            .build());
     private static final String WARNING_LOCATION = "warningLocation";
     private final IQueryFile queryFile;
     private final JTextPane text;
     private final Document document;
     private final PrintWriter printWriter;
     private final IOutputExtension extension;
+
+    private Future<?> currentAppender;
+    private Queue<String> chunkQueue = new ConcurrentLinkedQueue<>();
+    private volatile boolean abortAppend;
 
     TextOutputComponent(IOutputExtension extension, IQueryFile queryFile)
     {
@@ -85,6 +99,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     public void clearState()
     {
         text.setText("");
+        abortAppend = true;
     }
 
     @Override
@@ -99,88 +114,95 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         SimpleAttributeSet warning = new SimpleAttributeSet();
         StyleConstants.setForeground(warning, Color.RED);
         warning.addAttribute(WARNING_LOCATION, textSelection);
-
-        appendText(text + System.lineSeparator(), warning);
+        verifyAppenderThread();
+        appendBatch(List.of(new Chunk(text + System.lineSeparator(), warning)));
     }
 
-    private record TextBatch(int offset, String text)
+    private Runnable textAppender = () ->
     {
-    }
+        List<Chunk> batch = new ArrayList<>();
+        boolean done = false;
+        long lastValueStamp = 0;
 
-    /** Batch writer that doesn't access the text panes document after each write to improve UI exp. */
-    PrintWriter createBatchWriter()
-    {
-        // CSOFF
-        Writer writer = new Writer()
-        // CSON
+        while (!done)
         {
-            private int prevOffset = 0;
-            private volatile boolean abort = false;
-            private List<TextBatch> batch = new ArrayList<>(500);
-
-            @Override
-            public void write(char[] cbuf, int off, int len) throws IOException
+            if (abortAppend)
             {
-                String string = new String(cbuf, off, len);
-                batch.add(new TextBatch(prevOffset, string));
-                prevOffset += string.length();
-                if (batch.size() >= 500)
-                {
-                    addBatch();
-                }
+                chunkQueue.clear();
+                break;
             }
 
-            @Override
-            public void flush() throws IOException
+            String string = chunkQueue.poll();
+            if (string != null)
             {
-                addBatch();
+                lastValueStamp = System.currentTimeMillis();
+                batch.add(new Chunk(string, null));
             }
 
-            @Override
-            public void close() throws IOException
+            long timeSinceLastValue = System.currentTimeMillis() - lastValueStamp;
+
+            // We reached batch size or we reached time threshold since last value
+            if (batch.size() >= 500
+                    || (timeSinceLastValue > 50))
             {
-                // We abort the writer upon close. If this is a regular write
-                // with no forced abort everything should be written in flush
-                // but if we get an abort, close is called and if we are writing alot of queued up batches
-                // we must abort to avoid hanging UI.
-                abort = true;
+                appendBatch(batch);
+                batch.clear();
             }
 
-            private void addBatch()
-            {
-                if (batch.isEmpty())
-                {
-                    return;
-                }
+            // Keep thread awake a bit before ending
+            done = chunkQueue.isEmpty()
+                    && timeSinceLastValue > 500;
+        }
+    };
 
-                try
+    record Chunk(String text, AttributeSet attributes)
+    {
+    }
+
+    private void appendBatch(List<Chunk> batch)
+    {
+        if (batch.isEmpty())
+        {
+            return;
+        }
+        try
+        {
+            SwingUtilities.invokeAndWait(() ->
+            {
+                for (Chunk b : batch)
                 {
-                    SwingUtilities.invokeAndWait(() ->
+                    if (abortAppend)
                     {
-                        for (TextBatch b : batch)
-                        {
-                            if (abort)
-                            {
-                                break;
-                            }
-                            try
-                            {
-                                document.insertString(b.offset, b.text, null);
-                            }
-                            catch (BadLocationException e)
-                            {
-                            }
-                        }
-                        batch.clear();
-                    });
+                        break;
+                    }
+                    try
+                    {
+                        document.insertString(document.getLength(), b.text, b.attributes);
+                    }
+                    catch (BadLocationException e)
+                    {
+                    }
                 }
-                catch (InvocationTargetException | InterruptedException e)
-                {
-                }
-            }
-        };
+                batch.clear();
+            });
+        }
+        catch (InvocationTargetException | InterruptedException e)
+        {
+        }
+    }
 
-        return new PrintWriter(writer, true);
+    private void verifyAppenderThread()
+    {
+        synchronized (TextOutputComponent.this)
+        {
+            abortAppend = false;
+            // Fire up a new appending thread if previously one is not running
+            if (currentAppender == null
+                    || currentAppender.isDone())
+            {
+                currentAppender = EXECUTOR.submit(textAppender);
+            }
+        }
     }
 
     private PrintWriter createPrintWriter()
@@ -192,8 +214,9 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
             @Override
             public void write(char[] cbuf, int off, int len) throws IOException
             {
-                final String string = new String(cbuf, off, len);
-                appendText(string, null);
+                verifyAppenderThread();
+                String string = new String(cbuf, off, len);
+                chunkQueue.add(string);
             }
 
             @Override
@@ -212,39 +235,8 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
             @Override
             public void close()
             {
-                // DO nothing on close
             }
         };
-    }
-
-    private void appendText(String string, AttributeSet attributeSet)
-    {
-        Runnable r = () ->
-        {
-            // Detach document before update
-            int endOffset = document.getLength();
-            text.setDocument(new DefaultStyledDocument());
-            try
-            {
-                document.insertString(document.getLength(), string, attributeSet);
-            }
-            catch (BadLocationException e)
-            {
-            }
-            finally
-            {
-                text.setDocument(document);
-                text.setCaretPosition(endOffset);
-            }
-        };
-        if (SwingUtilities.isEventDispatchThread())
-        {
-            r.run();
-        }
-        else
-        {
-            SwingUtilities.invokeLater(r);
-        }
     }
 
     private class TextMouseListener extends MouseAdapter
@@ -252,7 +244,8 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         @Override
         public void mouseClicked(MouseEvent e)
         {
-            if (e.getClickCount() == 2)
+            if (SwingUtilities.isLeftMouseButton(e)
+                    && e.getClickCount() == 2)
             {
                 int character = text.viewToModel2D(e.getPoint());
                 if (character >= 0)
@@ -265,7 +258,11 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                         // Mark whole warning text
                         text.setSelectionStart(element.getStartOffset());
                         text.setSelectionEnd(element.getEndOffset());
-                        queryFile.select(warningLocation);
+                        IEditor editor = queryFile.getEditor();
+                        if (editor instanceof ITextEditor)
+                        {
+                            ((ITextEditor) editor).select(warningLocation);
+                        }
                     }
                 }
             }

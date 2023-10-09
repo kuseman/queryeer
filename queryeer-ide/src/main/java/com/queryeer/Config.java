@@ -3,49 +3,61 @@ package com.queryeer;
 import static com.queryeer.QueryeerController.MAPPER;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
-import static java.util.stream.Collectors.toMap;
-import static org.apache.commons.lang3.StringUtils.lowerCase;
+import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
+import java.util.Objects;
 
 import javax.swing.JOptionPane;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.queryeer.api.extensions.catalog.ICatalogExtension;
-import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
+import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IConfig;
-import com.queryeer.domain.ICatalogModel;
 
 /** Queryeer config */
 class Config implements IConfig
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Config.class);
     private static final String CONFIG = "queryeer.cfg";
+    private static final String SESSION = "queryeer.session.cfg";
 
     private static final int MAX_RECENT_FILES = 10;
-    @JsonProperty
-    @JsonDeserialize(
-            contentAs = Catalog.class)
-    private List<ICatalogModel> catalogs = new ArrayList<>();
+    private final File etcFolder;
+    private final File sessionFile;
+
     @JsonProperty
     private String lastOpenPath;
     @JsonProperty
     private final List<String> recentFiles = new ArrayList<>();
-    private File etcFolder;
+
+    /** Class name of the default query engine for new files */
+    @JsonProperty
+    private String defaultQueryEngineClassName;
+
+    @JsonIgnore
+    private IQueryEngine defaultQueryEngine;
+
+    /** Associations between file extension and query engine */
+    @JsonProperty
+    private List<QueryEngineAssociation> queryEngineAssociations = new ArrayList<>();
+
+    @JsonIgnore
+    private List<IQueryEngine> engines = emptyList();
+
+    private QueryeerSession session;
 
     Config(File etcFolder) throws IOException
     {
@@ -71,15 +83,79 @@ class Config implements IConfig
             MAPPER.readerForUpdating(this)
                     .readValue(file);
         }
+
+        sessionFile = new File(etcFolder, SESSION);
+        if (sessionFile.exists())
+        {
+            session = MAPPER.readValue(sessionFile, QueryeerSession.class);
+        }
+        if (session == null)
+        {
+            session = new QueryeerSession();
+        }
     }
 
-    List<ICatalogModel> getCatalogs()
+    List<IQueryEngine> getEngines()
     {
-        if (catalogs == null)
+        return engines;
+    }
+
+    File getEtcFolder()
+    {
+        return etcFolder;
+    }
+
+    /** Init config with discovered engines */
+    void init(List<IQueryEngine> engines)
+    {
+        this.engines = unmodifiableList(engines);
+
+        boolean save = false;
+
+        for (IQueryEngine engine : engines)
         {
-            return emptyList();
+            String engineClass = engine.getClass()
+                    .getSimpleName();
+
+            if (engineClass.equalsIgnoreCase(defaultQueryEngineClassName))
+            {
+                defaultQueryEngine = engine;
+            }
+
+            boolean found = false;
+            for (QueryEngineAssociation ass : queryEngineAssociations)
+            {
+                if (engineClass.equalsIgnoreCase(ass.getQueryEngineClassName()))
+                {
+                    found = true;
+                    ass.engine = engine;
+                    break;
+                }
+            }
+
+            // No association found, create one
+            if (!found)
+            {
+                QueryEngineAssociation ass = new QueryEngineAssociation();
+                ass.queryEngineClassName = engineClass;
+                // Add new ones as disabled
+                ass.engine = engine;
+                ass.extension = engine.getDefaultFileExtension();
+                queryEngineAssociations.add(ass);
+                save = true;
+            }
         }
-        return unmodifiableList(catalogs);
+
+        if (defaultQueryEngine == null)
+        {
+            defaultQueryEngine = engines.get(0);
+            save = true;
+        }
+
+        if (save)
+        {
+            save();
+        }
     }
 
     String getLastOpenPath()
@@ -110,6 +186,49 @@ class Config implements IConfig
     void removeRecentFile(String file)
     {
         recentFiles.remove(file);
+    }
+
+    IQueryEngine getDefaultQueryEngine()
+    {
+        return defaultQueryEngine;
+    }
+
+    void setDefaultQueryEngine(IQueryEngine defaultQueryEngine)
+    {
+        requireNonNull(defaultQueryEngine);
+        this.defaultQueryEngine = defaultQueryEngine;
+        this.defaultQueryEngineClassName = defaultQueryEngine.getClass()
+                .getSimpleName();
+    }
+
+    List<QueryEngineAssociation> getQueryEngineAssociations()
+    {
+        return queryEngineAssociations;
+    }
+
+    IQueryEngine getQueryEngine(String filename)
+    {
+        String extension = FilenameUtils.getExtension(filename);
+        if (isBlank(extension))
+        {
+            return engines.get(0);
+        }
+
+        for (QueryEngineAssociation ass : queryEngineAssociations)
+        {
+            if (isBlank(ass.extension)
+                    || ass.engine == null)
+            {
+                continue;
+            }
+
+            if (StringUtils.equalsAnyIgnoreCase(extension, ass.extension))
+            {
+                return ass.engine;
+            }
+        }
+
+        return engines.get(0);
     }
 
     /** Save config to disk */
@@ -161,13 +280,13 @@ class Config implements IConfig
         }
         catch (IOException e)
         {
-            System.err.println("Error reading extension config: " + configFile + ", exception:" + e);
+            LOGGER.error("Error reading extension config: {}", configFile, e);
             return new HashMap<>();
         }
     }
 
     @Override
-    public void saveExtensionConfig(String name, Map<String, Object> config)
+    public void saveExtensionConfig(String name, Map<String, ?> config)
     {
         File configFile = new File(etcFolder, FilenameUtils.getName(name + ".cfg"));
         try
@@ -177,127 +296,131 @@ class Config implements IConfig
         }
         catch (IOException e)
         {
-            System.err.println("Error writing plugin config: " + configFile + ", exception:" + e);
+            LOGGER.error("Error writing extension config: {}", configFile, e);
         }
     }
 
-    /** Load config with provide etc-folder */
-    void loadCatalogExtensions(List<ICatalogExtensionFactory> catalogExtensionFactories) throws IOException
+    @Override
+    public File getConfigFileName(String name)
     {
-        Set<String> seenAliases = new HashSet<>();
-        for (ICatalogModel catalog : catalogs)
+        return new File(etcFolder, FilenameUtils.getName(name + ".cfg"));
+    }
+
+    @JsonIgnore
+    @Override
+    public List<IQueryEngine> getQueryEngines()
+    {
+        return engines;
+    }
+
+    QueryeerSession getSession()
+    {
+        return session;
+    }
+
+    void saveSession()
+    {
+        // Invalid index, set to first
+        if (session.activeFileIndex < 0
+                || session.activeFileIndex >= session.files.size())
         {
-            if (!seenAliases.add(lowerCase(catalog.getAlias())))
-            {
-                throw new IllegalArgumentException("Duplicate alias found in config. Alias: " + catalog.getAlias());
-            }
+            session.activeFileIndex = 0;
         }
 
-        // Load extension according to config
-        // Auto add missing extension with the extensions default alias
-        Map<String, ICatalogExtensionFactory> extensions = catalogExtensionFactories.stream()
-                .sorted(Comparator.comparingInt(ICatalogExtensionFactory::order))
-                .collect(toMap(c -> c.getClass()
-                        .getName(), Function.identity(), (e1, e2) -> e1, LinkedHashMap::new));
-
-        Set<ICatalogExtensionFactory> processedFactories = new HashSet<>();
-
-        // Loop configured extensions
-        boolean configChanged = false;
-
-        for (ICatalogModel catalog : catalogs)
+        try
         {
-            ICatalogExtensionFactory factory = extensions.get(((Catalog) catalog).getFactory());
-            processedFactories.add(factory);
-            // Disable current catalog if no extension found
-            if (factory == null)
-            {
-                configChanged = true;
-                ((Catalog) catalog).disabled = true;
-            }
-            else
-            {
-                ((Catalog) catalog).catalogExtension = factory.create(catalog.getAlias());
-                if (catalog.isDisabled())
-                {
-                    configChanged = true;
-                }
-                // Enable config
-                ((Catalog) catalog).disabled = false;
-            }
+            QueryeerController.MAPPER.writerWithDefaultPrettyPrinter()
+                    .writeValue(sessionFile, session);
         }
-
-        // Append all new extensions not found in config
-        for (ICatalogExtensionFactory factory : extensions.values())
+        catch (IOException e)
         {
-            if (processedFactories.contains(factory))
-            {
-                continue;
-            }
-
-            Config.Catalog catalog = new Catalog();
-            catalogs.add(catalog);
-
-            catalog.factory = factory.getClass()
-                    .getName();
-            catalog.disabled = false;
-
-            String alias = factory.getDefaultAlias();
-
-            // Find an empty alias
-            int count = 1;
-            String currentAlias = alias;
-            while (seenAliases.contains(lowerCase(currentAlias)))
-            {
-                currentAlias = (alias + count++);
-            }
-
-            catalog.alias = alias;
-            catalog.catalogExtension = factory.create(alias);
-
-            configChanged = true;
-        }
-
-        if (configChanged)
-        {
-            save();
+            LOGGER.error("Error wrting session config to: {}", sessionFile, e);
         }
     }
 
-    /** Catalog extension */
-    static class Catalog implements ICatalogModel
+    /** Session with opened files */
+    static class QueryeerSession
+    {
+        /** The active file index. */
+        @JsonProperty
+        int activeFileIndex;
+        /** Opened files. */
+        @JsonProperty
+        List<QueryeerSessionFile> files = new ArrayList<>();
+    }
+
+    /** A opened file in the session. */
+    static class QueryeerSessionFile
     {
         @JsonProperty
-        private String alias;
+        File file;
         @JsonProperty
-        private String factory;
+        boolean isNew;
         @JsonProperty
-        private boolean disabled;
+        File backupFile;
+
+        @Override
+        public int hashCode()
+        {
+            return file != null ? file.hashCode()
+                    : 0;
+        }
+
+        @Override
+        public boolean equals(Object obj)
+        {
+            if (obj == null)
+            {
+                return false;
+            }
+            else if (obj == this)
+            {
+                return true;
+            }
+            else if (obj instanceof QueryeerSessionFile that)
+            {
+                return Objects.equals(file, that.file)
+                        && isNew == that.isNew
+                        && Objects.equals(backupFile, that.backupFile);
+            }
+            return false;
+        }
+    }
+
+    static class QueryEngineAssociation
+    {
+        @JsonProperty
+        private String extension;
+
+        @JsonProperty
+        private String queryEngineClassName;
 
         @JsonIgnore
-        private ICatalogExtension catalogExtension;
+        private IQueryEngine engine;
 
-        @Override
-        public String getAlias()
+        String getExtension()
         {
-            return alias;
+            return extension;
         }
 
-        public String getFactory()
+        void setExtension(String extension)
         {
-            return factory;
+            this.extension = extension;
         }
 
-        @Override
-        public boolean isDisabled()
+        String getQueryEngineClassName()
         {
-            return disabled;
+            return queryEngineClassName;
         }
 
-        @Override
-        public ICatalogExtension getCatalogExtension()
+        void setQueryEngineClassName(String queryEngineClassName)
         {
-            return catalogExtension;
+            this.queryEngineClassName = queryEngineClassName;
+        }
+
+        IQueryEngine getEngine()
+        {
+            return engine;
         }
     }
 }

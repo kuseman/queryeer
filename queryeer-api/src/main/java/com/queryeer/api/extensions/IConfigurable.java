@@ -18,6 +18,12 @@ public interface IConfigurable extends IExtension
     /** Return title of configurable. Is shown in options tree */
     String getTitle();
 
+    /** Return long title of configurable. Is shown in top of configuration component. */
+    default String getLongTitle()
+    {
+        return getTitle();
+    }
+
     /**
      * Configuration group. Used when showing options tree to group similar configurables together.
      * 
@@ -37,9 +43,14 @@ public interface IConfigurable extends IExtension
     String groupName();
 
     /**
-     * Add a dirty sate consumer for this configurable. Should be called each time the dirty state changes.
+     * Add a dirty sate consumer to this configurable. Should be called each time the dirty state changes.
      */
     void addDirtyStateConsumer(Consumer<Boolean> consumer);
+
+    /**
+     * Remove a dirty sate consumer from this configurable. Should be called each time the dirty state changes.
+     */
+    void removeDirtyStateConsumer(Consumer<Boolean> consumer);
 
     /**
      * Commits changes made to configurable.

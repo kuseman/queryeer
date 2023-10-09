@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
 public @interface Properties
 {
     /** Header that is shown above properties. HTML is allowed */
-    String header();
+    String header() default "";
 
     /** List of property descriptors that this type contains */
     Property[] properties() default @Property(

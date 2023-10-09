@@ -2,6 +2,7 @@ package com.queryeer.dialog;
 
 import java.awt.Component;
 import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -88,9 +89,12 @@ public final class ValueDialog
             @Override
             public void setVisible(boolean b)
             {
+                Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                        .getActiveWindow();
+
                 if (b)
                 {
-                    setLocationRelativeTo(getParent());
+                    setLocationRelativeTo(activeWindow);
                 }
                 super.setVisible(b);
             }
@@ -217,7 +221,9 @@ public final class ValueDialog
                     break;
                 case REPLACE_ALL:
                     result = SearchEngine.replaceAll(textArea, context);
-                    JOptionPane.showMessageDialog(null, result.getCount() + " occurrences replaced.");
+                    Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                            .getActiveWindow();
+                    JOptionPane.showMessageDialog(activeWindow, result.getCount() + " occurrences replaced.");
                     break;
             }
         }

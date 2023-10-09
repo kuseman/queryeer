@@ -1,5 +1,8 @@
 package com.queryeer;
 
+import java.awt.Image;
+import java.util.List;
+
 import javax.swing.Icon;
 
 import org.kordamp.ikonli.fontawesome.FontAwesome;
@@ -24,4 +27,9 @@ class IconFactory implements IIconFactory
         }
     }
 
+    @Override
+    public List<? extends Image> getApplicationIcons()
+    {
+        return Constants.APPLICATION_ICONS;
+    }
 }

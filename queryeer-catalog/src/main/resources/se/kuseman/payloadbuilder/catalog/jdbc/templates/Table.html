@@ -232,88 +232,82 @@
     
     <table>
         <caption style='background-color: #C2DCF2;'>
-            <span class='caption_name' th:text="${table.name}">Table</span>
-            <span class='caption_description'>[table]</span>
+            <span class='caption_name'>${table.name}</span>
+            <span class='caption_description'>[${table.type?lower_case}]</span>
         </caption>
-        
-        <tr th:each="column : ${table.columns}">
-            <td class='minwidth' th:inline="text"><b><i>[[${column.name}]]</i></b></td>
-            <td class='minwidth' th:text="${column.columnDataType} + ' ' + ${column.width} + (${not column.nullable} ? ' not null' : '')"></td>
+        <#list table.columns as column>
+        <tr>
+            <td class='minwidth'><b><i>${column.name}</i></b></td>
+            <td class='minwidth'>${column.getDefinition()}</td>
         </tr>
-    
-        <th:block th:if="${table.primaryKey}">
+        </#list>
+        <#list table.columns as column>
+        <#if column.primaryKeyName?has_content>
         <tr>
             <td colspan='2' class='section'>Primary Key</td>
         </tr>
         <tr>
-            <td colspan='2' class='name' th:text="${table.primaryKey.name}">Key name</td>
+            <td colspan='2' class='name'>${column.primaryKeyName}</td>
         </tr>
-        
-        <tr th:each="column : ${table.primaryKey.constrainedColumns}">
-            <td class='minwidth' th:text="${column.name}" >Column</td>
+        <#break>
+        </#if>
+        </#list>
+        <#list table.columns as column>
+        <#if column.primaryKeyName?has_content>
+        <tr>
+            <td class='minwidth'>${column.name}</td>
             <td class='minwidth'></td>
         </tr>
-        
-        </th:block>
-        
-        <th:block th:if="${table.foreignKeys}">
+        </#if>
+        </#list>
+        <#if foreignKeys?has_content>
         <tr>
             <td colspan='2' class='section'>Foreign Keys</td>
         </tr>
-        <th:block th:each="key : ${table.foreignKeys}">
+        <#list foreignKeys as key>
         <tr>
-            <td colspan='2' class='name' th:text="${key.name}">Key</td>
+            <td colspan='2' class='name'>${key.objectName.name}</td>
         </tr>
-        <tr th:each="column : ${key.constrainedColumns}">
-            <td class='minwidth' th:text="${column.name}">Column</td>
-            <td class='minwidth' th:text="${column.referencedColumn}" >ReferencedColumn</td>
+        <#list key.columns as column>
+        <tr>
+            <td class='minwidth'>${column.constrainedColumnName}</td>
+            <td class='minwidth'>${column.referencedObjectName.name} (${column.referencedColumnName})</td>
         </tr>
-        
-        </th:block>
-        
-        </th:block>
-        
-        
-        <th:block th:if="${table.indexes}">
+        </#list>
+        </#list>
+        </#if>
+        <#if indices?has_content>
         <tr>
             <td colspan='2' class='section'>Indices</td>
         </tr>
-        <th:block th:each="index : ${table.indexes}">
+        <#list indices as index>
         <tr>
-            <td class='name' th:text="${index.name}">Index</td>
-            <td class='description right' th:text="${index.unique} ? '[unique index]' : ''"></td>
+            <td class='name' th:text="">${index.indexName}</td>
+            <td class='description right'>${index.unique?string('[unique index]', '')}</td>
         </tr>
-        <tr th:each="column : ${index.columns}">
-            <td class='minwidth' th:text="${column.name}">Column</td>
-            <td class='minwidth' th:text="${column.sortSequence} != 'unknown' ? ${column.sortSequence} : ''">Sort</td>
+        <#list index.columns as column>
+        <tr>
+            <td class='minwidth'>${column.name}</td>
+            <td class='minwidth'>${column.ascending?string('ascending', 'descending')}</td>
         </tr>
-        
-        </th:block>
-        
-        </th:block>
-        
-        <th:block th:if="${@se.kuseman.payloadbuilder.catalog.jdbc.JdbcCompletionProvider@hasTableConstrains(table)}">
+        </#list>
+        </#list>
+        </#if>
+        <#if constraints?has_content>
         <tr>
             <td colspan='2' class='section'>Table Constraints</td>
         </tr>
-        <th:block th:each="constraint : ${table.tableConstraints}">
-        <th:block th:if="${constraint.type.value} eq 'CHECK' OR ${constraint.type.value} eq 'UNIQUE'">
+        <#list constraints as constraint>
         <tr>
-            <td class='name' th:text="${constraint.name}">Constraint</td>
-            <td class='description right' th:text="'[' + ${constraint.type} + ' constraint]'">Type</td>
+            <td class='name'>${constraint.name}</td>
+            <td class='description right'>[${constraint.type?lower_case} constraint]</td>
         </tr>
-        <tr th:each="column : ${constraint.constrainedColumns}">
-            <td class='minwidth' th:text="${column.name}">Column</td>
-            <td class='minwidth' th:text="${constraint.definition}"></td>
+        <tr>
+            <td class='minwidth'>${constraint.columnName}</td>
+            <td class='minwidth'>${constraint.definition}</td>
         </tr>
-        
-        </th:block>
-        
-        </th:block>
-        
-        </th:block>
-    
+        </#list>
+        </#if>
     </table>
-
 </body>
 </html>

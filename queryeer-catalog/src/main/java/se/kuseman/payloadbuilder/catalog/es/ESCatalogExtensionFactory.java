@@ -2,8 +2,8 @@ package se.kuseman.payloadbuilder.catalog.es;
 
 import static java.util.Objects.requireNonNull;
 
-import com.queryeer.api.extensions.catalog.ICatalogExtension;
-import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
+import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
+import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionFactory;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -22,6 +22,12 @@ class ESCatalogExtensionFactory implements ICatalogExtensionFactory
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.iconFactory = requireNonNull(iconFactory, "iconFactory");
+    }
+
+    @Override
+    public String getTitle()
+    {
+        return ESCatalogExtension.TITLE;
     }
 
     @Override

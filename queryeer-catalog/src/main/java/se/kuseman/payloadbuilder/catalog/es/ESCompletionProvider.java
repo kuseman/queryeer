@@ -5,7 +5,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.util.List;
 
-import com.queryeer.api.extensions.catalog.ICompletionProvider;
+import com.queryeer.api.extensions.payloadbuilder.ICompletionProvider;
 
 import se.kuseman.payloadbuilder.api.QualifiedName;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;

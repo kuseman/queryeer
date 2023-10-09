@@ -24,6 +24,7 @@ import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 /** The table component representing a result set */
 class Table extends JTable
 {
+    static final String POPUP_TRIGGER_LOCATION = "popupTriggerLocation";
     private final TableColumnAdjuster adjuster = new TableColumnAdjuster(this, 10);
     private final List<Integer> adjustedWidths = new ArrayList<>();
     final JPopupMenu tablePopupMenu = new JPopupMenu();
@@ -31,6 +32,7 @@ class Table extends JTable
 
     Table(List<ITableContextMenuAction> actions)
     {
+        setAutoCreateRowSorter(true);
         setBorder(BorderFactory.createEmptyBorder());
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setCellSelectionEnabled(true);
@@ -56,16 +58,24 @@ class Table extends JTable
                     if (column != null)
                     {
                         adjuster.adjustColumn(col, -1);
+                        e.consume();
                     }
                 }
             }
         });
 
         tablePopupMenu.add(copyWithoutHeadersAction);
-        tablePopupMenu.addSeparator();
 
         setComponentPopupMenu(tablePopupMenu);
         setTransferHandler(new TableTransferHandler());
+    }
+
+    @Override
+    public Point getPopupLocation(MouseEvent event)
+    {
+        putClientProperty(POPUP_TRIGGER_LOCATION, event != null ? event.getPoint()
+                : null);
+        return super.getPopupLocation(event);
     }
 
     @Override

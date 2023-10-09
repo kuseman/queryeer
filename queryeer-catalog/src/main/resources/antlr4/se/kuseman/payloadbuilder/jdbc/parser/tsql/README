@@ -1,0 +1,14 @@
+gitsha
+https://github.com/antlr/grammars-v4/commit/3f91b22d592ce7ecbc103608e1ef9de9e9a92986
+
+Changes
+- lexer:
+  SPACE:              [ \t\r\n]+    -> skip;
+  ->
+  SPACE:              [ \t\r\n]+    -> channel(HIDDEN);
+
+- parser:
+  @parser::header {
+  //CSOFF
+  //@formatter:off
+  }

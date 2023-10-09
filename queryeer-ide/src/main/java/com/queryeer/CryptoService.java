@@ -7,8 +7,12 @@ import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Window;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import javax.swing.BoxLayout;
@@ -18,6 +22,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.SwingUtilities;
 import javax.swing.event.AncestorEvent;
 import javax.swing.event.AncestorListener;
 
@@ -127,6 +132,11 @@ class CryptoService implements ICryptoService, IConfigurable
     }
 
     @Override
+    public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
+    {
+    }
+
+    @Override
     public Component getComponent()
     {
         if (configurableComponent == null)
@@ -134,19 +144,15 @@ class CryptoService implements ICryptoService, IConfigurable
             configurableComponent = new JPanel();
             configurableComponent.setLayout(new GridBagLayout());
 
-            JLabel header = new JLabel("<html><h2>Encryption</h2><hr>");
-            header.setHorizontalAlignment(JLabel.CENTER);
-            configurableComponent.add(header, new GridBagConstraints(0, 0, 1, 1, 1.0, 0.0, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 3, 3, 3), 0, 0));
-
             final List<IConfigurable> configurables = serviceLoader.getAll(IConfigurable.class);
 
             configurableComponent.add(new JLabel("Change master password. Re-encrypt all configured secrets and store do disk."),
-                    new GridBagConstraints(0, 1, 1, 1, 1.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.NONE, new Insets(0, 3, 3, 3), 0, 0));
+                    new GridBagConstraints(0, 0, 1, 1, 1.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.NONE, new Insets(0, 3, 3, 3), 0, 0));
 
             JButton button = new JButton("Change master password");
             button.addActionListener(e -> changeMasterPassword(configurables));
 
-            configurableComponent.add(button, new GridBagConstraints(0, 2, 1, 1, 1.0, 1.0, GridBagConstraints.NORTHWEST, GridBagConstraints.NONE, new Insets(0, 3, 3, 3), 0, 0));
+            configurableComponent.add(button, new GridBagConstraints(0, 1, 1, 1, 1.0, 1.0, GridBagConstraints.NORTHWEST, GridBagConstraints.NONE, new Insets(0, 3, 3, 3), 0, 0));
         }
         return configurableComponent;
     }
@@ -280,43 +286,68 @@ class CryptoService implements ICryptoService, IConfigurable
 
     protected char[] getMasterPassword(String passwordLabel, String title, String message)
     {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        JLabel label = new JLabel(passwordLabel);
-        label.setAlignmentX(0.0f);
-        JPasswordField pass = new JPasswordField(10);
-        pass.addAncestorListener(new AncestorListener()
+        AtomicInteger option = new AtomicInteger();
+        AtomicReference<char[]> password = new AtomicReference<char[]>();
+        Runnable r = () ->
         {
-            @Override
-            public void ancestorRemoved(AncestorEvent event)
+            JPanel panel = new JPanel();
+            panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+            JLabel label = new JLabel(passwordLabel);
+            label.setAlignmentX(0.0f);
+            JPasswordField pass = new JPasswordField(10);
+            pass.addAncestorListener(new AncestorListener()
             {
-            }
+                @Override
+                public void ancestorRemoved(AncestorEvent event)
+                {
+                }
 
-            @Override
-            public void ancestorMoved(AncestorEvent event)
-            {
-            }
+                @Override
+                public void ancestorMoved(AncestorEvent event)
+                {
+                }
 
-            @Override
-            public void ancestorAdded(AncestorEvent event)
-            {
-                JComponent component = event.getComponent();
-                component.requestFocusInWindow();
-                component.removeAncestorListener(this);
-            }
-        });
-        pass.setAlignmentX(0.0f);
-        panel.add(label);
-        panel.add(pass);
-        JLabel messageLabel = new JLabel(message);
-        messageLabel.setAlignmentX(0.0f);
-        panel.add(messageLabel);
-        String[] options = new String[] { "OK", "Cancel" };
-        int option = JOptionPane.showOptionDialog(null, panel, title, JOptionPane.NO_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
-        if (option == 0
-                && !ArrayUtils.isEmpty(pass.getPassword())) // pressing OK button
+                @Override
+                public void ancestorAdded(AncestorEvent event)
+                {
+                    JComponent component = event.getComponent();
+                    component.requestFocusInWindow();
+                    component.removeAncestorListener(this);
+                }
+            });
+            pass.setAlignmentX(0.0f);
+            panel.add(label);
+            panel.add(pass);
+            JLabel messageLabel = new JLabel(message);
+            messageLabel.setAlignmentX(0.0f);
+            panel.add(messageLabel);
+            String[] options = new String[] { "OK", "Cancel" };
+
+            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                    .getActiveWindow();
+
+            option.set(JOptionPane.showOptionDialog(activeWindow, panel, title, JOptionPane.NO_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]));
+            password.set(pass.getPassword());
+        };
+
+        if (SwingUtilities.isEventDispatchThread())
         {
-            return pass.getPassword();
+            r.run();
+        }
+        else
+        {
+            try
+            {
+                SwingUtilities.invokeAndWait(r);
+            }
+            catch (InvocationTargetException | InterruptedException e)
+            {
+            }
+        }
+        if (option.get() == 0
+                && !ArrayUtils.isEmpty(password.get())) // pressing OK button
+        {
+            return password.get();
         }
 
         return null;

@@ -9,6 +9,7 @@ import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -21,18 +22,23 @@ import java.util.regex.Pattern;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
+import javax.swing.DefaultRowSorter;
 import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JPopupMenu.Separator;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
-import javax.swing.JViewport;
 import javax.swing.KeyStroke;
+import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
@@ -84,9 +90,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             @Override
             public void setVisible(boolean b)
             {
+                Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                        .getActiveWindow();
+
                 if (b)
                 {
-                    setLocationRelativeTo(getParent());
+                    setLocationRelativeTo(activeWindow);
                 }
                 super.setVisible(b);
             }
@@ -320,10 +329,6 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
 
         Table table = new Table(contextMenuActions);
-        for (ITableContextMenuAction action : contextMenuActions)
-        {
-            table.tablePopupMenu.add(action.getAction());
-        }
 
         table.addMouseListener(new MouseAdapter()
         {
@@ -375,39 +380,147 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         // Add listener that sets the value for where the popup was triggered
         table.tablePopupMenu.addPopupMenuListener(new PopupMenuListener()
         {
+            List<Component> contextPopupItems = new ArrayList<>();
+
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e)
             {
-                SwingUtilities.invokeLater(new Runnable()
+                Point point = (Point) table.getClientProperty(Table.POPUP_TRIGGER_LOCATION);
+                if (point != null)
                 {
-                    @Override
-                    public void run()
+                    int row = table.rowAtPoint(point);
+                    int col = table.columnAtPoint(point);
+                    Object value = table.getValueAt(row, col);
+                    String header = table.getColumnName(col);
+
+                    int count = table.tablePopupMenu.getComponentCount();
+
+                    for (ITableContextMenuAction action : contextMenuActions)
                     {
-                        Point point = SwingUtilities.convertPoint(table.tablePopupMenu, new Point(0, 0), table);
-                        int row = table.rowAtPoint(point);
-                        int col = table.columnAtPoint(point);
-
-                        if (row >= 0
-                                && col >= 0)
+                        if (action.showContextMenu(value, header))
                         {
-                            lastClickedCell.value = table.getValueAt(row, col);
-                            lastClickedCell.header = table.getColumnName(col);
-
-                            table.setRowSelectionInterval(row, row);
-                            table.setColumnSelectionInterval(col, col);
+                            JMenuItem item = new JMenuItem(action.getAction());
+                            contextPopupItems.add(item);
+                            table.tablePopupMenu.insert(item, action.order());
                         }
                     }
-                });
+
+                    // Only show quick filter for small values
+                    if (String.valueOf(value)
+                            .length() <= 100)
+                    {
+                        if (table.tablePopupMenu.getComponentCount() != count)
+                        {
+                            addSeparator(table.tablePopupMenu.getComponentCount());
+                        }
+
+                        JMenu filter = createFilterContextMenu(col, value, header);
+
+                        contextPopupItems.add(filter);
+                        table.tablePopupMenu.add(filter);
+                    }
+
+                    // Insert a separator on top if we added any items
+                    if (table.tablePopupMenu.getComponentCount() != count)
+                    {
+                        addSeparator(count);
+                    }
+
+                    if (row >= 0
+                            && col >= 0)
+                    {
+                        lastClickedCell.value = value;
+                        lastClickedCell.header = header;
+
+                        table.setRowSelectionInterval(row, row);
+                        table.setColumnSelectionInterval(col, col);
+                    }
+                }
             }
 
             @Override
             public void popupMenuWillBecomeInvisible(PopupMenuEvent e)
             {
+                if (!contextPopupItems.isEmpty())
+                {
+                    for (Component comp : contextPopupItems)
+                    {
+                        table.tablePopupMenu.remove(comp);
+                    }
+                    contextPopupItems.clear();
+                }
             }
 
             @Override
             public void popupMenuCanceled(PopupMenuEvent e)
             {
+                popupMenuWillBecomeInvisible(e);
+            }
+
+            private JMenu createFilterContextMenu(int col, Object value, String header)
+            {
+                JMenu filter = new JMenu("Filter");
+                JMenuItem equals = new JMenuItem(new AbstractAction("Filter for " + header + " = " + value)
+                {
+                    @SuppressWarnings("unchecked")
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        RowFilter<Model, Integer> rowFilter = new RowFilter<Model, Integer>()
+                        {
+                            @Override
+                            public boolean include(Entry<? extends Model, ? extends Integer> entry)
+                            {
+                                if (value == null)
+                                {
+                                    return entry.getValue(col) == null;
+                                }
+                                return StringUtils.equalsIgnoreCase(entry.getStringValue(col), String.valueOf(value));
+                            }
+                        };
+                        ((DefaultRowSorter<Model, Integer>) table.getRowSorter()).setRowFilter(rowFilter);
+                    }
+                });
+                filter.add(equals);
+                JMenuItem notEquals = new JMenuItem(new AbstractAction("Filter for " + header + " <> " + value)
+                {
+                    @SuppressWarnings("unchecked")
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        RowFilter<Model, Integer> rowFilter = new RowFilter<Model, Integer>()
+                        {
+                            @Override
+                            public boolean include(Entry<? extends Model, ? extends Integer> entry)
+                            {
+                                if (value == null)
+                                {
+                                    return entry.getValue(col) != null;
+                                }
+                                return !StringUtils.equalsIgnoreCase(entry.getStringValue(col), String.valueOf(value));
+                            }
+                        };
+                        ((DefaultRowSorter<Model, Integer>) table.getRowSorter()).setRowFilter(rowFilter);
+                    }
+                });
+                filter.add(notEquals);
+                JMenuItem noFilter = new JMenuItem(new AbstractAction("No Filter for " + header)
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        ((DefaultRowSorter<?, ?>) table.getRowSorter()).setRowFilter(null);
+                    }
+                });
+                filter.add(noFilter);
+                return filter;
+            }
+
+            private void addSeparator(int position)
+            {
+                Separator separator = new JPopupMenu.Separator();
+                contextPopupItems.add(separator);
+                table.tablePopupMenu.insert(separator, position);
             }
         });
 
@@ -455,7 +568,8 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             int prevTableHeight = -1;
             if (i > 0)
             {
-                JScrollBar horizontalScrollBar = ((JScrollPane) ((JViewport) prevTable.getParent()).getParent()).getHorizontalScrollBar();
+                JScrollBar horizontalScrollBar = ((JScrollPane) prevTable.getParent()
+                        .getParent()).getHorizontalScrollBar();
 
                 // The least of 8 rows or actual rows in prev table
                 // CSOFF

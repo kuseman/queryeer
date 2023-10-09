@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.queryeer.api.component.Properties;
 import com.queryeer.api.component.PropertiesComponent;
 import com.queryeer.api.component.Property;
@@ -55,6 +56,12 @@ class CsvConfigurable implements IConfigurable
     }
 
     @Override
+    public String getLongTitle()
+    {
+        return "Settings for CSV Output Writer";
+    }
+
+    @Override
     public String groupName()
     {
         return IConfigurable.OUTPUT_FORMAT;
@@ -64,6 +71,12 @@ class CsvConfigurable implements IConfigurable
     public void addDirtyStateConsumer(Consumer<Boolean> consumer)
     {
         dirstyStateConsumers.add(consumer);
+    }
+
+    @Override
+    public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
+    {
+        dirstyStateConsumers.remove(consumer);
     }
 
     @SuppressWarnings("unchecked")
@@ -112,7 +125,6 @@ class CsvConfigurable implements IConfigurable
     }
 
     @Properties(
-            header = "<html><h2>Settings for CSV Output Writer</h2><hr></html>",
             properties = {
                     @Property(
                             propertyName = "escapeChar",
@@ -159,6 +171,9 @@ class CsvConfigurable implements IConfigurable
                             order = 9) })
     private static class CsvSettingsWrapper extends CsvSettings
     {
+        @JsonIgnore
+        private Preset preset;
+
         CsvSettingsWrapper()
         {
         }
@@ -175,6 +190,74 @@ class CsvConfigurable implements IConfigurable
             setEscapeNewLines(source.isEscapeNewLines());
             setRowSeparator(source.getRowSeparator());
             setResultSetSeparator(source.getResultSetSeparator());
+        }
+
+        @Property(
+                title = "Preset",
+                order = 10,
+                reloadParentOnChange = true)
+        public Preset getTemplate()
+        {
+            return preset;
+        }
+
+        @SuppressWarnings("unused")
+        public void setTemplate(Preset preset)
+        {
+            this.preset = preset;
+            if (preset != null)
+            {
+                switch (preset)
+                {
+                    case COMMA:
+                        setSeparatorChar(',');
+                        setEscapeChar('\\');
+                        setEscapeNewLines(true);
+                        setRowSeparator(System.lineSeparator());
+                        setWriteHeaders(true);
+                        break;
+                    case UNFORMATTED:
+                        setSeparatorChar('\0');
+                        setEscapeChar('\0');
+                        setEscapeNewLines(false);
+                        setRowSeparator("");
+                        setWriteHeaders(false);
+                        break;
+                    case SEMICOLON:
+                        setSeparatorChar(';');
+                        setEscapeChar('\\');
+                        setEscapeNewLines(true);
+                        setRowSeparator(System.lineSeparator());
+                        setWriteHeaders(true);
+                        break;
+                    case TAB:
+                        setSeparatorChar('\t');
+                        setEscapeChar('\\');
+                        setEscapeNewLines(true);
+                        setRowSeparator(System.lineSeparator());
+                        setWriteHeaders(true);
+                        break;
+                    case PIPE:
+                        setSeparatorChar('|');
+                        setEscapeChar('\\');
+                        setEscapeNewLines(true);
+                        setRowSeparator(System.lineSeparator());
+                        setWriteHeaders(true);
+                        break;
+                    default:
+                        break;
+
+                }
+            }
+        }
+
+        enum Preset
+        {
+            UNFORMATTED,
+            COMMA,
+            SEMICOLON,
+            PIPE,
+            TAB
         }
     }
 }
