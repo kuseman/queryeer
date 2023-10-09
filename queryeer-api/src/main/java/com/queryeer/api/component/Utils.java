@@ -15,11 +15,18 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import javax.swing.ImageIcon;
+
 import com.queryeer.api.component.PropertyFields.PropertyField;
 
 /** Component utils */
 class Utils
 {
+    static ImageIcon getResouceIcon(String name)
+    {
+        return new ImageIcon(Utils.class.getResource(name));
+    }
+
     /**
      * Collect property fields from provided class. First tries to find {@link Property} on get methods if no methods is found try {@link java.beans.Introspector}.
      */

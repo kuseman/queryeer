@@ -122,13 +122,13 @@ class ESCatalogConfigurable implements IConfigurable
     @Override
     public String getTitle()
     {
-        return "Elasticsearch";
+        return "Connections";
     }
 
     @Override
     public String groupName()
     {
-        return IConfigurable.CATALOG;
+        return "Elasticsearch";
     }
 
     @Override

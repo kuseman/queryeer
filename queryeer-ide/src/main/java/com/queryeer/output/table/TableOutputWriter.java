@@ -43,6 +43,7 @@ class TableOutputWriter implements OutputWriter
         // Print previous model row count
         if (model != null)
         {
+            model.internCache.clear();
             model.internCache = null;
         }
 
@@ -65,6 +66,7 @@ class TableOutputWriter implements OutputWriter
     {
         if (model != null)
         {
+            model.internCache.clear();
             model.internCache = null;
         }
         SwingUtilities.invokeLater(() -> getTablesOutputComponent().resizeLastTablesColumns());
