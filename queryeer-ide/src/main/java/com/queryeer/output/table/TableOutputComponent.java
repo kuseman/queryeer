@@ -47,11 +47,14 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.dialog.ValueDialog;
+
+import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
@@ -97,6 +100,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             findDialog.setVisible(true);
         }
     };
+
+    @Override
+    public OutputWriter createOutputWriter(IQueryFile queryFile)
+    {
+        return new TableOutputWriter(queryFile);
+    }
 
     @Override
     public String getSelectedText()

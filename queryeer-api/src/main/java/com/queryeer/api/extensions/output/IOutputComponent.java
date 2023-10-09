@@ -4,6 +4,10 @@ import java.awt.Component;
 
 import javax.swing.Icon;
 
+import com.queryeer.api.IQueryFile;
+
+import se.kuseman.payloadbuilder.api.OutputWriter;
+
 /** Definition of an output component */
 public interface IOutputComponent
 {
@@ -23,4 +27,7 @@ public interface IOutputComponent
     default void clearState()
     {
     }
+
+    /** Creates an {@link OutputWriter} for provided query file */
+    OutputWriter createOutputWriter(IQueryFile queryFile);
 }

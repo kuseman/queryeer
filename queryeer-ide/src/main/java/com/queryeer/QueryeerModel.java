@@ -4,6 +4,7 @@ import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.event.SwingPropertyChangeSupport;
 
@@ -39,6 +40,9 @@ class QueryeerModel
         {
             return;
         }
+
+        file.dispose();
+
         files.remove(index);
 
         pcs.fireIndexedPropertyChange(FILES, index, file, null);
@@ -82,7 +86,8 @@ class QueryeerModel
     {
         for (QueryFileModel model : files)
         {
-            if (model.getFilename()
+            if (model.getFile()
+                    .getAbsolutePath()
                     .equalsIgnoreCase(file))
             {
                 setSelectedFile(model);
@@ -90,5 +95,22 @@ class QueryeerModel
             }
         }
         return false;
+    }
+
+    void close()
+    {
+        for (QueryFileModel file : files)
+        {
+            file.dispose();
+        }
+
+        try
+        {
+            QueryFileModel.DISPOSE_EXECUTOR.shutdown();
+            QueryFileModel.DISPOSE_EXECUTOR.awaitTermination(30, TimeUnit.SECONDS);
+        }
+        catch (InterruptedException e)
+        {
+        }
     }
 }

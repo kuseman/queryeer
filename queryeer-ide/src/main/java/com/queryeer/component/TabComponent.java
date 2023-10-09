@@ -55,6 +55,11 @@ public class TabComponent extends JPanel
         lblTitle.setText(titleString);
     }
 
+    public void setIcon(Icon icon)
+    {
+        lblTitle.setIcon(icon);
+    }
+
     /** Tab button */
     static class TabButton extends JButton
     {
