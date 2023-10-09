@@ -1,0 +1,7 @@
+gitsha
+https://github.com/prestodb/presto/commit/76ae3edcf27b05ad297b701e292dc490e27f226c
+
+CHANGES:
+
+ADD
+options { caseInsensitive = true; }
