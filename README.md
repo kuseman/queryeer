@@ -31,7 +31,10 @@ Extensible Query IDE with support for Payloadbuilder Catalogs.
 
 Extending Queryeer can be made with a set of extension points.
 
-  - [ICatalogExtensionFactory](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/catalog/ICatalogExtensionFactory.java)
+  - [IQueryEngine](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/engine/IQueryEngine.java)
+    - Adding support for a query engine to Queeryer is made here
+
+  - [ICatalogExtensionFactory](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/payloadbuilder/ICatalogExtensionFactory.java)
     - Adding a payloadbuilder catalog to Queeryer is made here
 
    - [IConfigurable](https://github.com/kuseman/queryeer/tree/master/queryeer-api/src/main/java/com/queryeer/api/extensions/IConfigurable.java)

@@ -3,6 +3,7 @@ package com.queryeer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Point;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -26,6 +27,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import javax.swing.table.AbstractTableModel;
@@ -50,7 +52,7 @@ class TasksDialog extends JFrame
 {
     private static final Icon CHECK_CIRCLE = FontIcon.of(FontAwesome.CHECK_CIRCLE);
     private static final Icon EXCLAMATION_CIRCLE = FontIcon.of(FontAwesome.EXCLAMATION_CIRCLE);
-    private static final AnimatedIcon SPINNER = new AnimatedIcon(Utils.getResouceIcon("/icons/spinner.gif"));
+    private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
     private JTable tasksTable;
     private TasksTableModel tasksTableModel;
@@ -73,7 +75,9 @@ class TasksDialog extends JFrame
     {
         if (b)
         {
-            setLocationRelativeTo(getParent());
+            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                    .getActiveWindow();
+            setLocationRelativeTo(activeWindow);
         }
         super.setVisible(b);
     }
@@ -253,7 +257,7 @@ class TasksDialog extends JFrame
             tasksTableModel.tasks.add(taskRow);
             tasksTableModel.taskByKey.put(event.getTask()
                     .getKey(), taskRow);
-            tasksTableModel.fireTableDataChanged();
+            SwingUtilities.invokeLater(() -> tasksTableModel.fireTableDataChanged());
 
             if (!timer.isRunning())
             {
@@ -270,7 +274,7 @@ class TasksDialog extends JFrame
         if (taskRow != null)
         {
             taskRow.complete(event.getException());
-            tasksTableModel.fireTableDataChanged();
+            SwingUtilities.invokeLater(() -> tasksTableModel.fireTableDataChanged());
         }
     }
 

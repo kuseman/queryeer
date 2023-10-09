@@ -23,6 +23,7 @@ import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent.ClickedCell;
 import com.queryeer.dialog.ValueDialog;
+import com.queryeer.output.table.Model.QueryeerImage;
 
 /** Default factory for table context menu */
 class TableContextMenuActionFactory implements ITableContextMenuActionFactory
@@ -92,6 +93,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
             }
             return false;
         }
+
+        @Override
+        public boolean showContextMenu(Object value, String header)
+        {
+            return showLink(value);
+        }
     }
 
     private static class ViewAsXmlAction implements ITableContextMenuAction
@@ -137,6 +144,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                     && cs.length() > 2
                     && cs.charAt(0) == '<'
                     && cs.charAt(cs.length() - 1) == '>';
+        }
+
+        @Override
+        public boolean showContextMenu(Object value, String header)
+        {
+            return showLink(value);
         }
     }
 
@@ -196,7 +209,17 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 return StringUtils.startsWithIgnoreCase(str, "http://")
                         || StringUtils.startsWithIgnoreCase(str, "https://");
             }
+            else if (value instanceof QueryeerImage)
+            {
+                return true;
+            }
             return false;
+        }
+
+        @Override
+        public boolean showContextMenu(Object value, String header)
+        {
+            return showLink(value);
         }
     }
 }

@@ -5,6 +5,10 @@ import static java.util.Objects.requireNonNull;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Frame;
+import java.awt.Window;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
@@ -15,12 +19,15 @@ import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTree;
+import javax.swing.KeyStroke;
 import javax.swing.WindowConstants;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -47,6 +54,18 @@ class OptionsDialog extends JDialog
         this.configurables = requireNonNull(configurables, "configurables");
         root = initRootNode();
         initDialog();
+    }
+
+    @Override
+    public void setVisible(boolean b)
+    {
+        if (b)
+        {
+            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                    .getActiveWindow();
+            setLocationRelativeTo(activeWindow);
+        }
+        super.setVisible(b);
     }
 
     private DefaultMutableTreeNode initRootNode()
@@ -93,9 +112,8 @@ class OptionsDialog extends JDialog
             {
                 super.getTreeCellRendererComponent(optionsTree, value, selected, expanded, leaf, row, hasFocus);
 
-                if (value instanceof Configurable)
+                if (value instanceof Configurable node)
                 {
-                    Configurable node = (Configurable) value;
                     if (node.dirty)
                     {
                         this.setText("<html><b>" + this.getText() + "</b>");
@@ -150,6 +168,15 @@ class OptionsDialog extends JDialog
                 }
             }
         });
+
+        getRootPane().registerKeyboardAction(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                setVisible(false);
+            }
+        }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         getContentPane().add(bottomPanel, BorderLayout.SOUTH);
 
@@ -251,8 +278,14 @@ class OptionsDialog extends JDialog
 
         if (node.configComponent == null)
         {
+            JPanel panel = new JPanel(new BorderLayout());
+            JLabel label = new JLabel("<html><h2>" + node.getConfigurable()
+                    .getLongTitle() + "</h2><hr></html>");
+            label.setHorizontalAlignment(JLabel.CENTER);
+            panel.add(label, BorderLayout.NORTH);
+
             // Load component and set up listeners
-            node.configComponent = node.getConfigurable()
+            Component component = node.getConfigurable()
                     .getComponent();
             node.getConfigurable()
                     .addDirtyStateConsumer(dirty ->
@@ -262,6 +295,9 @@ class OptionsDialog extends JDialog
                         node.dirty = dirty;
                         optionsTree.repaint();
                     });
+
+            panel.add(component, BorderLayout.CENTER);
+            node.configComponent = panel;
         }
 
         configComponentPanel.removeAll();

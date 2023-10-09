@@ -16,4 +16,10 @@ public interface ITableContextMenuAction extends IExtensionAction
     {
         return false;
     }
+
+    /** Should this action be shown for provided value/header. */
+    default boolean showContextMenu(Object value, String header)
+    {
+        return true;
+    }
 }

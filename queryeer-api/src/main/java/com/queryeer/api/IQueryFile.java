@@ -2,17 +2,14 @@ package com.queryeer.api;
 
 import java.io.PrintWriter;
 
+import com.queryeer.api.editor.IEditor;
+import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
-
-import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 
 /** Definition of a query file. The editor tab with query text and results etc. */
 public interface IQueryFile
 {
-    /** Return the query session associated with the query file */
-    IQuerySession getSession();
-
     /** Set focus the messages output component */
     void focusMessages();
 
@@ -30,6 +27,9 @@ public interface IQueryFile
     /** Selects output component with provided class. */
     void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass);
 
+    /** Add a new output component to query file. */
+    void addOutputComponent(IOutputComponent outputComponent);
+
     /** Return the selected output component. */
     IOutputComponent getSelectedOutputComponent();
 
@@ -39,9 +39,14 @@ public interface IQueryFile
     /** Get the current selected output format for this file */
     IOutputFormatExtension getOutputFormat();
 
-    /** Clears the query files executions stats like runtime, number of rows etc. */
-    void clearExecutionStats();
+    /** Return the query files editor */
+    IEditor getEditor();
 
-    /** Marks the provided selection in query window */
-    void select(TextSelection textSelection);
+    /** Set status on file */
+    void setMetaData(QueryFileMetaData status);
+
+    /**
+     * Get engine state from this file
+     */
+    IQueryEngine.IState getEngineState();
 }

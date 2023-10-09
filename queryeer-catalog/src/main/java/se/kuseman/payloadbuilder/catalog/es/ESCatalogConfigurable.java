@@ -122,19 +122,31 @@ class ESCatalogConfigurable implements IConfigurable
     @Override
     public String getTitle()
     {
-        return "Elasticsearch";
+        return "Connections";
+    }
+
+    @Override
+    public String getLongTitle()
+    {
+        return "Connections to Elasticsearch";
     }
 
     @Override
     public String groupName()
     {
-        return IConfigurable.CATALOG;
+        return "Elasticsearch";
     }
 
     @Override
     public void addDirtyStateConsumer(Consumer<Boolean> consumer)
     {
         dirstyStateConsumers.add(consumer);
+    }
+
+    @Override
+    public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
+    {
+        dirstyStateConsumers.remove(consumer);
     }
 
     private Connection connection()

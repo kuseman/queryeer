@@ -4,23 +4,33 @@ import static java.util.Objects.requireNonNull;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.KeyboardFocusManager;
 import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
+import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
@@ -30,6 +40,7 @@ import javax.swing.InputMap;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -37,42 +48,64 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JSplitPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTable;
+import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
+import javax.swing.table.AbstractTableModel;
 
+import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.BooleanUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryeerController.ViewAction;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.event.Subscribe;
+import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.domain.Caret;
 import com.queryeer.event.CaretChangedEvent;
+import com.queryeer.event.QueryFileClosingEvent;
+import com.queryeer.event.QueryFileSaveEvent;
 
 /** Main view */
 class QueryeerView extends JFrame
 {
-    private static final String TOGGLE_COMMENT = "toggleComment";
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryeerView.class);
+
+    private static final String FILE_MODEL = "fileModel";
     private static final String TOGGLE_RESULT = "toggleResult";
-    private static final String TOGGLE_CATALOGS = "toggleCatalogs";
+    private static final String TOGGLE_QUICK_PROPERTIES = "toggleQuickProperties";
     private static final String NEW_QUERY = "NewQuery";
     private static final String EXECUTE = "Execute";
     private static final String STOP = "Stop";
     private static final Icon TASKS_ICON = FontIcon.of(FontAwesome.TASKS);
-    private static final AnimatedIcon SPINNER = new AnimatedIcon(Utils.getResouceIcon("/icons/spinner.gif"));
+    private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
     private final JPanel topPanel;
+    private final InputMap inputMap;
 
     private final JSplitPane splitPane;
-    private final JPanel panelCatalogs;
+    private final JTabbedPane leftTabbedPane;
+    private final JPanel panelQueryEngineProperties;
     private final JPanel panelStatus;
     private final JLabel labelMemory;
     private final JLabel labelCaret;
@@ -80,30 +113,47 @@ class QueryeerView extends JFrame
     private final JLabel labelTasks;
     private final JLabel labelTasksSpinner;
 
+    private final JMenu editMenu;
     private final JMenuItem openItem;
     private final JMenuItem saveItem;
     private final JMenuItem saveAsItem;
     private final JMenuItem exitItem;
     private final JMenu recentFiles;
+    private final JMenu windowMenu;
+
+    private final JToolBar toolBar;
     private final JComboBox<IOutputExtension> comboOutput;
     private final JComboBox<IOutputFormatExtension> comboFormat;
-
-    private Consumer<String> openRecentFileConsumer;
-    private Consumer<ViewAction> actionHandler;
-    private boolean catalogsCollapsed;
-    private int prevCatalogsDividerLocation;
+    private final QueryeerModel model;
     private final QueryFileTabbedPane tabbedPane;
+    private final IEventBus eventBus;
     private final TasksDialog tasksDialog;
     private final LogsDialog logsDialog;
 
+    private boolean suppressChangeEvents = false;
+
+    private Consumer<String> openRecentFileConsumer;
+    private Consumer<IQueryEngine> newQueryConsumer;
+    private Consumer<ViewAction> actionHandler;
+    private boolean quickPropertiesCollapsed;
+    private int prevPropertiesDividerLocation;
+    private WindowsDialog windowsDialog;
+
+    private List<AbstractButton> editorToolbarActions = new ArrayList<>();
+    private List<JMenuItem> editorMenuActions = new ArrayList<>();
+
     // CSOFF
-    QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, IEventBus eventBus, List<IOutputExtension> outputExtensions, List<IOutputFormatExtension> outputFormatExtensions)
+    QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, ProjectsView projectsView, IEventBus eventBus, List<IOutputExtension> outputExtensions,
+            List<IOutputFormatExtension> outputFormatExtensions, List<IQueryEngine> queryEngines)
     // CSON
     {
         setLocationRelativeTo(null);
         getContentPane().setLayout(new BorderLayout(0, 0));
 
+        this.model = requireNonNull(model, "model");
         this.tabbedPane = requireNonNull(tabbedPane, "tabbedPane");
+        this.eventBus = requireNonNull(eventBus, "eventBus");
+        this.model.addPropertyChangeListener(queryeerModelListener);
 
         List<IOutputExtension> actualOutputExtensions = new ArrayList<>(outputExtensions);
         List<IOutputFormatExtension> actualOutputFormatExtensions = new ArrayList<>(outputFormatExtensions);
@@ -252,41 +302,67 @@ class QueryeerView extends JFrame
         }))
                 .setText("About Queryeer IDE");
 
-        JMenu editMenu = new JMenu("Edit");
-        editMenu.add(new JMenuItem(new AbstractAction("Find ...", Constants.SEARCH)
+        windowMenu = new JMenu("Window");
+        JMenu windowsSort = new JMenu("Sort");
+
+        //@formatter:off
+        List<Pair<String, Comparator<QueryFileModel>>> comparators = List.of(
+                Pair.of("Name ASC", (a, b) -> StringUtils.compareIgnoreCase(a.getFile().getName(), b.getFile().getName())),
+                Pair.of("Name DESC", (a, b) -> -StringUtils.compareIgnoreCase(a.getFile().getName(), b.getFile().getName())),
+                Pair.of("Path ASC", (a, b) -> StringUtils.compareIgnoreCase(FilenameUtils.getPath(a.getFile().getAbsolutePath()), FilenameUtils.getPath(b.getFile().getAbsolutePath()))),
+                Pair.of("Path DESC", (a, b) -> -StringUtils.compareIgnoreCase(FilenameUtils.getPath(a.getFile().getAbsolutePath()), FilenameUtils.getPath(b.getFile().getAbsolutePath()))),
+                Pair.of("Activity ASC", (a, b) -> -Long.compare(a.getLastActivity(), b.getLastActivity())),
+                Pair.of("Activity DESC", (a, b) -> Long.compare(a.getLastActivity(), b.getLastActivity())),
+                Pair.of("Modification ASC", (a, b) -> -Long.compare(a.getLastModified(), b.getLastModified())),
+                Pair.of("Modification DESC", (a, b) -> Long.compare(a.getLastModified(), b.getLastModified())),
+                Pair.of("Type ASC", (a, b) -> StringUtils.compareIgnoreCase(FilenameUtils.getExtension(a.getFile().getName()), FilenameUtils.getExtension(a.getFile().getName()))),
+                Pair.of("Type DESC", (a, b) -> -StringUtils.compareIgnoreCase(FilenameUtils.getExtension(a.getFile().getName()), FilenameUtils.getExtension(a.getFile().getName())))
+                );
+        //@formatter:on
+
+        for (Pair<String, Comparator<QueryFileModel>> pair : comparators)
+        {
+            windowsSort.add(new JMenuItem(new AbstractAction(pair.getKey())
+            {
+                @Override
+                public void actionPerformed(ActionEvent e)
+                {
+                    model.sortFiles(pair.getValue());
+                }
+            }));
+        }
+
+        windowMenu.add(windowsSort);
+        windowMenu.add(new JMenuItem(new AbstractAction("Windows...")
         {
             @Override
             public void actionPerformed(ActionEvent e)
             {
-                getCurrentFile().showFind();
-            }
-        }));
-        editMenu.add(new JMenuItem(new AbstractAction("Replace ...")
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                getCurrentFile().showReplace();
-            }
-        }));
-        editMenu.add(new JMenuItem(new AbstractAction("GoTo Line ...", Constants.SHARE)
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                getCurrentFile().showGoToLine();
+                if (windowsDialog == null)
+                {
+                    windowsDialog = new WindowsDialog();
+                }
+                Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                        .getActiveWindow();
+                windowsDialog.setLocationRelativeTo(activeWindow);
+                windowsDialog.setVisible(true);
             }
         }));
 
+        windowMenu.addSeparator();
+
+        editMenu = new JMenu("Edit");
         menuBar.add(editMenu);
         menuBar.add(toolsMenu);
+        menuBar.add(windowMenu);
         menuBar.add(helpMenu);
 
-        JToolBar toolBar = new JToolBar();
+        toolBar = new JToolBar();
         toolBar.setRollover(true);
         toolBar.setFloatable(false);
         topPanel.add(toolBar, BorderLayout.SOUTH);
 
+        // CSOFF
         KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
         KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
@@ -294,15 +370,13 @@ class QueryeerView extends JFrame
                 .getMenuShortcutKeyMaskEx());
         KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
-        KeyStroke toggleCommentKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_7, Toolkit.getDefaultToolkit()
-                .getMenuShortcutKeyMaskEx());
+        // CSON
 
-        InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         inputMap.put(executeKeyStroke, EXECUTE);
         inputMap.put(stopKeyStroke, STOP);
         inputMap.put(newQueryKeyStroke, NEW_QUERY);
         inputMap.put(toggleResultKeyStroke, TOGGLE_RESULT);
-        inputMap.put(toggleCommentKeyStroke, TOGGLE_COMMENT);
         topPanel.getActionMap()
                 .put(EXECUTE, executeAction);
         topPanel.getActionMap()
@@ -311,12 +385,39 @@ class QueryeerView extends JFrame
                 .put(NEW_QUERY, newQueryAction);
         topPanel.getActionMap()
                 .put(TOGGLE_RESULT, toggleResultAction);
-        topPanel.getActionMap()
-                .put(TOGGLE_COMMENT, toggleCommentAction);
 
-        JButton newQueryButton = new JButton(newQueryAction);
+        JButton newQueryButton = new JButton();
+        newQueryButton.setIcon(Constants.FILE_TEXT_O);
         newQueryButton.setText("New Query");
         newQueryButton.setToolTipText("Open New Query Window (" + getAcceleratorText(newQueryKeyStroke) + ")");
+
+        final JPopupMenu queryEnginesPopup = new JPopupMenu();
+        for (IQueryEngine qe : queryEngines.stream()
+                .sorted(Comparator.comparingInt(IQueryEngine::order))
+                .toList())
+        {
+            final IQueryEngine queryEngine = qe;
+            queryEnginesPopup.add(new JMenuItem(new AbstractAction(queryEngine.getTitle(), queryEngine.getIcon())
+            {
+                @Override
+                public void actionPerformed(ActionEvent e)
+                {
+                    if (newQueryConsumer != null)
+                    {
+                        newQueryConsumer.accept(queryEngine);
+                    }
+                }
+            }));
+        }
+
+        newQueryButton.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent ev)
+            {
+                queryEnginesPopup.show(newQueryButton, newQueryButton.getBounds().x, newQueryButton.getBounds().y + newQueryButton.getBounds().height);
+            }
+        });
 
         JButton executeButton = new JButton(executeAction);
         executeButton.setText("Execute");
@@ -332,12 +433,10 @@ class QueryeerView extends JFrame
         toolBar.add(cancelAction)
                 .setToolTipText("Cancel Query (" + getAcceleratorText(stopKeyStroke) + ")");
         toolBar.addSeparator();
-        toolBar.add(toggleCatalogsAction)
+        toolBar.add(toggleQuickPropertiesAction)
                 .setToolTipText("Toggle Quick Properties Panel");
         toolBar.add(toggleResultAction)
                 .setToolTipText("Toggle Result Panel (" + getAcceleratorText(toggleResultKeyStroke) + ")");
-        toolBar.add(toggleCommentAction)
-                .setToolTipText("Toggle Comment On Selected Lines (" + getAcceleratorText(toggleCommentKeyStroke) + ")");
 
         comboOutput = new JComboBox<>();
         comboOutput.setRenderer(new DefaultListCellRenderer()
@@ -364,7 +463,8 @@ class QueryeerView extends JFrame
         DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) comboOutput.getModel();
         for (IOutputExtension outputExtension : actualOutputExtensions)
         {
-            if (!outputExtension.isAutoPopulated())
+            if (!outputExtension.isAutoPopulated()
+                    && outputExtension.isAutoAdded())
             {
                 outputComboModel.addElement(outputExtension);
             }
@@ -396,7 +496,14 @@ class QueryeerView extends JFrame
             formatComboModel.addElement(outputFormatExtension);
         }
 
-        comboFormat.addActionListener(l -> actionHandler.accept(ViewAction.FORMAT_CHANGED));
+        comboFormat.addActionListener(l ->
+        {
+            if (suppressChangeEvents)
+            {
+                return;
+            }
+            actionHandler.accept(ViewAction.FORMAT_CHANGED);
+        });
 
         toolBar.addSeparator();
         toolBar.add(new JLabel("Output "));
@@ -406,21 +513,32 @@ class QueryeerView extends JFrame
         toolBar.add(comboFormat);
 
         splitPane = new JSplitPane();
-        splitPane.setDividerSize(3);
         getContentPane().add(splitPane, BorderLayout.CENTER);
 
         splitPane.setRightComponent(tabbedPane);
 
-        panelCatalogs = new JPanel();
-        panelCatalogs.setLayout(new GridBagLayout());
-        splitPane.setLeftComponent(new JScrollPane(panelCatalogs));
-        splitPane.setDividerLocation(260);
+        panelQueryEngineProperties = new JPanel();
+        panelQueryEngineProperties.setLayout(new BorderLayout());
+        panelQueryEngineProperties.setBorder(new EmptyBorder(2, 2, 2, 2));
+
+        leftTabbedPane = new JTabbedPane(JTabbedPane.TOP);
+        leftTabbedPane.addTab("Properties", new JScrollPane(panelQueryEngineProperties));
+        leftTabbedPane.addTab("Projects", projectsView);
+
+        leftTabbedPane.setIconAt(1, FontIcon.of(FontAwesome.FILES_O));
+
+        splitPane.setLeftComponent(leftTabbedPane);
 
         setIconImages(Constants.APPLICATION_ICONS);
 
         // Switch formats upon changing output
         comboOutput.addActionListener(l ->
         {
+            if (suppressChangeEvents)
+            {
+                return;
+            }
+
             IOutputExtension extension = (IOutputExtension) comboOutput.getSelectedItem();
             comboFormat.setEnabled(extension.supportsOutputFormats());
             actionHandler.accept(ViewAction.OUTPUT_CHANGED);
@@ -438,7 +556,43 @@ class QueryeerView extends JFrame
             }
         });
 
-        tasksDialog = new TasksDialog(this, eventBus, running -> labelTasksSpinner.setVisible(running));
+        KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .addPropertyChangeListener(new PropertyChangeListener()
+                {
+                    @Override
+                    public void propertyChange(PropertyChangeEvent evt)
+                    {
+                        if ("focusOwner".equalsIgnoreCase(evt.getPropertyName()))
+                        {
+                            // boolean processed = false;
+                            if (evt.getNewValue() instanceof JComponent comp)
+                            {
+                                while (comp != null)
+                                {
+                                    @SuppressWarnings("unchecked")
+                                    List<Action> actions = (List<Action>) comp.getClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS);
+                                    if (actions != null)
+                                    {
+                                        populateActions(actions);
+                                        // processed = true;
+                                        break;
+                                    }
+
+                                    Container parent = comp.getParent();
+                                    comp = parent instanceof JComponent ? (JComponent) parent
+                                            : null;
+                                }
+                            }
+
+                            // if (!processed)
+                            // {
+                            // populateActions(emptyList());
+                            // }
+                        }
+                    }
+                });
+
+        tasksDialog = new TasksDialog(this, eventBus, running -> SwingUtilities.invokeLater(() -> labelTasksSpinner.setVisible(running)));
         logsDialog = new LogsDialog(this);
 
         eventBus.register(this);
@@ -452,12 +606,92 @@ class QueryeerView extends JFrame
         pack();
     }
 
+    private PropertyChangeListener queryeerModelListener = new PropertyChangeListener()
+    {
+        @Override
+        public void propertyChange(PropertyChangeEvent evt)
+        {
+            if (QueryeerModel.FILES.equalsIgnoreCase(evt.getPropertyName()))
+            {
+                // Add
+                if (evt.getNewValue() != null)
+                {
+                    // Only show 20 windows in menu list
+                    if (windowMenu.getMenuComponentCount() >= 24)
+                    {
+                        return;
+                    }
+
+                    QueryFileModel fileModel = (QueryFileModel) evt.getNewValue();
+                    JMenuItem windowItem = new JMenuItem(new AbstractAction(fileModel.getFile()
+                            .getName())
+                    {
+                        @Override
+                        public void actionPerformed(ActionEvent e)
+                        {
+                            model.setSelectedFile(fileModel);
+                        }
+
+                    });
+                    windowItem.putClientProperty(FILE_MODEL, fileModel);
+                    windowMenu.add(windowItem);
+                }
+                // Remove
+                else if (evt.getNewValue() == null)
+                {
+                    QueryFileModel fileModel = (QueryFileModel) evt.getOldValue();
+                    for (Component item : windowMenu.getMenuComponents())
+                    {
+                        if (item instanceof JMenuItem menuItem)
+                        {
+                            QueryFileModel modelItem = (QueryFileModel) menuItem.getClientProperty(FILE_MODEL);
+                            if (fileModel == modelItem)
+                            {
+                                windowMenu.remove(menuItem);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Redraw table when files changes
+                if (windowsDialog != null)
+                {
+                    windowsDialog.tableModel.fireTableDataChanged();
+                }
+            }
+            else if (QueryeerModel.SELECTED_FILE.equalsIgnoreCase(evt.getPropertyName()))
+            {
+                // Mark selected file with an icon
+                QueryFileModel fileModel = (QueryFileModel) evt.getNewValue();
+                if (fileModel == null)
+                {
+                    return;
+                }
+                for (Component item : windowMenu.getMenuComponents())
+                {
+                    if (item instanceof JMenuItem menuItem)
+                    {
+                        QueryFileModel modelItem = (QueryFileModel) menuItem.getClientProperty(FILE_MODEL);
+                        menuItem.setIcon(null);
+                        if (modelItem != null
+                                && fileModel == modelItem)
+                        {
+                            menuItem.setIcon(FontIcon.of(FontAwesome.CHECK));
+                        }
+                    }
+                }
+            }
+        }
+    };
+
     private void bindOutputExtensions(List<IOutputExtension> outputExtensions)
     {
         InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         for (IOutputExtension outputExtension : outputExtensions)
         {
-            if (!outputExtension.isAutoPopulated())
+            if (!outputExtension.isAutoPopulated()
+                    && outputExtension.isAutoAdded())
             {
                 inputMap.put(outputExtension.getKeyStroke(), outputExtension);
                 topPanel.getActionMap()
@@ -577,32 +811,23 @@ class QueryeerView extends JFrame
         }
     };
 
-    private final Action toggleCatalogsAction = new AbstractAction(TOGGLE_CATALOGS, Constants.ARROWS_H)
+    private final Action toggleQuickPropertiesAction = new AbstractAction(TOGGLE_QUICK_PROPERTIES, Constants.ARROWS_H)
     {
         @Override
         public void actionPerformed(ActionEvent e)
         {
             // Expanded
-            if (!catalogsCollapsed)
+            if (!quickPropertiesCollapsed)
             {
-                prevCatalogsDividerLocation = splitPane.getDividerLocation();
+                prevPropertiesDividerLocation = splitPane.getDividerLocation();
                 splitPane.setDividerLocation(0.0d);
-                catalogsCollapsed = true;
+                quickPropertiesCollapsed = true;
             }
             else
             {
-                splitPane.setDividerLocation(prevCatalogsDividerLocation);
-                catalogsCollapsed = false;
+                splitPane.setDividerLocation(prevPropertiesDividerLocation);
+                quickPropertiesCollapsed = false;
             }
-        }
-    };
-
-    private final Action toggleCommentAction = new AbstractAction(TOGGLE_COMMENT, Constants.INDENT)
-    {
-        @Override
-        public void actionPerformed(ActionEvent e)
-        {
-            actionHandler.accept(ViewAction.TOGGLE_COMMENT);
         }
     };
 
@@ -619,11 +844,6 @@ class QueryeerView extends JFrame
             }
         }
     };
-
-    JPanel getPanelCatalogs()
-    {
-        return panelCatalogs;
-    }
 
     JLabel getMemoryLabel()
     {
@@ -643,6 +863,166 @@ class QueryeerView extends JFrame
     JComboBox<IOutputFormatExtension> getFormatCombo()
     {
         return comboFormat;
+    }
+
+    /** Updates combo boxes etc. to reflect the provided query file view */
+    void updateState(QueryFileView fileView)
+    {
+        QueryFileModel file = fileView.getModel();
+
+        suppressChangeEvents = true;
+        try
+        {
+            comboOutput.setSelectedItem(file.getOutputExtension());
+            comboFormat.setSelectedItem(file.getOutputFormat());
+            setQueryEngineProperties(fileView.getModel()
+                    .getQueryEngine());
+            file.getQueryEngine()
+                    .focus(fileView);
+            fileView.getEditor()
+                    .focused();
+
+            // populateEditorActions(file.getEditor());
+        }
+        finally
+        {
+            suppressChangeEvents = false;
+        }
+    }
+
+    private void populateActions(List<Action> actions)
+    {
+        for (AbstractButton button : editorToolbarActions)
+        {
+            KeyStroke keyStroke = (KeyStroke) button.getAction()
+                    .getValue(Action.ACCELERATOR_KEY);
+
+            // Unbind old accelerators
+            if (keyStroke != null)
+            {
+                String actionCommand = (String) button.getAction()
+                        .getValue(Action.ACTION_COMMAND_KEY);
+                inputMap.remove(keyStroke);
+                topPanel.getActionMap()
+                        .remove(actionCommand);
+            }
+
+            toolBar.remove(button);
+        }
+        for (JMenuItem menuItem : editorMenuActions)
+        {
+            KeyStroke keyStroke = (KeyStroke) menuItem.getAction()
+                    .getValue(Action.ACCELERATOR_KEY);
+
+            // Unbind old accelerators
+            if (keyStroke != null)
+            {
+                String actionCommand = (String) menuItem.getAction()
+                        .getValue(Action.ACTION_COMMAND_KEY);
+                inputMap.remove(keyStroke);
+                topPanel.getActionMap()
+                        .remove(actionCommand);
+            }
+
+            Container parent = menuItem.getParent();
+
+            // Parent is a popup menu and not a JMenu for some reason
+            if (parent instanceof JPopupMenu)
+            {
+                parent.remove(menuItem);
+            }
+        }
+
+        editorToolbarActions.clear();
+        for (Action action : actions)
+        {
+            Integer order = (Integer) action.getValue(com.queryeer.api.action.Constants.ACTION_ORDER);
+            if (order == null
+                    || order > toolBar.getComponentCount())
+            {
+                order = -1;
+            }
+            KeyStroke keyStroke = (KeyStroke) action.getValue(Action.ACCELERATOR_KEY);
+
+            if (keyStroke != null)
+            {
+                String actionCommand = (String) action.getValue(Action.ACTION_COMMAND_KEY);
+                inputMap.put(keyStroke, actionCommand);
+                topPanel.getActionMap()
+                        .put(actionCommand, action);
+            }
+
+            String shortDescription = (String) action.getValue(Action.SHORT_DESCRIPTION);
+
+            Boolean showInToolBar = (Boolean) action.getValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_TOOLBAR);
+            Boolean showInMenu = (Boolean) action.getValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU);
+            if (BooleanUtils.isTrue(showInToolBar))
+            {
+                AbstractButton actionComponent;
+
+                Boolean toggleButton = (Boolean) action.getValue(com.queryeer.api.action.Constants.ACTION_TOGGLE);
+                if (BooleanUtils.isTrue(toggleButton))
+                {
+                    JToggleButton button = new JToggleButton(action);
+                    button.addActionListener(l -> action.putValue(Action.SELECTED_KEY, button.isSelected()));
+
+                    Boolean selected = (Boolean) action.getValue(Action.SELECTED_KEY);
+                    button.setSelected(BooleanUtils.isTrue(selected));
+
+                    actionComponent = button;
+                }
+                else
+                {
+                    actionComponent = new JButton(action);
+                }
+
+                if (shortDescription != null)
+                {
+                    if (keyStroke != null)
+                    {
+                        shortDescription += " (" + getAcceleratorText(keyStroke) + ")";
+                    }
+                    actionComponent.setToolTipText(shortDescription);
+                }
+
+                toolBar.add(actionComponent, (int) order);
+                editorToolbarActions.add(actionComponent);
+            }
+            if (BooleanUtils.isTrue(showInMenu))
+            {
+                String menu = (String) action.getValue(com.queryeer.api.action.Constants.ACTION_MENU);
+                if (!"Edit".equalsIgnoreCase(menu))
+                {
+                    LOGGER.error("{} is not supported menu for Editor Actions", menu);
+                    continue;
+                }
+
+                JMenuItem menuItem = new JMenuItem(action);
+                editMenu.add(menuItem, (int) order);
+                editorMenuActions.add(menuItem);
+            }
+        }
+    }
+
+    private void setQueryEngineProperties(IQueryEngine queryEngine)
+    {
+        SwingUtilities.invokeLater(() ->
+        {
+            leftTabbedPane.setTitleAt(0, queryEngine.getTitle());
+            leftTabbedPane.setIconAt(0, queryEngine.getIcon());
+
+            panelQueryEngineProperties.removeAll();
+            panelQueryEngineProperties.add(queryEngine.getQuickPropertiesComponent(), BorderLayout.CENTER);
+            panelQueryEngineProperties.revalidate();
+            panelQueryEngineProperties.repaint();
+
+            if (prevPropertiesDividerLocation == 0)
+            {
+                splitPane.setDividerLocation(panelQueryEngineProperties.getPreferredSize()
+                        .getWidth() / splitPane.getWidth());
+                prevPropertiesDividerLocation = splitPane.getDividerLocation();
+            }
+        });
     }
 
     void setRecentFiles(List<String> recentFiles)
@@ -666,8 +1046,260 @@ class QueryeerView extends JFrame
         this.actionHandler = actionHandler;
     }
 
+    void setNewQueryConsumer(Consumer<IQueryEngine> newQueryConsumer)
+    {
+        this.newQueryConsumer = newQueryConsumer;
+    }
+
     QueryFileView getCurrentFile()
     {
         return (QueryFileView) tabbedPane.getSelectedComponent();
+    }
+
+    private class WindowsDialog extends JDialog
+    {
+        private final FileModel tableModel;
+
+        WindowsDialog()
+        {
+            setTitle("Windows");
+            setIconImages(Constants.APPLICATION_ICONS);
+            getContentPane().setLayout(new GridBagLayout());
+
+            setModal(true);
+            getRootPane().registerKeyboardAction(new ActionListener()
+            {
+                @Override
+                public void actionPerformed(ActionEvent e)
+                {
+                    setVisible(false);
+                }
+            }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+
+            JTextArea preview = new JTextArea();
+            preview.setEditable(false);
+
+            JButton activate = new JButton("Activate");
+            activate.setAlignmentX(0.5f);
+            JButton close = new JButton("Close Window(s)");
+            close.setAlignmentX(0.5f);
+            JButton save = new JButton("Save");
+            save.setAlignmentX(0.5f);
+            JTable table = new JTable();
+            table.getSelectionModel()
+                    .addListSelectionListener(l ->
+                    {
+                        int length = table.getSelectedRows().length;
+                        activate.setEnabled(length <= 1);
+                        close.setEnabled(length > 0);
+                        save.setEnabled(length > 0);
+                        preview.setEnabled(length == 1);
+
+                        String previewText = "";
+                        if (length == 1)
+                        {
+                            QueryFileModel fileModel = model.getFiles()
+                                    .get(table.convertRowIndexToModel(table.getSelectedRow()));
+                            previewText = String.valueOf(fileModel.getEditor()
+                                    .getValue(true));
+                        }
+                        preview.setText(previewText);
+                        preview.setCaretPosition(0);
+                    });
+            table.addMouseListener(new MouseAdapter()
+            {
+                @Override
+                public void mouseClicked(MouseEvent e)
+                {
+                    if (SwingUtilities.isLeftMouseButton(e)
+                            && e.getClickCount() == 2)
+                    {
+                        int row = table.rowAtPoint(e.getPoint());
+                        if (row >= 0)
+                        {
+                            int modelRow = table.convertRowIndexToModel(row);
+                            QueryFileModel fileModel = model.getFiles()
+                                    .get(modelRow);
+                            model.setSelectedFile(fileModel);
+                            setVisible(false);
+                        }
+                    }
+                }
+            });
+            table.setSelectionMode(ListSelectionModel.SINGLE_INTERVAL_SELECTION);
+            tableModel = new FileModel();
+            table.setModel(tableModel);
+            table.setAutoCreateRowSorter(true);
+
+            JPanel buttonPanel = new JPanel();
+            buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.Y_AXIS));
+            buttonPanel.add(activate);
+            buttonPanel.add(save);
+            buttonPanel.add(close);
+
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 1.0d;
+            gbc.weighty = 0.5d;
+            gbc.fill = GridBagConstraints.BOTH;
+            gbc.insets = new Insets(2, 2, 2, 2);
+            getContentPane().add(new JScrollPane(table), gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 1;
+            gbc.gridy = 0;
+            gbc.gridheight = 5;
+            gbc.fill = GridBagConstraints.BOTH;
+            gbc.insets = new Insets(2, 2, 2, 2);
+            getContentPane().add(buttonPanel, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 1;
+            gbc.fill = GridBagConstraints.BOTH;
+            gbc.insets = new Insets(2, 2, 2, 2);
+            getContentPane().add(new JLabel("Preview:"), gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 2;
+            gbc.weightx = 1.0d;
+            gbc.weighty = 0.5d;
+            gbc.fill = GridBagConstraints.BOTH;
+            gbc.insets = new Insets(2, 2, 2, 2);
+            getContentPane().add(new JScrollPane(preview), gbc);
+
+            activate.addActionListener(l ->
+            {
+                int index = table.getSelectedRow();
+                if (index < 0)
+                {
+                    return;
+                }
+                index = table.convertRowIndexToModel(index);
+                QueryFileModel fileModel = model.getFiles()
+                        .get(index);
+                model.setSelectedFile(fileModel);
+                setVisible(false);
+            });
+
+            close.addActionListener(l ->
+            {
+                int[] selectedRows = table.getSelectedRows();
+                Arrays.sort(selectedRows);
+                int modifier = 0;
+                for (int i = 0; i < selectedRows.length; i++)
+                {
+                    int index = table.convertRowIndexToModel(selectedRows[i] - modifier);
+                    QueryFileModel fileModel = model.getFiles()
+                            .get(index);
+                    // Design here is a bit off, we need the VIEW of QueryFile but we
+                    // only have the model, the tabbedPane has the view so let it fetch it for us
+                    QueryFileView fileView = tabbedPane.getFileView(fileModel);
+                    if (fileView != null)
+                    {
+                        QueryFileClosingEvent event = new QueryFileClosingEvent(fileView);
+                        eventBus.publish(event);
+                        if (event.isCanceled())
+                        {
+                            break;
+                        }
+                    }
+                    modifier++;
+                }
+                // Redraw the table after we removed some files
+                tableModel.fireTableDataChanged();
+            });
+
+            save.addActionListener(l ->
+            {
+                int[] selectedRows = table.getSelectedRows();
+                Arrays.sort(selectedRows);
+                for (int i = 0; i < selectedRows.length; i++)
+                {
+                    int index = table.convertRowIndexToModel(selectedRows[i]);
+                    QueryFileModel fileModel = model.getFiles()
+                            .get(index);
+                    // Design here is a bit off, we need the VIEW of QueryFile but we
+                    // only have the model, the tabbedPane has the view so let it fetch it for us
+                    QueryFileView fileView = tabbedPane.getFileView(fileModel);
+                    if (fileView != null)
+                    {
+                        QueryFileSaveEvent event = new QueryFileSaveEvent(fileView);
+                        eventBus.publish(event);
+                        if (event.isCanceled())
+                        {
+                            break;
+                        }
+                    }
+                }
+                // Redraw the table after we saved some files
+                tableModel.fireTableDataChanged();
+            });
+
+            setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
+            setPreferredSize(Constants.DEFAULT_DIALOG_SIZE);
+            pack();
+            setLocationRelativeTo(null);
+            pack();
+        }
+
+        private class FileModel extends AbstractTableModel
+        {
+            @Override
+            public int getRowCount()
+            {
+                return model.getFiles()
+                        .size();
+            }
+
+            @Override
+            public String getColumnName(int column)
+            {
+                return switch (column)
+                {
+                    case 0 -> "Name";
+                    case 1 -> "Path";
+                    case 2 -> "Size";
+                    default -> throw new IllegalArgumentException("Invalid column index");
+                };
+            }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex)
+            {
+                if (columnIndex == 2)
+                {
+                    return Long.class;
+                }
+                return super.getColumnClass(columnIndex);
+            }
+
+            @Override
+            public int getColumnCount()
+            {
+                return 3;
+            }
+
+            @Override
+            public Object getValueAt(int rowIndex, int columnIndex)
+            {
+                QueryFileModel fileModel = model.getFiles()
+                        .get(rowIndex);
+                return switch (columnIndex)
+                {
+                    case 0 -> fileModel.getFile()
+                            .getName()
+                            + (fileModel.isDirty() ? "*"
+                                    : "");
+                    case 1 -> fileModel.getFile()
+                            .getParent();
+                    case 2 -> fileModel.getFile()
+                            .length();
+                    default -> throw new IllegalArgumentException("Invalid column index");
+                };
+            }
+        }
     }
 }

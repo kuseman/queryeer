@@ -2,7 +2,7 @@ package com.queryeer.api.extensions.output.text;
 
 import java.io.PrintWriter;
 
-import com.queryeer.api.TextSelection;
+import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.extensions.output.IOutputComponent;
 
 /** Definition of the built in text output component */

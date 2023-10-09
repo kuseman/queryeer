@@ -6,6 +6,8 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Window;
+import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -35,11 +37,13 @@ import se.kuseman.payloadbuilder.core.Payloadbuilder;
 class AboutDialog extends JDialog
 {
     private final String version;
+    private final File etcFolder;
     private static final String CHANGELOG = readChangeLog();
 
-    AboutDialog(JFrame parent, String version)
+    AboutDialog(JFrame parent, String version, File etcFolder)
     {
         this.version = version;
+        this.etcFolder = etcFolder;
         initDialog();
     }
 
@@ -104,6 +108,18 @@ class AboutDialog extends JDialog
         return message;
     }
 
+    @Override
+    public void setVisible(boolean b)
+    {
+        if (b)
+        {
+            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                    .getActiveWindow();
+            setLocationRelativeTo(activeWindow);
+        }
+        super.setVisible(b);
+    }
+
     void showNewVersionMessage(String message)
     {
         JEditorPane pane = new JEditorPane("text/html", message);
@@ -164,8 +180,10 @@ class AboutDialog extends JDialog
         sb.append("\n");
         sb.append("Payloadbuilder Version: " + Objects.toString(Payloadbuilder.class.getPackage()
                 .getImplementationVersion(), "Dev"));
+        sb.append("\n");
+        sb.append("Config Location: " + etcFolder.getAbsolutePath());
         sb.append("\n\n");
-        sb.append("(C) Copyright Marcus Henriksson 2024");
+        sb.append("(C) Copyright Marcus Henriksson 2025");
 
         return sb.toString();
     }

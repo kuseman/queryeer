@@ -69,6 +69,6 @@ class TextOutputExtension implements IOutputExtension
         }
 
         TextOutputComponent outputComponent = (TextOutputComponent) file.getOutputComponent(ITextOutputComponent.class);
-        return outputFormat.createOutputWriter(file, outputComponent.createBatchWriter());
+        return outputFormat.createOutputWriter(file, outputComponent.getTextWriter());
     }
 }

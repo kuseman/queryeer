@@ -6,14 +6,19 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import javax.swing.Icon;
 import javax.swing.SwingUtilities;
 import javax.swing.event.EventListenerList;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
+
+import org.apache.commons.lang3.StringUtils;
 
 import com.queryeer.output.table.TableOutputWriter.RowList;
 
@@ -21,8 +26,10 @@ import com.queryeer.output.table.TableOutputWriter.RowList;
 class Model implements TableModel
 {
     private static final String NO_COLUMN_NAME = "(No column name)";
+    private static final String IMAGE_PREFIX = "__queryeerimage__";
     private final List<RowList> rows = new ArrayList<>(50);
     private List<String> columns = emptyList();
+    private Set<Integer> imageColumnIndices = new HashSet<>();
     private int lastNotifyRowIndex = 0;
     private EventListenerList listenerList = new EventListenerList();
 
@@ -52,6 +59,14 @@ class Model implements TableModel
         if (requireNonNull(columns).size() > 0)
         {
             this.columns = columns;
+            int size = columns.size();
+            for (int i = 0; i < size; i++)
+            {
+                if (StringUtils.startsWithIgnoreCase(columns.get(i), IMAGE_PREFIX))
+                {
+                    imageColumnIndices.add(i);
+                }
+            }
             SwingUtilities.invokeLater(() -> fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW)));
         }
     }
@@ -82,6 +97,11 @@ class Model implements TableModel
         {
             return NO_COLUMN_NAME;
         }
+        // strip the prefix from the special image column
+        else if (imageColumnIndices.contains(column))
+        {
+            return StringUtils.substring(col, IMAGE_PREFIX.length());
+        }
         return col;
     }
 
@@ -99,7 +119,17 @@ class Model implements TableModel
             return null;
         }
 
-        return row.get(columnIndex);
+        Object value = row.get(columnIndex);
+
+        if (value != null
+                && imageColumnIndices.contains(columnIndex)
+                && !(value instanceof QueryeerImage))
+        {
+            value = new QueryeerImage(value);
+            row.set(columnIndex, value);
+        }
+
+        return value;
     }
 
     @Override
@@ -151,6 +181,19 @@ class Model implements TableModel
         }
     }
 
+    void notifyCellChange(int row, int column)
+    {
+        TableModelEvent event = new TableModelEvent(this, row, row, column, TableModelEvent.UPDATE);
+        if (SwingUtilities.isEventDispatchThread())
+        {
+            fireTableChanged(event);
+        }
+        else
+        {
+            SwingUtilities.invokeLater(() -> fireTableChanged(event));
+        }
+    }
+
     private void fireTableChanged(TableModelEvent e)
     {
         Object[] listeners = listenerList.getListenerList();
@@ -160,6 +203,50 @@ class Model implements TableModel
             {
                 ((TableModelListener) listeners[i + 1]).tableChanged(e);
             }
+        }
+    }
+
+    /** Image holder for special columns with images. */
+    static class QueryeerImage
+    {
+        private final Object rawValue;
+        private volatile Icon icon;
+        private volatile boolean loading;
+
+        QueryeerImage(Object rawValue)
+        {
+            this.rawValue = requireNonNull(rawValue);
+        }
+
+        public Object getRawValue()
+        {
+            return rawValue;
+        }
+
+        Icon getIcon()
+        {
+            return icon;
+        }
+
+        void setIcon(Icon icon)
+        {
+            this.icon = icon;
+        }
+
+        boolean isLoading()
+        {
+            return loading;
+        }
+
+        void setLoading(boolean loading)
+        {
+            this.loading = loading;
+        }
+
+        @Override
+        public String toString()
+        {
+            return String.valueOf(rawValue);
         }
     }
 }

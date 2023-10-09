@@ -3,6 +3,7 @@ package com.queryeer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
+import java.awt.Window;
 
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -49,7 +50,9 @@ class LogsDialog extends JFrame
     {
         if (b)
         {
-            setLocationRelativeTo(getParent());
+            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                    .getActiveWindow();
+            setLocationRelativeTo(activeWindow);
         }
         super.setVisible(b);
     }

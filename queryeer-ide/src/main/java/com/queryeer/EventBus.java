@@ -10,6 +10,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.queryeer.api.event.Event;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.service.IEventBus;
@@ -17,6 +20,7 @@ import com.queryeer.api.service.IEventBus;
 /** Implementation of the event bus */
 class EventBus implements IEventBus
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(EventBus.class);
     private final Map<Class<?>, List<Subscriber>> subscribersByEventType = new HashMap<>();
 
     @Override
@@ -71,8 +75,7 @@ class EventBus implements IEventBus
             }
             catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e)
             {
-                // TODO: logging
-                e.printStackTrace();
+                LOGGER.error("Error calling subscriber", e);
             }
         }
     }

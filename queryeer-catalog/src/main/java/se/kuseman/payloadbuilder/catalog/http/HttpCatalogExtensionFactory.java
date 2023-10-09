@@ -1,7 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.http;
 
-import com.queryeer.api.extensions.catalog.ICatalogExtension;
-import com.queryeer.api.extensions.catalog.ICatalogExtensionFactory;
+import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
+import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionFactory;
 
 class HttpCatalogExtensionFactory implements ICatalogExtensionFactory
 {
@@ -9,6 +9,12 @@ class HttpCatalogExtensionFactory implements ICatalogExtensionFactory
     public ICatalogExtension create(String catalogAlias)
     {
         return new HttpCatalogExtension();
+    }
+
+    @Override
+    public String getTitle()
+    {
+        return HttpCatalogExtension.TITLE;
     }
 
     @Override
