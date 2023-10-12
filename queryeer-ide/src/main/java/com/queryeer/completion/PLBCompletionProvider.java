@@ -164,10 +164,6 @@ class PLBCompletionProvider extends CompletionProviderBase implements ToolTipSup
             suggestions.tokens.entrySet()
                     .forEach(e ->
                     {
-                        if (!PLBParser.TOKEN_WHITELIST.contains(e.getKey()))
-                        {
-                            return;
-                        }
                         // Don't suggest keywords if we have rules and the token is a non reserved.
                         // ie.
                         //
@@ -177,7 +173,7 @@ class PLBCompletionProvider extends CompletionProviderBase implements ToolTipSup
                         // Here we should input an expression and hence a column reference and hence a identifier
                         // but there are some tokens that can be used as identifier (non reserved ones)
                         // but it will be very weird if we suggest those in auto completion
-                        else if (!suggestions.rules.isEmpty()
+                        if (!suggestions.rules.isEmpty()
                                 && PLBParser.NON_RESERVED_TOKENS.contains(e.getKey()))
                         {
                             return;
@@ -207,7 +203,7 @@ class PLBCompletionProvider extends CompletionProviderBase implements ToolTipSup
 
         // columns/scalar functions
         if (!candidates.skipRules()
-                && suggestions.rules.containsKey(PayloadBuilderQueryParser.RULE_expression))
+                && suggestions.rules.containsKey(PayloadBuilderQueryParser.RULE_primary))
         {
             Map<String, TableSource> tableSources = parser.findTableSources(candidates.tree());
             result.addAll(filter(completionRegistry.getColumnCompletions(this, querySession, catalogs, tableSources, textToMatch), textToMatch, equalsMatch));

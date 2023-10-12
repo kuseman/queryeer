@@ -56,6 +56,8 @@ import se.kuseman.payloadbuilder.core.execution.QuerySession;
  */
 class CompletionRegistry
 {
+    private static final List<String> EXPRESSION_FUNCTIONS = List.of("cast", "dateadd", "datepart", "datediff");
+
     private static final Icon COLUMNS = FontIcon.of(FontAwesome.COLUMNS);
     private static final Icon GEAR = FontIcon.of(FontAwesome.GEAR);
     private static final Icon TABLE = FontIcon.of(FontAwesome.TABLE);
@@ -248,14 +250,7 @@ class CompletionRegistry
     /** Get scalar functions from session */
     List<PLBCompletion> getScalarFunctionCompletions(CompletionProvider provider, QuerySession session, String textToMatch)
     {
-        List<PLBCompletion> result = getFunctions(provider, session, true, textToMatch);
-
-        // Add functions that are expressions and hence aren't discovered in catalog registry
-        result.add(new PLBCompletion(provider, "cast", "cast()", GEAR));
-        result.add(new PLBCompletion(provider, "dateadd", "dateadd()", GEAR));
-        result.add(new PLBCompletion(provider, "datepart", "datepart()", GEAR));
-        result.add(new PLBCompletion(provider, "datediff", "datediff()", GEAR));
-        return result;
+        return getFunctions(provider, session, true, textToMatch);
     }
 
     private Map<String, Collection<TableMeta>> getTableMetas(QuerySession session, List<ICatalogModel> catalogs)
@@ -395,8 +390,18 @@ class CompletionRegistry
                 }
             }
         }
-
+        // Add functions that are expressions and hence aren't discovered in catalog registry
+        addExpressionFunctions(provider, textToMatch, functions);
         return functions;
+    }
+
+    private void addExpressionFunctions(CompletionProvider provider, String textToMatch, List<PLBCompletion> result)
+    {
+        // Add functions that are expressions and hence aren't discovered in catalog registry
+        EXPRESSION_FUNCTIONS.stream()
+                .filter(f -> StringUtils.startsWithIgnoreCase(f, textToMatch))
+                .map(f -> new PLBCompletion(provider, f, f + "()", GEAR))
+                .forEach(result::add);
     }
 
     /** Checks if any of the qualifed names parts starts with prefix */

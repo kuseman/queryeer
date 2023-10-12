@@ -1,6 +1,7 @@
 package com.queryeer.completion;
 
 import static java.util.stream.Collectors.toList;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 import static se.kuseman.payloadbuilder.core.utils.CollectionUtils.asSet;
 
 import java.awt.Color;
@@ -17,7 +18,6 @@ import java.util.Set;
 
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 
 import org.antlr.v4.runtime.BaseErrorListener;
@@ -27,6 +27,7 @@ import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.DefaultErrorStrategy;
 import org.antlr.v4.runtime.LexerNoViableAltException;
 import org.antlr.v4.runtime.Parser;
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
 import org.antlr.v4.runtime.Token;
@@ -52,13 +53,11 @@ import se.kuseman.payloadbuilder.api.expression.IExpression;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryLexer;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser;
-import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.ComparisonExpressionContext;
+import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.Expr_compareContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.IdentifierContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.LiteralContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.LiteralExpressionContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.NonReservedContext;
-import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.PrimaryContext;
-import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.PrimaryExpressionContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.QueryContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.StatementContext;
 import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser.TableSourceContext;
@@ -72,67 +71,7 @@ import se.kuseman.payloadbuilder.core.parser.QueryParser;
 class PLBParser extends AbstractParser implements DocumentListener
 {
     static final Set<Integer> NON_RESERVED_TOKENS;
-
-    // White list of tokens we want to suggest. Common ones like TOP/DISTINCT/ORDER BY etc.
-    //@formatter:off
-    static final Set<Integer> TOKEN_WHITELIST = asSet(
-            PayloadBuilderQueryLexer.ANALYZE,
-            PayloadBuilderQueryLexer.ASC,
-            PayloadBuilderQueryLexer.APPLY,
-            PayloadBuilderQueryLexer.BY,
-            PayloadBuilderQueryLexer.CACHE,
-            PayloadBuilderQueryLexer.CACHES,
-            PayloadBuilderQueryLexer.CASE,
-            PayloadBuilderQueryLexer.CROSS,
-            PayloadBuilderQueryLexer.DESC,
-            PayloadBuilderQueryLexer.DESCRIBE,
-            PayloadBuilderQueryLexer.DISTINCT,
-            PayloadBuilderQueryLexer.DROP,
-            PayloadBuilderQueryLexer.ELSE,
-            PayloadBuilderQueryLexer.FLUSH,
-            PayloadBuilderQueryLexer.END,
-            PayloadBuilderQueryLexer.EXISTS,
-            PayloadBuilderQueryLexer.FIRST,
-            PayloadBuilderQueryLexer.FOR,
-            PayloadBuilderQueryLexer.FROM,
-            PayloadBuilderQueryLexer.FUNCTIONS,
-            PayloadBuilderQueryLexer.GROUP,
-            PayloadBuilderQueryLexer.HAVING,
-            PayloadBuilderQueryLexer.IF,
-            PayloadBuilderQueryLexer.IN,
-            PayloadBuilderQueryLexer.INNER,
-            PayloadBuilderQueryLexer.INSERT,
-            PayloadBuilderQueryLexer.INTO,
-            PayloadBuilderQueryLexer.IS,
-            PayloadBuilderQueryLexer.JOIN,
-            PayloadBuilderQueryLexer.LAST,
-            PayloadBuilderQueryLexer.LEFT,
-            PayloadBuilderQueryLexer.LIKE,
-            PayloadBuilderQueryLexer.NOT,
-            PayloadBuilderQueryLexer.NULL,
-            PayloadBuilderQueryLexer.NULLS,
-            PayloadBuilderQueryLexer.ON,
-            PayloadBuilderQueryLexer.OR,
-            PayloadBuilderQueryLexer.ORDER,
-            PayloadBuilderQueryLexer.OUTER,
-            PayloadBuilderQueryLexer.POPULATE,
-            PayloadBuilderQueryLexer.PRINT,
-            PayloadBuilderQueryLexer.REMOVE,
-            PayloadBuilderQueryLexer.RIGHT,
-            PayloadBuilderQueryLexer.SELECT,
-            PayloadBuilderQueryLexer.SET,
-            PayloadBuilderQueryLexer.SHOW,
-            PayloadBuilderQueryLexer.THEN,
-            PayloadBuilderQueryLexer.TIME,
-            PayloadBuilderQueryLexer.TOP,
-            PayloadBuilderQueryLexer.USE,
-            PayloadBuilderQueryLexer.VARIABLES,
-            PayloadBuilderQueryLexer.WHEN,
-            PayloadBuilderQueryLexer.WITH,
-            PayloadBuilderQueryLexer.WHERE,
-            PayloadBuilderQueryLexer.ZONE);
-    //@formatter:on
-    private static final Set<Integer> PREFERRED_RULES = asSet(PayloadBuilderQueryParser.RULE_tableSource, PayloadBuilderQueryParser.RULE_expression);
+    private static final Set<Integer> PREFERRED_RULES = asSet(PayloadBuilderQueryParser.RULE_tableSource, PayloadBuilderQueryParser.RULE_primary);
     private final QuerySession session;
     private PayloadBuilderQueryParser parser;
     private QueryContext queryContext;
@@ -193,6 +132,13 @@ class PLBParser extends AbstractParser implements DocumentListener
         long start = System.currentTimeMillis();
         try
         {
+            String text = doc.getText(0, doc.getLength());
+            if (isBlank(text))
+            {
+                result.setParseTime(System.currentTimeMillis() - start);
+                return;
+            }
+
             CharStream charStream = CharStreams.fromString(doc.getText(0, doc.getLength()));
             PayloadBuilderQueryLexer lexer = new PayloadBuilderQueryLexer(charStream);
             lexer.removeErrorListeners();
@@ -234,19 +180,21 @@ class PLBParser extends AbstractParser implements DocumentListener
                         return null;
                     }
 
-                    if (!(ctx.expression() instanceof PrimaryExpressionContext))
+                    ParseTree current = ctx.expression();
+
+                    while (current != null
+                            && !(current instanceof LiteralExpressionContext))
+                    {
+                        current = current.getChildCount() > 0 ? current.getChild(0)
+                                : null;
+                    }
+
+                    if (current == null)
                     {
                         return null;
                     }
 
-                    PrimaryContext primary = ((PrimaryExpressionContext) ctx.expression()).primary();
-
-                    if (!(primary instanceof LiteralExpressionContext))
-                    {
-                        return null;
-                    }
-
-                    LiteralContext literal = ((LiteralExpressionContext) primary).literal();
+                    LiteralContext literal = ((LiteralExpressionContext) current).literal();
 
                     QualifiedName qname = QueryParser.getQualifiedName(ctx.qname());
                     String catalogAlias = qname.getFirst();
@@ -260,8 +208,13 @@ class PLBParser extends AbstractParser implements DocumentListener
                 }
 
                 @Override
-                public Void visitComparisonExpression(ComparisonExpressionContext ctx)
+                public Void visitExpr_compare(Expr_compareContext ctx)
                 {
+                    if (ctx.right == null)
+                    {
+                        return null;
+                    }
+
                     String left = ctx.left.getText();
                     String right = ctx.right.getText();
 
@@ -283,7 +236,7 @@ class PLBParser extends AbstractParser implements DocumentListener
 
                     if (noticeText != null)
                     {
-                        DefaultParserNotice notice = new DefaultParserNotice(result.getParser(), "Same expression on both sides", ctx.start.getLine() - 1, startIndex, length);
+                        DefaultParserNotice notice = new DefaultParserNotice(result.getParser(), noticeText, ctx.start.getLine() - 1, startIndex, length);
                         notice.setLevel(Level.WARNING);
                         notice.setColor(Color.BLUE);
                         result.addNotice(notice);
@@ -296,8 +249,10 @@ class PLBParser extends AbstractParser implements DocumentListener
 
             core = new CodeCompletionCore(parser, PREFERRED_RULES, Set.of());
         }
-        catch (BadLocationException e)
+        catch (Exception e)
         {
+            core = null;
+            queryContext = null;
             result.setError(e);
         }
         finally
@@ -322,15 +277,46 @@ class PLBParser extends AbstractParser implements DocumentListener
         {
             return Candidates.EMPTY;
         }
-        CandidatesCollection c3Candiates = core.collectCandidates(tokenOffset.suggestTokenIndex, null);
+
+        ParserRuleContext context = null;
+        if (result.getNotices()
+                .stream()
+                .anyMatch(n -> n.getLevel() == Level.ERROR))
+        {
+            ParseTree tree = tokenOffset.tree;
+            // Pick the previous node if we are at eof
+            if (tree instanceof TerminalNode
+                    && ((TerminalNode) tree).getSymbol()
+                            .getType() == PayloadBuilderQueryLexer.EOF)
+            {
+                tree = tokenOffset.prevTree;
+            }
+            context = closesParentRule(tree);
+        }
+
+        CandidatesCollection c3Candiates = core.collectCandidates(tokenOffset.suggestTokenIndex, context);
         return new Candidates(tokenOffset.tree, c3Candiates, tokenOffset.textToMatch, tokenOffset.skipRules);
+    }
+
+    ParserRuleContext closesParentRule(ParseTree t)
+    {
+        while (t != null)
+        {
+            if (t instanceof ParserRuleContext
+                    && (PREFERRED_RULES.contains(((ParserRuleContext) t).getRuleIndex())))
+            {
+                return (ParserRuleContext) t;
+            }
+
+            t = t.getParent();
+        }
+
+        return null;
     }
 
     /** Find table sources from provided tree */
     Map<String, TableSource> findTableSources(ParseTree tree)
     {
-        // TOOD: Find all USE statements and populate properties to be able to let catalogs collect correctly
-
         // First find statement root
         ParseTree current = tree;
         while (!(current instanceof StatementContext))
@@ -397,7 +383,7 @@ class PLBParser extends AbstractParser implements DocumentListener
                         tokenIndex++;
                     }
 
-                    return new TokenOffset(tokenIndex, skipRules, node, textToMatch);
+                    return new TokenOffset(tokenIndex, skipRules, node, prev, textToMatch);
                 }
                 // We passed the offset which means caret is at a hidden channel token
                 // Find that token in the input stream
@@ -421,7 +407,7 @@ class PLBParser extends AbstractParser implements DocumentListener
                         skipRules = true;
                     }
 
-                    return new TokenOffset(tokenIndex, skipRules, node, "");
+                    return new TokenOffset(tokenIndex, skipRules, node, prev, "");
                 }
 
                 prev = node;
@@ -564,13 +550,13 @@ class PLBParser extends AbstractParser implements DocumentListener
                 || NON_RESERVED_TOKENS.contains(token.getType());
     }
 
-    private record TokenOffset(int suggestTokenIndex, boolean skipRules, ParseTree tree, String textToMatch)
+    private record TokenOffset(int suggestTokenIndex, boolean skipRules, ParseTree tree, ParseTree prevTree, String textToMatch)
     {
     }
 
     record Candidates(ParseTree tree, CandidatesCollection collection, String textToMatch, boolean skipRules)
     {
-        static final Candidates EMPTY = new Candidates(null, new CandidatesCollection(), "", true);
+        static final Candidates EMPTY = new Candidates(null, new CodeCompletionCore.CandidatesCollection(), "", true);
     }
 
     record TableSource(String catalogAlias, QualifiedName qname, boolean isFunction)

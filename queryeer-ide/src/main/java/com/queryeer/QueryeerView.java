@@ -133,7 +133,7 @@ class QueryeerView extends JFrame
         labelCaret = new JLabel("", SwingConstants.CENTER);
         labelCaret.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
         labelCaret.setPreferredSize(new Dimension(100, 20));
-        labelCaret.setToolTipText("Caret position (Line, column, position)");
+        labelCaret.setToolTipText("Caret Position (Line, Column, Offset)");
         labelVersion = new JLabel();
         labelTasks = new JLabel();
         labelTasks.setMaximumSize(new Dimension(16, 16));
@@ -142,7 +142,7 @@ class QueryeerView extends JFrame
         // CSON
         JPanel panelTasks = new JPanel();
         panelTasks.setLayout(new BoxLayout(panelTasks, BoxLayout.X_AXIS));
-        panelTasks.setToolTipText("Click to see tasks");
+        panelTasks.setToolTipText("Click To See Tasks");
         panelTasks.addMouseListener(new MouseAdapter()
         {
             @Override
