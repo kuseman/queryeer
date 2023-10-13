@@ -2,6 +2,10 @@ CHANGELOG
 
 Queryeer
 
+v1.0.2
+fix: Adapt code complete to payloadbuilder parse rewrite
+fix: Bump payloadbuilder
+
 v1.0.0
 feat: Bumping Payloadbuilder to v1.0.0
 feat: Auto completions framework for Catalog extensions. Added support for ES and JDBC
@@ -33,6 +37,9 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.0.2
+feat: Re-wrote expression part in grammar to remove left recursive parts to avoid to deep ast:s
 
 v1.0.0
 fix: Guard against NPE when comparing QualifiedName's
