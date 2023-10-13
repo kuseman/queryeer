@@ -18,6 +18,8 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.event.AncestorEvent;
+import javax.swing.event.AncestorListener;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
@@ -283,6 +285,26 @@ class CryptoService implements ICryptoService, IConfigurable
         JLabel label = new JLabel(passwordLabel);
         label.setAlignmentX(0.0f);
         JPasswordField pass = new JPasswordField(10);
+        pass.addAncestorListener(new AncestorListener()
+        {
+            @Override
+            public void ancestorRemoved(AncestorEvent event)
+            {
+            }
+
+            @Override
+            public void ancestorMoved(AncestorEvent event)
+            {
+            }
+
+            @Override
+            public void ancestorAdded(AncestorEvent event)
+            {
+                JComponent component = event.getComponent();
+                component.requestFocusInWindow();
+                component.removeAncestorListener(this);
+            }
+        });
         pass.setAlignmentX(0.0f);
         panel.add(label);
         panel.add(pass);

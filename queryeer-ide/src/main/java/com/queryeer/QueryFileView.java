@@ -50,6 +50,7 @@ import org.fife.rsta.ui.search.FindDialog;
 import org.fife.rsta.ui.search.ReplaceDialog;
 import org.fife.rsta.ui.search.SearchEvent;
 import org.fife.rsta.ui.search.SearchListener;
+import org.fife.ui.rsyntaxtextarea.ErrorStrip;
 import org.fife.ui.rsyntaxtextarea.SquiggleUnderlineHighlightPainter;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rsyntaxtextarea.TextEditorPane;
@@ -161,16 +162,26 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
         textEditor.getActionMap()
                 .put(GOTO, showGotoLineAction);
 
-        RTextScrollPane sp = new RTextScrollPane(textEditor);
+        RTextScrollPane sp = new RTextScrollPane(textEditor, true);
         textEditor.getDocument()
                 .addDocumentListener(new ADocumentListenerAdapter()
                 {
                     @Override
                     protected void update()
                     {
-                        if (!suppressDocumentUpdateEvent)
+                        if (suppressDocumentUpdateEvent)
+                        {
+                            return;
+                        }
+
+                        suppressDocumentUpdateEvent = true;
+                        try
                         {
                             file.setQuery(textEditor.getText());
+                        }
+                        finally
+                        {
+                            suppressDocumentUpdateEvent = false;
                         }
                     }
                 });
@@ -215,12 +226,17 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
             outputComponentChanged();
         }
 
+        ErrorStrip errorStrip = new ErrorStrip(textEditor);
+        JPanel editorPanel = new JPanel(new BorderLayout());
+        editorPanel.add(sp);
+        editorPanel.add(errorStrip, BorderLayout.LINE_END);
+
         resultTabs.addChangeListener(l -> outputComponentChanged());
 
         splitPane = new JSplitPane();
         splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
         splitPane.setDividerLocation(400);
-        splitPane.setLeftComponent(sp);
+        splitPane.setLeftComponent(editorPanel);
         splitPane.setRightComponent(tabPanel);
         add(splitPane, BorderLayout.CENTER);
 
@@ -787,10 +803,21 @@ class QueryFileView extends JPanel implements IQueryFile, SearchListener
             }
             else if (QueryFileModel.QUERY.equals(evt.getPropertyName()))
             {
-                // Turn off document change listener while we change enditor content
+                if (suppressDocumentUpdateEvent)
+                {
+                    return;
+                }
+
                 suppressDocumentUpdateEvent = true;
-                textEditor.setText(file.getQuery(false));
-                suppressDocumentUpdateEvent = false;
+                try
+                {
+                    textEditor.setText(file.getQuery(false));
+                }
+                finally
+                {
+                    suppressDocumentUpdateEvent = false;
+                }
+
             }
         }
     }

@@ -3,12 +3,14 @@ package com.queryeer.completion;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
 
+import org.apache.commons.io.IOUtils;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -21,6 +23,45 @@ import se.kuseman.payloadbuilder.core.parser.PayloadBuilderQueryParser;
 /** Test of {@link PLBParser} */
 public class PLBParserTest
 {
+    @Test
+    public void test_regression_in_c3_where_suggests_would_hang_becuase_of_large_parse_tree() throws Exception
+    {
+        String query = IOUtils.toString(PLBParserTest.class.getResourceAsStream("/com/queryeer/completion/query_with_many_and_clauses.plbsql"), StandardCharsets.UTF_8);
+
+        PLBParser parser = new PLBParser(new QuerySession(new CatalogRegistry()));
+        Document doc = Mockito.mock(Document.class);
+        Element elm = Mockito.mock(Element.class);
+        when(doc.getDefaultRootElement()).thenReturn(elm);
+        when(doc.getText(Mockito.anyInt(), Mockito.anyInt())).thenReturn(query);
+
+        Candidates suggestions;
+
+        // After "and " line 28
+        suggestions = parser.getSuggestions(doc, 614);
+        assertEquals("", suggestions.textToMatch());
+        assertEquals(false, suggestions.skipRules());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
+
+        // After "and log.logger" line 54
+        suggestions = parser.getSuggestions(doc, 1057);
+        assertEquals("log.logger", suggestions.textToMatch());
+        assertEquals(false, suggestions.skipRules());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
+
+        // After "._doc" line 25
+        suggestions = parser.getSuggestions(doc, 597);
+        assertEquals("._doc", suggestions.textToMatch());
+        assertEquals(false, suggestions.skipRules());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_tableSource), suggestions.collection().rules.keySet());
+
+        // NOTE! Broken because we land on EOF and because of earlier parse errors we cannot match anything
+        // After "and " before EOF line 71
+        // suggestions = parser.getSuggestions(doc, 1400);
+        // assertEquals("", suggestions.textToMatch());
+        // assertEquals(false, suggestions.skipRules());
+        // assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
+    }
+
     @Test
     public void test_tablesource() throws BadLocationException
     {
@@ -106,7 +147,7 @@ public class PLBParserTest
         suggestions = suggestions("select * from tableA where ", 27);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'by'
         suggestions = suggestions("select * from tableA order by ", 28);
@@ -121,7 +162,7 @@ public class PLBParserTest
         suggestions = suggestions("select * from tableA order by ", 30);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'by'
         suggestions = suggestions("select * from tableA group by ", 29);
@@ -132,7 +173,7 @@ public class PLBParserTest
         suggestions = suggestions("select * from tableA group by ", 30);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'having'
         suggestions = suggestions("select * from tableA having ", 27);
@@ -143,13 +184,13 @@ public class PLBParserTest
         suggestions = suggestions("select * from tableA having ", 28);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // EOF
         suggestions = suggestions("select * from tableA where ", 27);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'e' in table
         suggestions = suggestions("select * from tableA where ", 20);
@@ -167,19 +208,19 @@ public class PLBParserTest
         suggestions = suggestions("select *, ", 9);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After ', '
         suggestions = suggestions("select *, ", 10);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After ','
         suggestions = suggestions("select *, from tableA", 9);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
     }
 
     @Test
@@ -201,7 +242,7 @@ public class PLBParserTest
         suggestions = suggestions("select ", 7);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 't'
         suggestions = suggestions("select col ", 6);
@@ -212,7 +253,7 @@ public class PLBParserTest
         suggestions = suggestions("select col ", 7);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // On a new line between 'select' and 'col'
         suggestions = suggestions("""
@@ -224,7 +265,7 @@ public class PLBParserTest
                 """, 8);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // On a new line after 'col'
         suggestions = suggestions("""
@@ -239,25 +280,25 @@ public class PLBParserTest
                 """, 14);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // Between 'o' and 'l'
         suggestions = suggestions("select col ", 9);
         assertEquals("co", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'col'
         suggestions = suggestions("select col ", 10);
         assertEquals("col", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // EOF
         suggestions = suggestions("select col ", 11);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // DOT
 
@@ -265,25 +306,25 @@ public class PLBParserTest
         suggestions = suggestions("select p. ", 7);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // Between 'p' and '.'
         suggestions = suggestions("select p. ", 8);
         assertEquals("p", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'p.'
         suggestions = suggestions("select p. ", 9);
         assertEquals("p.", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // EOF
         suggestions = suggestions("select p. ", 10);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // HASH
 
@@ -291,25 +332,25 @@ public class PLBParserTest
         suggestions = suggestions("select p# ", 7);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // Between 'p' and '#'
         suggestions = suggestions("select p# ", 8);
         assertEquals("p", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // After 'p.'
         suggestions = suggestions("select p# ", 9);
         assertEquals("p#", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
 
         // EOF
         suggestions = suggestions("select p# ", 10);
         assertEquals("", suggestions.textToMatch());
         assertEquals(false, suggestions.skipRules());
-        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_expression), suggestions.collection().rules.keySet());
+        assertEquals(Set.of(PayloadBuilderQueryParser.RULE_primary), suggestions.collection().rules.keySet());
     }
 
     private Candidates suggestions(String query, int offset) throws BadLocationException

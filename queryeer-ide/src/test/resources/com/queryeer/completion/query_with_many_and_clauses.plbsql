@@ -1,0 +1,71 @@
+--describe
+select
+  cast("@timestamp", 'datetime')  timestamp
+, item.instanceName
+, host.name                       host
+, application
+, environment
+, deploy
+, log.level
+, message
+, error.stack_trace
+, http.response.body.content      bodyContent
+, log.logger
+, item."group"
+, item.httpPathGeneric
+-- Request columns, mostly visible on INFO-logs
+, item.responseTime
+, item.totalTimeInES
+, item.totalTimeInSQL
+, url.original                    url
+, http.request.id                 correlationId
+, http.response.status_code       status
+
+, "@timestamp",*
+from es#"https://elk:9200"."filebeat-*"._doc
+where true
+
+and 
+
+and application not in (
+  'app8_1'
+, 'app8_2'
+, 'app8_3'
+, 'app8_4'
+, 'app9_1'
+, 'app9_2'
+, 'app9_3'
+, 'app9_4'
+)
+
+-- Filter on specific environments
+and environment in (
+    'Prod'
+)
+
+-- Filter on various properites
+and not regexp_like(message, 'A HTTP call to')
+and log.logger != 'value1'
+and log.logger != 'value2'
+and log.logger != 'value3'
+and log.logger != 'value4'
+and log.logger != 'value5'
+and log.logger != 'value6'
+and log.logger != 'value7'
+and log.logger != 'value8'
+and log.logger != 'value9'
+and log.logger != 'value10'
+and log.logger != 'value11'
+and log.logger != 'value12'
+and item."group" != 'Deprecation'
+
+
+-- Filter on log level
+and log.level IN (
+'ERROR'
+,'WARN'
+)
+--
+and item.instanceName = 'instance'
+and "@timestamp" > dateadd('hour', -12, getutcdate())
+and 
