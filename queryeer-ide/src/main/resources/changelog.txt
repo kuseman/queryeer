@@ -2,6 +2,10 @@ CHANGELOG
 
 Queryeer
 
+v1.0.3
+fix: Select table cell when right click to bring up context menu to avoid that wrong value is used in actions
+chore: Bump payloadbuilder
+
 v1.0.2
 fix: Adapt code complete to payloadbuilder parse rewrite
 fix: Bump payloadbuilder
@@ -37,6 +41,9 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.0.3
+fix(ESCatalog): Batch fetching of mappings to avoid memory problems with large aliases (#47)
 
 v1.0.2
 feat: Re-wrote expression part in grammar to remove left recursive parts to avoid to deep ast:s
