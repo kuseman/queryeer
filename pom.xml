@@ -2,7 +2,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.queryeer</groupId>
     <artifactId>queryeer</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Queryeer</name>
     <description>Query IDE based on Payloadbuilder</description>
@@ -57,7 +57,7 @@
         <url>https://github.com/kuseman/queryeer</url>
         <connection>scm:git:git@github.com:kuseman/queryeer.git</connection>
         <developerConnection>scm:git:git@github.com:kuseman/queryeer.git</developerConnection>
-        <tag>v1.0.3</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <licenses>
