@@ -32,6 +32,8 @@ import javax.swing.JTable;
 import javax.swing.JViewport;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TableModelEvent;
 
 import org.apache.commons.lang3.StringUtils;
@@ -283,6 +285,45 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         table.setRowSelectionInterval(row, row);
                     }
                 }
+            }
+        });
+
+        // Add listener that sets the value for where the popup was triggered
+        table.tablePopupMenu.addPopupMenuListener(new PopupMenuListener()
+        {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e)
+            {
+                SwingUtilities.invokeLater(new Runnable()
+                {
+                    @Override
+                    public void run()
+                    {
+                        Point point = SwingUtilities.convertPoint(table.tablePopupMenu, new Point(0, 0), table);
+                        int row = table.rowAtPoint(point);
+                        int col = table.columnAtPoint(point);
+
+                        if (row >= 0
+                                && col >= 0)
+                        {
+                            lastClickedCell.value = table.getValueAt(row, col);
+                            lastClickedCell.header = table.getColumnName(col);
+
+                            table.setRowSelectionInterval(row, row);
+                            table.setColumnSelectionInterval(col, col);
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e)
+            {
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e)
+            {
             }
         });
 
