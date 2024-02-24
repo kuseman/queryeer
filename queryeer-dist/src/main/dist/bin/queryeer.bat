@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 SET SCRIPT_DIR=%~dp0
 SET "APP_HOME=%SCRIPT_DIR%.."
 SET "LIB_DIR=%APP_HOME%\lib"
-#SET "ETC_DIR=%APP_HOME%\.queryeer"
+REM SET "ETC_DIR=%APP_HOME%\.queryeer"
 SET "PLUGINS_DIR=%APP_HOME%\plugins"
 SET "SHARED_DIR=%APP_HOME%\shared"
 

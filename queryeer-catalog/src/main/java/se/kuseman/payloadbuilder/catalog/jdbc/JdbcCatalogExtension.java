@@ -203,7 +203,6 @@ class JdbcCatalogExtension implements ICatalogExtension
         if (connection != null)
         {
             connection.setup(session, catalogAlias);
-            session.setCatalogProperty(catalogAlias, JdbcCatalog.SCHEMA, (String) null);
             session.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, (String) null);
         }
     }
@@ -219,14 +218,7 @@ class JdbcCatalogExtension implements ICatalogExtension
         if (connection != null
                 && !isBlank(database))
         {
-            if (connection.isUsesSchemas())
-            {
-                session.setCatalogProperty(catalogAlias, JdbcCatalog.SCHEMA, database);
-            }
-            else
-            {
-                session.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, database);
-            }
+            session.setCatalogProperty(catalogAlias, JdbcCatalog.DATABASE, database);
         }
     }
 

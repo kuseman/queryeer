@@ -20,7 +20,7 @@
         <mockito-core.version>4.3.1</mockito-core.version>
         <slf4j.version>1.7.30</slf4j.version>
         <spotless.version>2.39.0</spotless.version>
-        <payloadbuilder.version>1.0.3</payloadbuilder.version>
+        <payloadbuilder.version>1.0.4</payloadbuilder.version>
     </properties>
 
     <issueManagement>
@@ -49,6 +49,17 @@
             </releases>
             <snapshots>
                 <enabled>true</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>sonatype.releases</id>
+            <name>Sonatype Relase Repository</name>
+            <url>https://s01.oss.sonatype.org/content/repositories/releases</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
             </snapshots>
         </repository>
     </repositories>

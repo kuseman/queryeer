@@ -2,7 +2,6 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
-import static org.apache.commons.lang3.StringUtils.defaultString;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.io.IOException;
@@ -23,6 +22,8 @@ import se.kuseman.payloadbuilder.api.QualifiedName;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsModel.Connection;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.SqlDialect;
 
 import schemacrawler.inclusionrule.RegularExpressionInclusionRule;
 import schemacrawler.schema.Catalog;
@@ -63,10 +64,8 @@ class JdbcCompletionProvider implements ICompletionProvider
                 .valueAsString(0);
         String database = session.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
-        String schema = session.getCatalogProperty(catalogAlias, JdbcCatalog.SCHEMA)
-                .valueAsString(0);
 
-        return new TableCacheKey(url, schema, database);
+        return new TableCacheKey(url, database);
     }
 
     @Override
@@ -74,16 +73,14 @@ class JdbcCompletionProvider implements ICompletionProvider
     {
         String database = session.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
-        String schema = session.getCatalogProperty(catalogAlias, JdbcCatalog.SCHEMA)
-                .valueAsString(0);
 
         Connection connection = model.findConnection(session, catalogAlias);
         if (connection != null)
         {
-            return connection.getName() + "#" + defaultString(database, schema);
+            return connection.getName() + "#" + database;
         }
 
-        return JdbcCatalogExtension.TITLE + "#" + defaultString(database, schema);
+        return JdbcCatalogExtension.TITLE + "#" + database;
     }
 
     @Override
@@ -95,8 +92,6 @@ class JdbcCompletionProvider implements ICompletionProvider
                 .valueAsString(0);
         String database = session.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
-        String schema = session.getCatalogProperty(catalogAlias, JdbcCatalog.SCHEMA)
-                .valueAsString(0);
         String username = session.getCatalogProperty(catalogAlias, JdbcCatalog.USERNAME)
                 .valueAsString(0);
         Object password = session.getCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD)
@@ -104,8 +99,7 @@ class JdbcCompletionProvider implements ICompletionProvider
 
         return !(isBlank(url)
                 || isBlank(driverClassName)
-                || (isBlank(database)
-                        && isBlank(schema))
+                || isBlank(database)
                 || isBlank(username)
                 || password == null);
     }
@@ -115,8 +109,6 @@ class JdbcCompletionProvider implements ICompletionProvider
     {
         String database = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
-        String schema = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.SCHEMA)
-                .valueAsString(0);
         String url = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.URL)
                 .valueAsString(0);
         final String username = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.USERNAME)
@@ -125,18 +117,22 @@ class JdbcCompletionProvider implements ICompletionProvider
 
         try
         {
+            SqlDialect dialect = DialectProvider.getDialect(url, password);
+
             DatabaseConnectorRegistry registry = DatabaseConnectorRegistry.getDatabaseConnectorRegistry();
             DatabaseConnector dbConnector = registry.findDatabaseConnectorFromUrl(url);
 
             LimitOptionsBuilder limitOptionsBuilder = LimitOptionsBuilder.builder();
-            if (!isBlank(database))
-            {
-                limitOptionsBuilder.includeSchemas(new RegularExpressionInclusionRule(database + ".*"));
-            }
-            if (!isBlank(schema))
+
+            if (dialect.usesSchemaAsDatabase())
             {
                 // For schemas we don't wildcard search we want only the provided schema
-                limitOptionsBuilder.includeSchemas(new RegularExpressionInclusionRule(schema));
+                limitOptionsBuilder.includeSchemas(new RegularExpressionInclusionRule(database));
+            }
+            else
+            {
+                limitOptionsBuilder.includeSchemas(new RegularExpressionInclusionRule(database + ".*"));
+                url += ";databaseName=${database}";
             }
 
             SchemaCrawlerOptions crawlOptions = SchemaCrawlerOptionsBuilder.newSchemaCrawlerOptions()
@@ -144,11 +140,6 @@ class JdbcCompletionProvider implements ICompletionProvider
                     .withLoadOptions(LoadOptionsBuilder.builder()
                             .withInfoLevel(getInfoLevel(dbConnector))
                             .toOptions());
-
-            if (!isBlank(database))
-            {
-                url += ";databaseName=${database}";
-            }
 
             DatabaseConnectionSource ds = DatabaseConnectionSourceBuilder.builder(url)
                     .withDatabase(database)
@@ -184,7 +175,7 @@ class JdbcCompletionProvider implements ICompletionProvider
         }
     }
 
-    record TableCacheKey(String url, String schema, String database)
+    record TableCacheKey(String url, String database)
     {
     }
 
