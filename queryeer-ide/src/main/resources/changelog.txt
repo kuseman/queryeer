@@ -2,6 +2,10 @@ CHANGELOG
 
 Queryeer
 
+v1.0.4
+feat: Add Catalog extension for Payloadbuilder Http Catalog
+chore: Bump payloadbuilder
+
 v1.0.3
 fix: Select table cell when right click to bring up context menu to avoid that wrong value is used in actions
 chore: Bump payloadbuilder
@@ -41,6 +45,14 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.0.4
+feat: Add HTTP catalog that can be used to call HTTP endpoints and turn those into table sources
+    This catalog supports indexed access via table hints which specifies query patterns with placeholder
+    fields that acts as predicated columns
+fix: Don't push where predicates down to left joined table sources
+feat: Add support for sql dialects in jdbc-catalog
+fix(ESCatalog): Fix issue where meta could not be extracted due to no aliases
 
 v1.0.3
 fix(ESCatalog): Batch fetching of mappings to avoid memory problems with large aliases (#47)
