@@ -32,6 +32,8 @@ import io.github.classgraph.ScanResult;
 class ServiceLoader
 {
     private final Map<Class<?>, ServiceRegistration> services = new HashMap<>();
+    private final Map<Class<?>, Object> resolvedInstances = new HashMap<>();
+
     private PluginHandler pluginHandler;
 
     ServiceLoader()
@@ -152,6 +154,8 @@ class ServiceLoader
             this.dependenceis = null;
             this.contructor = null;
             this.instance = instance;
+
+            resolvedInstances.put(instance.getClass(), instance);
         }
 
         ServiceType(Class<?> type)
@@ -166,6 +170,13 @@ class ServiceLoader
         {
             if (instance == null)
             {
+                // First check if this type is already resolved
+                instance = resolvedInstances.get(type);
+                if (instance != null)
+                {
+                    return instance;
+                }
+
                 Object[] args = new Object[dependenceis.size()];
                 for (int i = 0; i < dependenceis.size(); i++)
                 {
@@ -195,6 +206,7 @@ class ServiceLoader
                 {
                     contructor.setAccessible(true);
                     instance = contructor.newInstance(args);
+                    resolvedInstances.put(type, instance);
                 }
                 catch (InstantiationException | IllegalAccessException | IllegalArgumentException | InvocationTargetException e)
                 {

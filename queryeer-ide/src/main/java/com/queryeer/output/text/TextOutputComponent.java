@@ -27,9 +27,14 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.IQueryFile;
-import com.queryeer.api.TextSelection;
+import com.queryeer.api.editor.IEditor;
+import com.queryeer.api.editor.ITextEditor;
+import com.queryeer.api.editor.TextSelection;
+import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IQueryFileProvider;
+
+import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
@@ -87,6 +92,18 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         warning.addAttribute(WARNING_LOCATION, textSelection);
 
         appendText(text + System.lineSeparator(), warning);
+    }
+
+    @Override
+    public OutputWriter createOutputWriter(IQueryFile queryFile)
+    {
+        IOutputFormatExtension outputFormat = queryFile.getOutputFormat();
+        if (outputFormat == null)
+        {
+            throw new IllegalArgumentException("No output format selected");
+        }
+
+        return outputFormat.createOutputWriter(queryFile, queryFile.getMessagesWriter());
     }
 
     private PrintWriter createPrintWriter()
@@ -167,7 +184,11 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                         IQueryFile currentFile = queryFileProvider.getCurrentFile();
                         if (currentFile != null)
                         {
-                            currentFile.select(warningLocation);
+                            IEditor editor = currentFile.getEditor();
+                            if (editor instanceof ITextEditor)
+                            {
+                                ((ITextEditor) editor).select(warningLocation);
+                            }
                         }
                     }
                 }

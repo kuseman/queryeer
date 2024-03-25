@@ -43,6 +43,7 @@ class CsvFormat implements IOutputFormatExtension
     static class CsvTextOutputWriter extends CsvOutputWriter
     {
         private final IQueryFile file;
+        private boolean header;
 
         CsvTextOutputWriter(Writer writer, IQueryFile file, CsvSettings settings)
         {
@@ -51,10 +52,21 @@ class CsvFormat implements IOutputFormatExtension
         }
 
         @Override
+        public void initResult(String[] columns)
+        {
+            header = true;
+            super.initResult(columns);
+            header = false;
+        }
+
+        @Override
         public void endRow()
         {
             super.endRow();
-            file.incrementTotalRowCount();
+            if (!header)
+            {
+                file.incrementTotalRowCount();
+            }
         }
     }
 }
