@@ -4,3 +4,5 @@
 *.java   text diff=java
 *.html   text diff=html
 *.sql    text
+
+queryeer-ide/src/test/resources/com/queryeer/completion/query_with_many_and_clauses.plbsql eol=lf

@@ -19,5 +19,5 @@ public interface ITableContextMenuActionFactory extends IExtension
      *
      * @return Created actions or null if no actions is available for provided component
      */
-    List<IExtensionAction> create(ITableOutputComponent outputcomponent);
+    List<ITableContextMenuAction> create(ITableOutputComponent outputcomponent);
 }

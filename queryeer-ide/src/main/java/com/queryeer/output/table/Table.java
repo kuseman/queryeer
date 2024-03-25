@@ -15,7 +15,10 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
+import javax.swing.table.JTableHeader;
 import javax.swing.table.TableColumn;
+
+import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 
 /** The table component representing a result set */
 class Table extends JTable
@@ -25,11 +28,14 @@ class Table extends JTable
     final JPopupMenu tablePopupMenu = new JPopupMenu();
     final AtomicBoolean columnsAdjusted = new AtomicBoolean();
 
-    Table()
+    Table(List<ITableContextMenuAction> actions)
     {
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setCellSelectionEnabled(true);
-        setDefaultRenderer(Object.class, new CellRenderer());
+        CellRenderer cellRenderer = new CellRenderer(actions);
+        setDefaultRenderer(Object.class, cellRenderer);
+        addMouseListener(cellRenderer);
+        addMouseMotionListener(cellRenderer);
 
         getTableHeader().addMouseListener(new MouseAdapter()
         {
@@ -97,8 +103,12 @@ class Table extends JTable
                 continue;
             }
             TableColumn column = getColumnModel().getColumn(i);
-            getTableHeader().setResizingColumn(column);
-            column.setWidth(adjustedWidths.get(i));
+            JTableHeader header = getTableHeader();
+            if (header != null)
+            {
+                header.setResizingColumn(column);
+                column.setWidth(adjustedWidths.get(i));
+            }
         }
     }
 

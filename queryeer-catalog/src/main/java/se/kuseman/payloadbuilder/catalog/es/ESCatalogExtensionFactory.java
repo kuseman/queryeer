@@ -19,8 +19,8 @@ class ESCatalogExtensionFactory implements ICatalogExtensionFactory
     ESCatalogExtensionFactory(IQueryFileProvider queryFileProvider, IEventBus eventBus, ESConnectionsModel connectionsModel, IIconFactory iconFactory)
     {
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
-        this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.eventBus = requireNonNull(eventBus, "eventBus");
+        this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.iconFactory = requireNonNull(iconFactory, "iconFactory");
     }
 

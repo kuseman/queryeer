@@ -20,10 +20,12 @@ import java.util.regex.Pattern;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
@@ -46,6 +48,7 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
 import com.queryeer.api.extensions.IExtensionAction;
+import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.dialog.ValueDialog;
@@ -60,7 +63,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private final TableClickedCell lastClickedCell = new TableClickedCell();
     private final TableFindDialog findDialog;
 
-    private List<Action> contextMenuActions;
+    private List<ITableContextMenuAction> contextMenuActions;
 
     TableOutputComponent(List<ITableContextMenuActionFactory> contextMenuActionFactories)
     {
@@ -162,6 +165,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                                 table.scrollRectToVisible(new Rectangle(table.getCellRect(row, col, true)));
                                 return;
                             }
+                            startCol = 0;
                         }
                     }
 
@@ -178,6 +182,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     }
                 }
 
+                JOptionPane.showMessageDialog(this, "No more hits", "Search", JOptionPane.INFORMATION_MESSAGE);
                 break;
         }
     }
@@ -203,8 +208,18 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     @Override
     public void clearState()
     {
-        removeAll();
+        // Clear reference to any table
+        findDialog.currentTable = null;
+
+        // Remove listeners
+        for (JTable table : tables)
+        {
+            table.setTableHeader(null);
+            Model model = (Model) table.getModel();
+            model.removeTableModelListener(table);
+        }
         tables.clear();
+        removeAll();
         repaint();
     }
 
@@ -239,6 +254,21 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         return StringUtils.containsIgnoreCase(value, context.getSearchFor());
     }
 
+    private ITableContextMenuAction getAction(Object value)
+    {
+        int actionsSize = contextMenuActions.size();
+        for (int i = 0; i < actionsSize; i++)
+        {
+            ITableContextMenuAction action = contextMenuActions.get(i);
+            if (action.supportsLinks()
+                    && action.showLink(value))
+            {
+                return action;
+            }
+        }
+        return null;
+    }
+
     private Table createTable()
     {
         if (contextMenuActions == null)
@@ -247,14 +277,13 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     .flatMap(f -> f.create(this)
                             .stream())
                     .sorted(Comparator.comparing(IExtensionAction::order))
-                    .map(IExtensionAction::getAction)
                     .collect(toList());
         }
 
-        Table table = new Table();
-        for (Action action : contextMenuActions)
+        Table table = new Table(contextMenuActions);
+        for (ITableContextMenuAction action : contextMenuActions)
         {
-            table.tablePopupMenu.add(action);
+            table.tablePopupMenu.add(action.getAction());
         }
 
         table.addMouseListener(new MouseAdapter()
@@ -266,7 +295,8 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 int row = table.rowAtPoint(point);
                 int col = table.columnAtPoint(point);
 
-                lastClickedCell.value = table.getValueAt(row, col);
+                Object value = table.getValueAt(row, col);
+                lastClickedCell.value = value;
                 lastClickedCell.header = table.getColumnName(col);
 
                 if (e.getClickCount() == 2
@@ -274,7 +304,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 {
                     if (row >= 0)
                     {
-                        ValueDialog.showValueDialog("Value viewer - " + table.getColumnName(col), lastClickedCell.value, ValueDialog.Format.UNKOWN);
+                        ITableContextMenuAction action = getAction(value);
+                        // Don't trigger link actions on double click
+                        if (action == null)
+                        {
+                            ValueDialog.showValueDialog("Value viewer - " + table.getColumnName(col), lastClickedCell.value, ValueDialog.Format.UNKOWN);
+                        }
                     }
                 }
                 else if (e.getClickCount() == 1
@@ -283,6 +318,16 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     if (col == 0)
                     {
                         table.setRowSelectionInterval(row, row);
+                    }
+                    else
+                    {
+                        // Single click then see if there are any link actions for current value
+                        ITableContextMenuAction action = getAction(value);
+                        if (action != null)
+                        {
+                            action.getAction()
+                                    .actionPerformed(new ActionEvent(table, -1, ""));
+                        }
                     }
                 }
             }
@@ -391,6 +436,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             else if (i == 1)
             {
                 JSplitPane sp = new JSplitPane();
+                sp.setBorder(BorderFactory.createEmptyBorder());
                 sp.setOrientation(JSplitPane.VERTICAL_SPLIT);
                 sp.setLeftComponent(new JScrollPane(parent));
                 // Adjust prev tables height
@@ -409,12 +455,15 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 Component rc = prevSp.getRightComponent();
 
                 JSplitPane sp = new JSplitPane();
+                sp.setBorder(BorderFactory.createEmptyBorder());
                 sp.setOrientation(JSplitPane.VERTICAL_SPLIT);
 
                 // Adjust prev tables height
                 if (rc instanceof JScrollPane)
                 {
-                    sp.setLeftComponent(new JScrollPane(prevTable));
+                    JScrollPane scrollPane = new JScrollPane(prevTable);
+                    scrollPane.setBorder(BorderFactory.createEmptyBorder());
+                    sp.setLeftComponent(scrollPane);
                     sp.getLeftComponent()
                             .setPreferredSize(new Dimension(0, prevTableHeight));
                 }
@@ -424,7 +473,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                             .setPreferredSize(new Dimension(0, prevTableHeight));
                     sp.setLeftComponent(rc);
                 }
-                sp.setRightComponent(new JScrollPane(table));
+                JScrollPane scrollPane = new JScrollPane(table);
+                scrollPane.setBorder(BorderFactory.createEmptyBorder());
+                sp.setRightComponent(scrollPane);
                 sp.getRightComponent()
                         .setPreferredSize(new Dimension(0, tablHeight));
 
