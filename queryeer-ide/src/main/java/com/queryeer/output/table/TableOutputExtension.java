@@ -18,7 +18,7 @@ import se.kuseman.payloadbuilder.api.OutputWriter;
 /** The main table output extension */
 class TableOutputExtension implements IOutputExtension
 {
-    private List<ITableContextMenuActionFactory> contextMenuActionFactories;
+    private final List<ITableContextMenuActionFactory> contextMenuActionFactories;
 
     TableOutputExtension(List<ITableContextMenuActionFactory> contextMenuActionFactories)
     {

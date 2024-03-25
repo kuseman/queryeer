@@ -277,8 +277,17 @@ class JdbcCatalogExtension implements ICatalogExtension
 
         SwingUtilities.invokeLater(() ->
         {
-            propertiesComponent.connections.setSelectedItem(connectionToSelect.getValue());
-            propertiesComponent.databases.setSelectedItem(databaseToSelect.getValue());
+            propertiesComponent.suppressEvents = true;
+            try
+            {
+                propertiesComponent.connections.setSelectedItem(connectionToSelect.getValue());
+                propertiesComponent.populateDatabases(connectionToSelect.getValue());
+                propertiesComponent.databases.setSelectedItem(databaseToSelect.getValue());
+            }
+            finally
+            {
+                propertiesComponent.suppressEvents = false;
+            }
         });
     }
 
@@ -294,6 +303,7 @@ class JdbcCatalogExtension implements ICatalogExtension
         private final DefaultComboBoxModel<String> databasesModel = new DefaultComboBoxModel<>();
         private final JButton reload;
         private final JLabel authStatus;
+        private boolean suppressEvents = false;
 
         PropertiesComponent()
         {
@@ -324,22 +334,40 @@ class JdbcCatalogExtension implements ICatalogExtension
 
             connections.addItemListener(l ->
             {
-                JdbcConnectionsModel.Connection connection = (JdbcConnectionsModel.Connection) connections.getSelectedItem();
-                if (connection != null)
+                if (suppressEvents)
                 {
-                    // Prepare connection silent
-                    connectionsModel.prepare(connection, true);
-                    setupConnection(connection);
-                    reload(connection, true);
-                    populateDatabases(connection);
+                    return;
                 }
-                updateAuthStatus(connection);
+
+                suppressEvents = true;
+                try
+                {
+                    JdbcConnectionsModel.Connection connection = (JdbcConnectionsModel.Connection) connections.getSelectedItem();
+                    if (connection != null)
+                    {
+                        // Prepare connection silent
+                        connectionsModel.prepare(connection, true);
+                        setupConnection(connection);
+                        reload(connection, true);
+                        populateDatabases(connection);
+                    }
+                    updateAuthStatus(connection);
+                }
+                finally
+                {
+                    suppressEvents = false;
+                }
             });
 
             AutoCompletionComboBox.enable(databases);
             databases.setPrototypeDisplayValue(PROTOTYPE_CATALOG);
             databases.addItemListener(l ->
             {
+                if (suppressEvents)
+                {
+                    return;
+                }
+
                 setupDatabase((JdbcConnectionsModel.Connection) connections.getSelectedItem(), (String) databases.getSelectedItem());
             });
             // CSOFF

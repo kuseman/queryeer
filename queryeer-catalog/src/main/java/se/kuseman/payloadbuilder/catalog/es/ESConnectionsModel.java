@@ -4,7 +4,6 @@ import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
-import static org.apache.commons.lang3.StringUtils.defaultString;
 import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
@@ -591,7 +590,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         @Override
         public String toString()
         {
-            return defaultString(name, endpoint);
+            return Objects.toString(name, endpoint);
         }
 
         @Override

@@ -26,6 +26,7 @@ public class PLBParserTest
     @Test
     public void test_regression_in_c3_where_suggests_would_hang_becuase_of_large_parse_tree() throws Exception
     {
+        // NOTE! Important that this file has UNIX LF line endings
         String query = IOUtils.toString(PLBParserTest.class.getResourceAsStream("/com/queryeer/completion/query_with_many_and_clauses.plbsql"), StandardCharsets.UTF_8);
 
         PLBParser parser = new PLBParser(new QuerySession(new CatalogRegistry()));

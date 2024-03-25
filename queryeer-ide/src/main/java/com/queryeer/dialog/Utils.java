@@ -67,6 +67,19 @@ class Utils
     {
         try
         {
+            // See if the input value is a JSON string already
+            if (value instanceof String)
+            {
+                try
+                {
+                    Object v = READER.readValue((String) value);
+                    value = v;
+                }
+                catch (IOException e)
+                {
+                }
+            }
+
             return Utils.WRITER.writeValueAsString(value);
         }
         catch (JsonProcessingException e)

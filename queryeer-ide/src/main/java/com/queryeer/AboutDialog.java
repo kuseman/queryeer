@@ -1,7 +1,5 @@
 package com.queryeer;
 
-import static org.apache.commons.lang3.StringUtils.defaultString;
-
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -11,6 +9,7 @@ import java.awt.Insets;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -160,10 +159,10 @@ class AboutDialog extends JDialog
         StringBuilder sb = new StringBuilder();
         sb.append("Queryeer IDE\n\n");
 
-        sb.append("Queryeer Version: " + defaultString(AboutDialog.class.getPackage()
+        sb.append("Queryeer Version: " + Objects.toString(AboutDialog.class.getPackage()
                 .getImplementationVersion(), "Dev"));
         sb.append("\n");
-        sb.append("Payloadbuilder Version: " + defaultString(Payloadbuilder.class.getPackage()
+        sb.append("Payloadbuilder Version: " + Objects.toString(Payloadbuilder.class.getPackage()
                 .getImplementationVersion(), "Dev"));
         sb.append("\n\n");
         sb.append("(C) Copyright Marcus Henriksson 2022");
