@@ -107,6 +107,11 @@ class Config implements IConfig
         }
     }
 
+    void removeRecentFile(String file)
+    {
+        recentFiles.remove(file);
+    }
+
     /** Save config to disk */
     void save()
     {

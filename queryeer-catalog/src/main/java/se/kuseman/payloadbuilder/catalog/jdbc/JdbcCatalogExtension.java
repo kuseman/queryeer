@@ -479,6 +479,11 @@ class JdbcCatalogExtension implements ICatalogExtension
         private void populateDatabases(JdbcConnectionsModel.Connection connection)
         {
             databasesModel.removeAllElements();
+            if (connection == null
+                    || connection.getDatabases() == null)
+            {
+                return;
+            }
             for (String database : connection.getDatabases())
             {
                 databasesModel.addElement(database);

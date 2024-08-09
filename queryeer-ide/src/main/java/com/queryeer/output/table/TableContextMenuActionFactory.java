@@ -2,6 +2,7 @@ package com.queryeer.output.table;
 
 import static java.util.Arrays.asList;
 
+import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.event.ActionEvent;
 import java.net.URI;
@@ -58,7 +59,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 {
                     ClickedCell lastClickedCell = outputcomponent.getLastClickedCell();
                     Object value = lastClickedCell.getValue();
-                    ValueDialog.showValueDialog("Json viewer - " + lastClickedCell.getColumnHeader(), value, ValueDialog.Format.JSON);
+                    ValueDialog.showValueDialog((Component) e.getSource(), "Json viewer - " + lastClickedCell.getColumnHeader(), value, ValueDialog.Format.JSON);
                 }
             };
         }
@@ -118,7 +119,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 {
                     ClickedCell lastClickedCell = outputcomponent.getLastClickedCell();
                     Object value = lastClickedCell.getValue();
-                    ValueDialog.showValueDialog("XML viewer - " + lastClickedCell.getColumnHeader(), value, ValueDialog.Format.XML);
+                    ValueDialog.showValueDialog((Component) e.getSource(), "XML viewer - " + lastClickedCell.getColumnHeader(), value, ValueDialog.Format.XML);
                 }
             };
         }
@@ -190,8 +191,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         @Override
         public boolean showLink(Object value)
         {
-            return value instanceof String str
-                    && StringUtils.startsWithIgnoreCase(str, "http");
+            if (value instanceof String str)
+            {
+                return StringUtils.startsWithIgnoreCase(str, "http://")
+                        || StringUtils.startsWithIgnoreCase(str, "https://");
+            }
+            return false;
         }
     }
 }

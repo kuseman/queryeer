@@ -75,7 +75,18 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         inputMap.put(findKeyStroke, FIND);
         getActionMap().put(FIND, showFindDialogAction);
 
-        findDialog = new TableFindDialog();
+        findDialog = new TableFindDialog()
+        {
+            @Override
+            public void setVisible(boolean b)
+            {
+                if (b)
+                {
+                    setLocationRelativeTo(getParent());
+                }
+                super.setVisible(b);
+            }
+        };
     }
 
     private final Action showFindDialogAction = new AbstractAction()
@@ -136,7 +147,6 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 {
                     int startRow = findDialog.currentRow;
                     int startCol = findDialog.currentCol;
-
                     for (int i = tableIndex; i < tables.size(); i++)
                     {
                         Table table = tables.get(i);
@@ -218,6 +228,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             Model model = (Model) table.getModel();
             model.removeTableModelListener(table);
         }
+
         tables.clear();
         removeAll();
         repaint();
@@ -308,7 +319,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         // Don't trigger link actions on double click
                         if (action == null)
                         {
-                            ValueDialog.showValueDialog("Value viewer - " + table.getColumnName(col), lastClickedCell.value, ValueDialog.Format.UNKOWN);
+                            ValueDialog.showValueDialog(TableOutputComponent.this, "Value viewer - " + table.getColumnName(col), lastClickedCell.value, ValueDialog.Format.UNKOWN);
                         }
                     }
                 }
@@ -542,6 +553,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             wholeWordCheckBox.setEnabled(false);
             upButton.setEnabled(false);
             downButton.setEnabled(false);
+            setLocationRelativeTo(getParent());
         }
 
         void incrementSearchState()
@@ -590,6 +602,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     }
                 }
             }
+
             super.setVisible(visible);
         }
     }

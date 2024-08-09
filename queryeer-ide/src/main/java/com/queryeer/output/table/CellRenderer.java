@@ -17,6 +17,7 @@ import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
 
 import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 
@@ -82,7 +83,14 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
                 && this.col == column
                 && this.isRollover)
         {
-            setText("<html><u><font color='blue'>" + StringEscapeUtils.escapeHtml4(value.toString()));
+            String str = value.toString();
+            // To avoid to large html strings abbreviate the string before underline
+            if (str.length() > 170)
+            {
+                str = StringUtils.abbreviate(str, 170);
+            }
+
+            setText("<html><u><font color='blue'>" + StringEscapeUtils.escapeHtml4(str));
         }
         else if (value != null)
         {
@@ -174,6 +182,7 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
             col = -1;
             isRollover = false;
         }
+        table.setCursor(DEFAULT_CURSOR);
     }
 
     @Override

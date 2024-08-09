@@ -165,7 +165,7 @@ class AboutDialog extends JDialog
         sb.append("Payloadbuilder Version: " + Objects.toString(Payloadbuilder.class.getPackage()
                 .getImplementationVersion(), "Dev"));
         sb.append("\n\n");
-        sb.append("(C) Copyright Marcus Henriksson 2022");
+        sb.append("(C) Copyright Marcus Henriksson 2024");
 
         return sb.toString();
     }

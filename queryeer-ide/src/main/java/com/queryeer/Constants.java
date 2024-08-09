@@ -19,7 +19,7 @@ import org.kordamp.ikonli.swing.FontIcon;
 /** Icons in Queryeer */
 public interface Constants
 {
-    public static final Dimension DEFAULT_DIALOG_SIZE = new Dimension(800, 600);
+    public static final Dimension DEFAULT_DIALOG_SIZE = new Dimension(1000, 800);
     public static final Icon CHECK_CIRCLE_ICON = FontIcon.of(FontAwesome.CHECK_CIRCLE);
     public static final Icon PLAY_ICON = FontIcon.of(FontAwesome.PLAY);
     public static final Icon CLOSE_ICON = FontIcon.of(FontAwesome.CLOSE);

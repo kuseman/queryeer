@@ -21,7 +21,6 @@ import javax.swing.Action;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
-import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -47,7 +46,7 @@ import com.queryeer.event.TaskCompletedEvent;
 import com.queryeer.event.TaskStartedEvent;
 
 /** Tasks dialog */
-class TasksDialog extends JDialog
+class TasksDialog extends JFrame
 {
     private static final Icon CHECK_CIRCLE = FontIcon.of(FontAwesome.CHECK_CIRCLE);
     private static final Icon EXCLAMATION_CIRCLE = FontIcon.of(FontAwesome.EXCLAMATION_CIRCLE);
@@ -60,12 +59,23 @@ class TasksDialog extends JDialog
 
     TasksDialog(JFrame parent, IEventBus eventBus, Consumer<Boolean> tasksRunningConsumer)
     {
+        super("Tasks");
         this.tasksRunningConsumer = tasksRunningConsumer;
         initDialog();
         eventBus.register(this);
         // NOTE! after init dialog
         this.timer = new Timer(150, timerListener);
         this.timer.stop();
+    }
+
+    @Override
+    public void setVisible(boolean b)
+    {
+        if (b)
+        {
+            setLocationRelativeTo(getParent());
+        }
+        super.setVisible(b);
     }
 
     private void initDialog()
@@ -92,7 +102,7 @@ class TasksDialog extends JDialog
                     if (col == TasksTableModel.STATUS_COLUMN_INDEX)
                     {
                         TaskRow taskRow = tasksTableModel.tasks.get(row);
-                        ValueDialog.showValueDialog("Task status - " + taskRow.task.getName(), tasksTable.getValueAt(row, col), ValueDialog.Format.UNKOWN);
+                        ValueDialog.showValueDialog(TasksDialog.this, "Task status - " + taskRow.task.getName(), tasksTable.getValueAt(row, col), ValueDialog.Format.UNKOWN);
                     }
                 }
             }

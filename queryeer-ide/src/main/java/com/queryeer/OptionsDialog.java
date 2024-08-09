@@ -252,8 +252,8 @@ class OptionsDialog extends JDialog
         if (node.configComponent == null)
         {
             // Load component and set up listeners
-            node.configComponent = new JScrollPane(node.getConfigurable()
-                    .getComponent());
+            node.configComponent = node.getConfigurable()
+                    .getComponent();
             node.getConfigurable()
                     .addDirtyStateConsumer(dirty ->
                     {
@@ -265,7 +265,7 @@ class OptionsDialog extends JDialog
         }
 
         configComponentPanel.removeAll();
-        configComponentPanel.add(node.configComponent);
+        configComponentPanel.add(node.configComponent, BorderLayout.CENTER);
         configComponentPanel.revalidate();
         configComponentPanel.repaint();
     }

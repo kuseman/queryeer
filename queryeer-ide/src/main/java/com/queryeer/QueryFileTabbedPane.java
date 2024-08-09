@@ -136,7 +136,7 @@ class QueryFileTabbedPane extends JTabbedPane
     /** View for tab header component */
     private class QueryFileTabComponent extends TabComponent implements PropertyChangeListener
     {
-        private QueryFileModel file;
+        private final QueryFileModel file;
 
         QueryFileTabComponent(QueryFileModel file, Runnable closeAction)
         {

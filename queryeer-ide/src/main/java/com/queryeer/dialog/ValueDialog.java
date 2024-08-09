@@ -1,5 +1,6 @@
 package com.queryeer.dialog;
 
+import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -24,7 +25,7 @@ import com.queryeer.Constants;
 public final class ValueDialog
 {
     /** Show a value dialog with provided title value and format */
-    public static void showValueDialog(String title, Object val, Format format)
+    public static void showValueDialog(Component parent, String title, Object val, Format format)
     {
         Object value = val;
         switch (format)
@@ -39,10 +40,10 @@ public final class ValueDialog
                 break;
         }
 
-        showValueDialog(title, value, format.syntax);
+        showValueDialog(parent, title, value, format.syntax);
     }
 
-    private static void showValueDialog(String title, Object val, String preferredSyntax)
+    private static void showValueDialog(Component parent, String title, Object val, String preferredSyntax)
     {
         Object value = val;
         if (value == null)
@@ -65,6 +66,8 @@ public final class ValueDialog
         JFrame frame = new JFrame(title);
         frame.setIconImages(Constants.APPLICATION_ICONS);
         RSyntaxTextArea rta = new RSyntaxTextArea();
+        rta.setCodeFoldingEnabled(true);
+        rta.setBracketMatchingEnabled(true);
         // CSOFF
         rta.setColumns(80);
         rta.setRows(40);
@@ -74,8 +77,6 @@ public final class ValueDialog
         {
             // Always use json for map/collection types
             rta.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_JSON);
-            rta.setCodeFoldingEnabled(true);
-            rta.setBracketMatchingEnabled(true);
             rta.setText(Utils.formatJson(value));
         }
         else
@@ -83,12 +84,12 @@ public final class ValueDialog
             rta.setSyntaxEditingStyle(preferredSyntax);
             rta.setText(String.valueOf(value));
         }
+
         rta.setCaretPosition(0);
         rta.setEditable(false);
         RTextScrollPane sp = new RTextScrollPane(rta);
         frame.getContentPane()
                 .add(sp);
-        frame.setSize(Constants.DEFAULT_DIALOG_SIZE);
         frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         // Close dialog on escape
         frame.getRootPane()
@@ -100,6 +101,12 @@ public final class ValueDialog
                         frame.setVisible(false);
                     }
                 }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
+        frame.pack();
+        if (parent != null)
+        {
+            frame.setLocationRelativeTo(parent);
+        }
+        frame.setSize(Constants.DEFAULT_DIALOG_SIZE);
         frame.setVisible(true);
     }
 
