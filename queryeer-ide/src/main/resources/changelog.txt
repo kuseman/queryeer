@@ -2,6 +2,14 @@ CHANGELOG
 
 Queryeer
 
+v1.0.5
+feat: Bump payloadbuilder
+feat: Add a logs dialog to be able to view logs from core and extensions etc.
+fix: Misc stability fixes
+feat: Add hyperlinks on values in table when context menu actions can handle those
+fix: Fix issue with find dialog in table that didn't search correctly
+fix: Fix issue in JDBC catalog where connections/database settings wasn't re-setted when swithing tabs
+
 v1.0.4
 feat: Add Catalog extension for Payloadbuilder Http Catalog
 chore: Bump payloadbuilder
@@ -45,6 +53,32 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.0.5
+feat: Add a unique id to TableSourceReference to be able to have multiple joined data sources with the same actual table
+fix: Fix issue with implicit casting from Any (Int/Long) to Boolean
+fix: Lower allocations i NestedLoop by only creating loop row and cartesian columns when needed
+fix: Avoid using tuplevector builder when we only have one resulting row in a loop and instead create a literal tuple vector with one row
+fix: Changed to mutable structs in NestedLoop's hot code path to avoid excessive allocations of anonymous class instances
+fix: Added constants for various literal ValueVector's to avoid excessive allocations
+feat: Add support for provide a schema compile time for a table variable. This avoids a performance hit runtime when columns are looked up.
+feat: Add support for writing to outputstream in JsonOutputWriter to enable writing raw utf8 bytes from UTF8String's, this enables for writing strings without materializing java.lang.String's out of UTF8String's.
+fix: Change to a BufferedInputStream in function FilesystemCatalog#contents
+fix: Fix issue where UTF8Strings couldn't reflectivly (Any) be conveted to EpochDateTime(offset)
+fix: Fix issue where predicates wasn't pushed down to table functions
+fix: Fix issue where order by column could not be bound due to not checking aliases but only column names when adding internal projections
+fix(payloadbuilder-bytes): Remove validation errors when types mismatch and instead re-create the schema according to payload and have one external and one internal schema. This to be able to change/re-use old non used column slots in the payload.
+fix: Fix issue where we couldn't push down a sort/projection expression into a computed projection
+fix: Performance fixes in ExpressionMath to avoid allocations when comparing known stuff fix: Optimizations in ObjectBufferVectorBuilder to intern objects and transforming all strings to UFT8String fix: Re-implemented group by to a much more memory efficient structure     This made it possible to run the #1brc in PLB :). Completed at 0:05:42 with a couple of 100 Mb heap
+feat: Add TVF openjson, opencsv, openxml that streams input and batches tuplevectors
+feat: Changed HTTP catalog to redirect responses to these functions instead of implementing their own parsing
+fix: Move missing write methods into OutputWriter to be able to override in writers.
+fix: Use bytes version of UTF8String for literals to avoid creating strings when doing comparisions etc. This is a performance fix for catalogs that is optimized and uses only bytes strings aswell. This might harm catalogs that don't uses bytes strings but that should be ok.
+feat(HttpCatalog): Add support for JsonResponsePath option to be able to dig into a certain path in response that a tuplevector should be generated
+fix(JdbcCatalog): Add housekeeping thread that closes inactive jdbc datasources
+Resolve table options
+feat: Add support for having a table variable as a table source
+fix: Correct JDK version in README
 
 v1.0.4
 feat: Add HTTP catalog that can be used to call HTTP endpoints and turn those into table sources
