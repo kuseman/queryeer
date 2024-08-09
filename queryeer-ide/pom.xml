@@ -17,7 +17,7 @@
         <slf4j-reload4j.version>1.7.36</slf4j-reload4j.version>
         <ikonli-fontawesome-pack.version>2.4.0</ikonli-fontawesome-pack.version>
         <ikonli-swing.version>2.4.0</ikonli-swing.version>
-        <rsyntaxtextarea.version>3.3.3</rsyntaxtextarea.version>
+        <rsyntaxtextarea.version>3.4.0</rsyntaxtextarea.version>
         <autocomplete.version>3.3.1</autocomplete.version>
         <rstaui.version>3.3.1</rstaui.version>
         <jasypt.version>1.9.3</jasypt.version>

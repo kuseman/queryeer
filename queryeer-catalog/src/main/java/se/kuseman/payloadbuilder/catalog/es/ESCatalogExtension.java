@@ -344,7 +344,11 @@ class ESCatalogExtension implements ICatalogExtension
             {
                 if (!suppressSetupIndex)
                 {
-                    setupIndex((Index) quickPropertiesPanel.indices.getSelectedItem());
+                    Object item = quickPropertiesPanel.indices.getSelectedItem();
+                    if (item instanceof Index)
+                    {
+                        setupIndex((Index) item);
+                    }
                 }
             });
 

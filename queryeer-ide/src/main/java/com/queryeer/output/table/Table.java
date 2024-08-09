@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.BorderFactory;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.table.JTableHeader;
@@ -30,6 +31,7 @@ class Table extends JTable
 
     Table(List<ITableContextMenuAction> actions)
     {
+        setBorder(BorderFactory.createEmptyBorder());
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setCellSelectionEnabled(true);
         CellRenderer cellRenderer = new CellRenderer(actions);

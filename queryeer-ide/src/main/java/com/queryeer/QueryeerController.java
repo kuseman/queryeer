@@ -24,6 +24,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -357,7 +358,16 @@ class QueryeerController implements PropertyChangeListener
             return;
         }
 
-        newQueryAction(new File(file));
+        File recentFile = new File(file);
+        if (!recentFile.exists())
+        {
+            JOptionPane.showMessageDialog(view, "'" + recentFile.getAbsolutePath() + "' does not exists!", "File Not Found", JOptionPane.INFORMATION_MESSAGE);
+            config.removeRecentFile(file);
+            saveConfig();
+            return;
+        }
+
+        newQueryAction(recentFile);
         config.appendRecentFile(file);
         saveConfig();
     }
@@ -542,6 +552,7 @@ class QueryeerController implements PropertyChangeListener
             {
                 if (!model.select(selectedFile.getAbsolutePath()))
                 {
+                    selectedFile = new File(StringUtils.trim(selectedFile.getAbsolutePath()));
                     newQueryAction(selectedFile);
                     config.appendRecentFile(selectedFile.getAbsolutePath());
                     saveConfig = true;

@@ -1,5 +1,7 @@
 package com.queryeer;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -92,6 +94,7 @@ class QueryeerView extends JFrame
     private int prevCatalogsDividerLocation;
     private final QueryFileTabbedPane tabbedPane;
     private final TasksDialog tasksDialog;
+    private final LogsDialog logsDialog;
 
     // CSOFF
     QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, IEventBus eventBus, List<IOutputExtension> outputExtensions, List<IOutputFormatExtension> outputFormatExtensions)
@@ -100,7 +103,7 @@ class QueryeerView extends JFrame
         setLocationRelativeTo(null);
         getContentPane().setLayout(new BorderLayout(0, 0));
 
-        this.tabbedPane = tabbedPane;
+        this.tabbedPane = requireNonNull(tabbedPane, "tabbedPane");
 
         List<IOutputExtension> actualOutputExtensions = new ArrayList<>(outputExtensions);
         List<IOutputFormatExtension> actualOutputFormatExtensions = new ArrayList<>(outputFormatExtensions);
@@ -139,16 +142,43 @@ class QueryeerView extends JFrame
         labelTasks.setMaximumSize(new Dimension(16, 16));
         labelTasks.setIcon(TASKS_ICON);
 
+        JLabel labelLogs = new JLabel(FontIcon.of(FontAwesome.FILE_TEXT_O));
+        labelLogs.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
+        labelLogs.setToolTipText("Logs");
+        labelLogs.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseClicked(MouseEvent e)
+            {
+                if (logsDialog.getExtendedState() == JFrame.ICONIFIED)
+                {
+                    logsDialog.setExtendedState(JFrame.NORMAL);
+                }
+                else if (logsDialog.isShowing())
+                {
+                    logsDialog.toFront();
+                }
+                else
+                {
+                    logsDialog.setVisible(true);
+                }
+            }
+        });
+
         // CSON
         JPanel panelTasks = new JPanel();
         panelTasks.setLayout(new BoxLayout(panelTasks, BoxLayout.X_AXIS));
-        panelTasks.setToolTipText("Click To See Tasks");
+        panelTasks.setToolTipText("Tasks");
         panelTasks.addMouseListener(new MouseAdapter()
         {
             @Override
             public void mouseClicked(MouseEvent e)
             {
-                if (tasksDialog.isShowing())
+                if (tasksDialog.getExtendedState() == JFrame.ICONIFIED)
+                {
+                    tasksDialog.setExtendedState(JFrame.NORMAL);
+                }
+                else if (tasksDialog.isShowing())
                 {
                     tasksDialog.toFront();
                 }
@@ -168,6 +198,7 @@ class QueryeerView extends JFrame
 
         panelTasks.add(labelTasksSpinner);
 
+        panelStatus.add(labelLogs);
         panelStatus.add(panelTasks);
         panelStatus.add(labelMemory);
         panelStatus.add(labelCaret);
@@ -280,29 +311,29 @@ class QueryeerView extends JFrame
                 .put(TOGGLE_COMMENT, toggleCommentAction);
 
         JButton newQueryButton = new JButton(newQueryAction);
-        newQueryButton.setText("New query");
-        newQueryButton.setToolTipText("Open new query window (" + getAcceleratorText(newQueryKeyStroke) + ")");
+        newQueryButton.setText("New Query");
+        newQueryButton.setToolTipText("Open New Query Window (" + getAcceleratorText(newQueryKeyStroke) + ")");
 
         JButton executeButton = new JButton(executeAction);
         executeButton.setText("Execute");
-        executeButton.setToolTipText("Execute query (" + getAcceleratorText(executeKeyStroke) + ")");
+        executeButton.setToolTipText("Execute Query (" + getAcceleratorText(executeKeyStroke) + ")");
 
         toolBar.add(openAction)
-                .setToolTipText("Open file (" + getAcceleratorText(openItem.getAccelerator()) + ")");
+                .setToolTipText("Open File (" + getAcceleratorText(openItem.getAccelerator()) + ")");
         toolBar.add(saveAction)
-                .setToolTipText("Save current file (" + getAcceleratorText(saveItem.getAccelerator()) + ")");
+                .setToolTipText("Save Current File (" + getAcceleratorText(saveItem.getAccelerator()) + ")");
         toolBar.addSeparator();
         toolBar.add(newQueryButton);
         toolBar.add(executeButton);
         toolBar.add(cancelAction)
-                .setToolTipText("Cancel query (" + getAcceleratorText(stopKeyStroke) + ")");
+                .setToolTipText("Cancel Query (" + getAcceleratorText(stopKeyStroke) + ")");
         toolBar.addSeparator();
         toolBar.add(toggleCatalogsAction)
-                .setToolTipText("Toggle catalogs pane");
+                .setToolTipText("Toggle Quick Properties Panel");
         toolBar.add(toggleResultAction)
-                .setToolTipText("Toggle result pane (" + getAcceleratorText(toggleResultKeyStroke) + ")");
+                .setToolTipText("Toggle Result Panel (" + getAcceleratorText(toggleResultKeyStroke) + ")");
         toolBar.add(toggleCommentAction)
-                .setToolTipText("Toggle comment on selected lines (" + getAcceleratorText(toggleCommentKeyStroke) + ")");
+                .setToolTipText("Toggle Comment On Selected Lines (" + getAcceleratorText(toggleCommentKeyStroke) + ")");
 
         comboOutput = new JComboBox<>();
         comboOutput.setRenderer(new DefaultListCellRenderer()
@@ -400,6 +431,7 @@ class QueryeerView extends JFrame
         });
 
         tasksDialog = new TasksDialog(this, eventBus, running -> labelTasksSpinner.setVisible(running));
+        logsDialog = new LogsDialog(this);
 
         eventBus.register(this);
         bindOutputExtensions(outputExtensions);

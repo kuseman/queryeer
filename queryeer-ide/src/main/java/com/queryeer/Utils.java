@@ -101,7 +101,7 @@ final class Utils
         }
         catch (Exception e)
         {
-            System.err.println("Error fetching latest tags");
+            System.err.println("Error fetching latest tags: " + e.getMessage());
         }
         finally
         {

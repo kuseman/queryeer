@@ -19,9 +19,11 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.CountingOutputStream;
 
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.TextSelection;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
@@ -117,6 +119,11 @@ class FileOutputExtension implements IOutputExtension
         }
         catch (IOException e)
         {
+            file.getOutputComponent(ITextOutputComponent.class)
+                    .appendWarning(e.getMessage(), TextSelection.EMPTY);
+            file.getOutputComponent(ITextOutputComponent.class)
+                    .getTextWriter()
+                    .println();
             throw new RuntimeException("Error creating FILE output writer", e);
         }
     }
