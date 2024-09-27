@@ -157,6 +157,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         {
                             for (int col = startCol; col < colCount; col++)
                             {
+                                // Don't search in row number
+                                if (col == 0)
+                                {
+                                    continue;
+                                }
+
                                 Object value = table.getValueAt(row, col);
                                 if (!match(value, context, pattern))
                                 {
@@ -547,12 +553,17 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         {
             super((JFrame) SwingUtilities.getWindowAncestor(TableOutputComponent.this), TableOutputComponent.this);
             setIconImages(Constants.APPLICATION_ICONS);
-            wrapCheckBox.setSelected(true);
+
+            context.setSearchWrap(true);
+            context.setMarkAll(false);
+
             markAllCheckBox.setSelected(false);
             markAllCheckBox.setEnabled(false);
             wholeWordCheckBox.setEnabled(false);
             upButton.setEnabled(false);
             downButton.setEnabled(false);
+
+            refreshUIFromContext();
             setLocationRelativeTo(getParent());
         }
 
