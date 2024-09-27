@@ -2,6 +2,11 @@ CHANGELOG
 
 Queryeer
 
+v1.6.0
+fix: Bump payloadbuilder
+chore: Change version semantics to have revision part free for fixes as it should have been
+fix: Fix issue in find dialog where wrap was checked in UI but not in model
+
 v1.0.5
 feat: Bump payloadbuilder
 feat: Add a logs dialog to be able to view logs from core and extensions etc.
@@ -53,6 +58,40 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.6.0
+build: Don't run sql server 2017 when the container fails to start. Happens somehow in GITHUB actions
+fix: Fixed issues where an aliased column coludn't be referenced when projected multiple times
+fix(ESCatalog): Fix broken render template function ... again
+fix: Listen to query abort signal in hash match operator
+fix(ESCatalog): Fix broken render template function
+feat(ESCatalog): Add support for pushing down null predicates to elastic
+fix: Add datstream support into strategy mechanism to only query data streams when that is actually supported
+fix(ESCatalog): Fetch mappings from datastreams explicitly since those are not exposed via _alias endpoint
+chore: Change version semantics to have revision part free for fixes as it should have been
+build(deps-dev): Bump com.mysql:mysql-connector-j
+fix: Fix issue where a nested sub query expression broke the parent subquery and yielded null as a result
+fix(payloadbuilder-bytes): Add fix when missing array columns when both schema types was equal
+fix: Fix issue where we ended up with a broken tuple vector due to mix of schema columns when having left joins with no matching rows
+fix: Fix issue where outer context got cleared in a outer apply chain ending up with a broken tuple vector that does not match the schema
+fix: Add created column to cached array in ChainedTupleVector
+fix: Fix NPE in RegexpMatchFunction
+fix: Only expand asterisk populated columns when directly aliased
+fix: Avoid copying inner vector in HashMatch when creaitng resulting populated result
+fix: Fix issue when having order bys inside sub query expressions
+feat: Add base64 encode/decode scalar functions
+feat(ESCatalog): Ignore unavailable indices to avoid crashes when there is a closed index among alias/datastream indices
+feat: Add support for utilizing indices for pushdown predicates (atm EQUAL/IN)
+feat: Add string_agg scalar function
+feat: Introduce a MutableValueVector type to replace all previous builders and was used and is much easier to comprehend and use.
+feat: Added a new eval method that takes a selection value vector as input, this to make evaluation must more performant and easier to use. Note that not all expressions has implemented this method here.
+fix: Misc allocation fixes when building result vectors
+fix: Fixed wrong AtTimeZone expression type
+fix: Changed implemenation of CaseExpression to not evaluate expressions for rows that does not need evaluating. This also fixes contract problem where we earlier evaluated else path (or other conditions) for rows that should not get into else.
+fix: Fix issue in function openxml when all values in a column was effectively null
+fix(ESCatalog): Add retry to HttpClient to recover from slow ELK instances
+feat: Implement HashJoin as physical join algorithm
+fix: Remove ColumnReference to make all sourounding code a bit easier. That was a really weird construct when we already has CoreColumn to add extra stuff that didn't belong to standard Column.
 
 v1.0.5
 feat: Add a unique id to TableSourceReference to be able to have multiple joined data sources with the same actual table
