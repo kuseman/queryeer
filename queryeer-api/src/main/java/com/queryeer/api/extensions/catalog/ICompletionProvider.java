@@ -20,6 +20,8 @@ public interface ICompletionProvider
      * what is needed to fetch table meta.
      * For example URL/databasename/username/password etc.
      * </pre>
+     *
+     * @return Returns the cache key or null if this provided doesn't need caching
      */
     Object getTableMetaCacheKey(IQuerySession session, String catalogAlias);
 

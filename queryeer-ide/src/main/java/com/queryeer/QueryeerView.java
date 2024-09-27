@@ -4,23 +4,28 @@ import static java.util.Objects.requireNonNull;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.GridBagLayout;
+import java.awt.KeyboardFocusManager;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
+import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
@@ -37,20 +42,27 @@ import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JSplitPane;
+import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
+import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
 
+import org.apache.commons.lang3.BooleanUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryeerController.ViewAction;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.event.Subscribe;
+import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.service.IEventBus;
@@ -60,19 +72,21 @@ import com.queryeer.event.CaretChangedEvent;
 /** Main view */
 class QueryeerView extends JFrame
 {
-    private static final String TOGGLE_COMMENT = "toggleComment";
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryeerView.class);
+
     private static final String TOGGLE_RESULT = "toggleResult";
-    private static final String TOGGLE_CATALOGS = "toggleCatalogs";
+    private static final String TOGGLE_QUICK_PROPERTIES = "toggleQuickProperties";
     private static final String NEW_QUERY = "NewQuery";
     private static final String EXECUTE = "Execute";
     private static final String STOP = "Stop";
     private static final Icon TASKS_ICON = FontIcon.of(FontAwesome.TASKS);
-    private static final AnimatedIcon SPINNER = new AnimatedIcon(Utils.getResouceIcon("/icons/spinner.gif"));
+    private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
     private final JPanel topPanel;
+    private final InputMap inputMap;
 
     private final JSplitPane splitPane;
-    private final JPanel panelCatalogs;
+    private final JPanel panelQueryEngineProperties;
     private final JPanel panelStatus;
     private final JLabel labelMemory;
     private final JLabel labelCaret;
@@ -80,15 +94,21 @@ class QueryeerView extends JFrame
     private final JLabel labelTasks;
     private final JLabel labelTasksSpinner;
 
+    private final JMenu editMenu;
     private final JMenuItem openItem;
     private final JMenuItem saveItem;
     private final JMenuItem saveAsItem;
     private final JMenuItem exitItem;
     private final JMenu recentFiles;
+
+    private final JToolBar toolBar;
     private final JComboBox<IOutputExtension> comboOutput;
     private final JComboBox<IOutputFormatExtension> comboFormat;
 
+    private boolean suppressChangeEvents = false;
+
     private Consumer<String> openRecentFileConsumer;
+    private Consumer<IQueryEngine> newQueryConsumer;
     private Consumer<ViewAction> actionHandler;
     private boolean catalogsCollapsed;
     private int prevCatalogsDividerLocation;
@@ -96,8 +116,11 @@ class QueryeerView extends JFrame
     private final TasksDialog tasksDialog;
     private final LogsDialog logsDialog;
 
+    private List<AbstractButton> editorToolbarActions = new ArrayList<>();
+    private List<JMenuItem> editorMenuActions = new ArrayList<>();
+
     // CSOFF
-    QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, IEventBus eventBus, List<IOutputExtension> outputExtensions, List<IOutputFormatExtension> outputFormatExtensions)
+    QueryeerView(QueryFileTabbedPane tabbedPane, IEventBus eventBus, List<IOutputExtension> outputExtensions, List<IOutputFormatExtension> outputFormatExtensions, List<IQueryEngine> queryEngines)
     // CSON
     {
         setLocationRelativeTo(null);
@@ -252,53 +275,31 @@ class QueryeerView extends JFrame
         }))
                 .setText("About Queryeer IDE");
 
-        JMenu editMenu = new JMenu("Edit");
-        editMenu.add(new JMenuItem(new AbstractAction("Find ...", Constants.SEARCH)
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                getCurrentFile().showFind();
-            }
-        }));
-        editMenu.add(new JMenuItem(new AbstractAction("Replace ...")
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                getCurrentFile().showReplace();
-            }
-        }));
-        editMenu.add(new JMenuItem(new AbstractAction("GoTo Line ...", Constants.SHARE)
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                getCurrentFile().showGoToLine();
-            }
-        }));
-
+        editMenu = new JMenu("Edit");
         menuBar.add(editMenu);
         menuBar.add(toolsMenu);
         menuBar.add(helpMenu);
 
-        JToolBar toolBar = new JToolBar();
+        toolBar = new JToolBar();
         toolBar.setRollover(true);
         toolBar.setFloatable(false);
         topPanel.add(toolBar, BorderLayout.SOUTH);
 
-        KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK);
+        // CSOFF
+        KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
         KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
-        KeyStroke newQueryKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK);
-        KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK);
-        KeyStroke toggleCommentKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_7, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke newQueryKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_N, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        // CSON
 
-        InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         inputMap.put(executeKeyStroke, EXECUTE);
         inputMap.put(stopKeyStroke, STOP);
         inputMap.put(newQueryKeyStroke, NEW_QUERY);
         inputMap.put(toggleResultKeyStroke, TOGGLE_RESULT);
-        inputMap.put(toggleCommentKeyStroke, TOGGLE_COMMENT);
         topPanel.getActionMap()
                 .put(EXECUTE, executeAction);
         topPanel.getActionMap()
@@ -307,12 +308,39 @@ class QueryeerView extends JFrame
                 .put(NEW_QUERY, newQueryAction);
         topPanel.getActionMap()
                 .put(TOGGLE_RESULT, toggleResultAction);
-        topPanel.getActionMap()
-                .put(TOGGLE_COMMENT, toggleCommentAction);
 
-        JButton newQueryButton = new JButton(newQueryAction);
+        JButton newQueryButton = new JButton();
+        newQueryButton.setIcon(Constants.FILE_TEXT_O);
         newQueryButton.setText("New Query");
         newQueryButton.setToolTipText("Open New Query Window (" + getAcceleratorText(newQueryKeyStroke) + ")");
+
+        final JPopupMenu queryEnginesPopup = new JPopupMenu();
+        for (IQueryEngine qe : queryEngines.stream()
+                .sorted(Comparator.comparingInt(IQueryEngine::order))
+                .toList())
+        {
+            final IQueryEngine queryEngine = qe;
+            queryEnginesPopup.add(new JMenuItem(new AbstractAction(queryEngine.getTitle(), queryEngine.getIcon())
+            {
+                @Override
+                public void actionPerformed(ActionEvent e)
+                {
+                    if (newQueryConsumer != null)
+                    {
+                        newQueryConsumer.accept(queryEngine);
+                    }
+                }
+            }));
+        }
+
+        newQueryButton.addActionListener(new ActionListener()
+        {
+            @Override
+            public void actionPerformed(ActionEvent ev)
+            {
+                queryEnginesPopup.show(newQueryButton, newQueryButton.getBounds().x, newQueryButton.getBounds().y + newQueryButton.getBounds().height);
+            }
+        });
 
         JButton executeButton = new JButton(executeAction);
         executeButton.setText("Execute");
@@ -328,12 +356,10 @@ class QueryeerView extends JFrame
         toolBar.add(cancelAction)
                 .setToolTipText("Cancel Query (" + getAcceleratorText(stopKeyStroke) + ")");
         toolBar.addSeparator();
-        toolBar.add(toggleCatalogsAction)
+        toolBar.add(toggleQuickPropertiesAction)
                 .setToolTipText("Toggle Quick Properties Panel");
         toolBar.add(toggleResultAction)
                 .setToolTipText("Toggle Result Panel (" + getAcceleratorText(toggleResultKeyStroke) + ")");
-        toolBar.add(toggleCommentAction)
-                .setToolTipText("Toggle Comment On Selected Lines (" + getAcceleratorText(toggleCommentKeyStroke) + ")");
 
         comboOutput = new JComboBox<>();
         comboOutput.setRenderer(new DefaultListCellRenderer()
@@ -389,7 +415,14 @@ class QueryeerView extends JFrame
             formatComboModel.addElement(outputFormatExtension);
         }
 
-        comboFormat.addActionListener(l -> actionHandler.accept(ViewAction.FORMAT_CHANGED));
+        comboFormat.addActionListener(l ->
+        {
+            if (suppressChangeEvents)
+            {
+                return;
+            }
+            actionHandler.accept(ViewAction.FORMAT_CHANGED);
+        });
 
         toolBar.addSeparator();
         toolBar.add(new JLabel("Output "));
@@ -404,15 +437,22 @@ class QueryeerView extends JFrame
 
         splitPane.setRightComponent(tabbedPane);
 
-        panelCatalogs = new JPanel();
-        panelCatalogs.setLayout(new GridBagLayout());
-        splitPane.setLeftComponent(new JScrollPane(panelCatalogs));
+        panelQueryEngineProperties = new JPanel();
+        panelQueryEngineProperties.setLayout(new BorderLayout());
+        panelQueryEngineProperties.setBorder(new EmptyBorder(2, 2, 2, 2));
+
+        splitPane.setLeftComponent(new JScrollPane(panelQueryEngineProperties));
 
         setIconImages(Constants.APPLICATION_ICONS);
 
         // Switch formats upon changing output
         comboOutput.addActionListener(l ->
         {
+            if (suppressChangeEvents)
+            {
+                return;
+            }
+
             IOutputExtension extension = (IOutputExtension) comboOutput.getSelectedItem();
             comboFormat.setEnabled(extension.supportsOutputFormats());
             actionHandler.accept(ViewAction.OUTPUT_CHANGED);
@@ -429,6 +469,42 @@ class QueryeerView extends JFrame
                 exitAction.actionPerformed(null);
             }
         });
+
+        KeyboardFocusManager.getCurrentKeyboardFocusManager()
+                .addPropertyChangeListener(new PropertyChangeListener()
+                {
+                    @Override
+                    public void propertyChange(PropertyChangeEvent evt)
+                    {
+                        if ("focusOwner".equalsIgnoreCase(evt.getPropertyName()))
+                        {
+                            // boolean processed = false;
+                            if (evt.getNewValue() instanceof JComponent comp)
+                            {
+                                while (comp != null)
+                                {
+                                    @SuppressWarnings("unchecked")
+                                    List<Action> actions = (List<Action>) comp.getClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS);
+                                    if (actions != null)
+                                    {
+                                        populateActions(actions);
+                                        // processed = true;
+                                        break;
+                                    }
+
+                                    Container parent = comp.getParent();
+                                    comp = parent instanceof JComponent ? (JComponent) parent
+                                            : null;
+                                }
+                            }
+
+                            // if (!processed)
+                            // {
+                            // populateActions(emptyList());
+                            // }
+                        }
+                    }
+                });
 
         tasksDialog = new TasksDialog(this, eventBus, running -> labelTasksSpinner.setVisible(running));
         logsDialog = new LogsDialog(this);
@@ -566,7 +642,7 @@ class QueryeerView extends JFrame
         }
     };
 
-    private final Action toggleCatalogsAction = new AbstractAction(TOGGLE_CATALOGS, Constants.ARROWS_H)
+    private final Action toggleQuickPropertiesAction = new AbstractAction(TOGGLE_QUICK_PROPERTIES, Constants.ARROWS_H)
     {
         @Override
         public void actionPerformed(ActionEvent e)
@@ -586,15 +662,6 @@ class QueryeerView extends JFrame
         }
     };
 
-    private final Action toggleCommentAction = new AbstractAction(TOGGLE_COMMENT, Constants.INDENT)
-    {
-        @Override
-        public void actionPerformed(ActionEvent e)
-        {
-            actionHandler.accept(ViewAction.TOGGLE_COMMENT);
-        }
-    };
-
     private final Action recentFileAction = new AbstractAction()
     {
         @Override
@@ -608,11 +675,6 @@ class QueryeerView extends JFrame
             }
         }
     };
-
-    JPanel getPanelCatalogs()
-    {
-        return panelCatalogs;
-    }
 
     JLabel getMemoryLabel()
     {
@@ -632,6 +694,153 @@ class QueryeerView extends JFrame
     JComboBox<IOutputFormatExtension> getFormatCombo()
     {
         return comboFormat;
+    }
+
+    /** Updates combo boxes etc. to reflect the provided query file view */
+    void updateState(QueryFileView fileView)
+    {
+        QueryFileModel file = fileView.getModel();
+
+        suppressChangeEvents = true;
+        try
+        {
+            comboOutput.setSelectedItem(file.getOutputExtension());
+            comboFormat.setSelectedItem(file.getOutputFormat());
+            setQueryEngineProperties(fileView.getModel()
+                    .getQueryEngine());
+            file.getQueryEngine()
+                    .focus(fileView);
+            fileView.getEditor()
+                    .focused();
+
+            // populateEditorActions(file.getEditor());
+        }
+        finally
+        {
+            suppressChangeEvents = false;
+        }
+    }
+
+    private void populateActions(List<Action> actions)
+    {
+        for (AbstractButton button : editorToolbarActions)
+        {
+            KeyStroke keyStroke = (KeyStroke) button.getAction()
+                    .getValue(Action.ACCELERATOR_KEY);
+
+            // Unbind old accelerators
+            if (keyStroke != null)
+            {
+                String actionCommand = (String) button.getAction()
+                        .getValue(Action.ACTION_COMMAND_KEY);
+                inputMap.remove(keyStroke);
+                topPanel.getActionMap()
+                        .remove(actionCommand);
+            }
+
+            toolBar.remove(button);
+        }
+        for (JMenuItem menuItem : editorMenuActions)
+        {
+            KeyStroke keyStroke = (KeyStroke) menuItem.getAction()
+                    .getValue(Action.ACCELERATOR_KEY);
+
+            // Unbind old accelerators
+            if (keyStroke != null)
+            {
+                String actionCommand = (String) menuItem.getAction()
+                        .getValue(Action.ACTION_COMMAND_KEY);
+                inputMap.remove(keyStroke);
+                topPanel.getActionMap()
+                        .remove(actionCommand);
+            }
+
+            Container parent = menuItem.getParent();
+
+            // Parent is a popup menu and not a JMenu for some reason
+            if (parent instanceof JPopupMenu)
+            {
+                ((JPopupMenu) parent).remove(menuItem);
+            }
+        }
+
+        editorToolbarActions.clear();
+        for (Action action : actions)
+        {
+            Integer order = (Integer) action.getValue(com.queryeer.api.action.Constants.ACTION_ORDER);
+            if (order == null
+                    || order > toolBar.getComponentCount())
+            {
+                order = -1;
+            }
+            KeyStroke keyStroke = (KeyStroke) action.getValue(Action.ACCELERATOR_KEY);
+
+            if (keyStroke != null)
+            {
+                String actionCommand = (String) action.getValue(Action.ACTION_COMMAND_KEY);
+                inputMap.put(keyStroke, actionCommand);
+                topPanel.getActionMap()
+                        .put(actionCommand, action);
+            }
+
+            String shortDescription = (String) action.getValue(Action.SHORT_DESCRIPTION);
+
+            Boolean showInToolBar = (Boolean) action.getValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_TOOLBAR);
+            Boolean showInMenu = (Boolean) action.getValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU);
+            if (BooleanUtils.isTrue(showInToolBar))
+            {
+                AbstractButton actionComponent;
+
+                Boolean toggleButton = (Boolean) action.getValue(com.queryeer.api.action.Constants.ACTION_TOGGLE);
+                if (BooleanUtils.isTrue(toggleButton))
+                {
+                    JToggleButton button = new JToggleButton(action);
+                    button.addActionListener(l -> action.putValue(Action.SELECTED_KEY, button.isSelected()));
+
+                    Boolean selected = (Boolean) action.getValue(Action.SELECTED_KEY);
+                    button.setSelected(BooleanUtils.isTrue(selected));
+
+                    actionComponent = button;
+                }
+                else
+                {
+                    actionComponent = new JButton(action);
+                }
+
+                if (shortDescription != null)
+                {
+                    if (keyStroke != null)
+                    {
+                        shortDescription += " (" + getAcceleratorText(keyStroke) + ")";
+                    }
+                    actionComponent.setToolTipText(shortDescription);
+                }
+
+                toolBar.add(actionComponent, (int) order);
+                editorToolbarActions.add(actionComponent);
+            }
+            if (BooleanUtils.isTrue(showInMenu))
+            {
+                String menu = (String) action.getValue(com.queryeer.api.action.Constants.ACTION_MENU);
+                if (!"Edit".equalsIgnoreCase(menu))
+                {
+                    LOGGER.error("{} is not supported menu for Editor Actions", menu);
+                    continue;
+                }
+
+                JMenuItem menuItem = new JMenuItem(action);
+                editMenu.add(menuItem, (int) order);
+                editorMenuActions.add(menuItem);
+            }
+        }
+    }
+
+    private void setQueryEngineProperties(IQueryEngine queryEngine)
+    {
+        panelQueryEngineProperties.removeAll();
+        panelQueryEngineProperties.add(queryEngine.getQuickPropertiesComponent(), BorderLayout.CENTER);
+        panelQueryEngineProperties.revalidate();
+        panelQueryEngineProperties.repaint();
     }
 
     void setRecentFiles(List<String> recentFiles)
@@ -655,9 +864,13 @@ class QueryeerView extends JFrame
         this.actionHandler = actionHandler;
     }
 
+    void setNewQueryConsumer(Consumer<IQueryEngine> newQueryConsumer)
+    {
+        this.newQueryConsumer = newQueryConsumer;
+    }
+
     QueryFileView getCurrentFile()
     {
         return (QueryFileView) tabbedPane.getSelectedComponent();
     }
-
 }
