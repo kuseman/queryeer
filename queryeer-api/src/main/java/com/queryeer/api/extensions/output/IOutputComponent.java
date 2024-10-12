@@ -4,15 +4,22 @@ import java.awt.Component;
 
 import javax.swing.Icon;
 
-import com.queryeer.api.IQueryFile;
-
-import se.kuseman.payloadbuilder.api.OutputWriter;
-
 /** Definition of an output component */
 public interface IOutputComponent
 {
     /** Title that is shown in result tab component */
     String title();
+
+    /** Return the owning extension for this component. */
+    IOutputExtension getExtension();
+
+    /**
+     * Returns true if this component is active and should be populated. Only applicable if it's extension is {@link IOutputExtension#isAutoPopulated()}
+     */
+    default boolean active()
+    {
+        return true;
+    }
 
     /** Icon that is shown in result tab component */
     default Icon icon()
@@ -27,7 +34,4 @@ public interface IOutputComponent
     default void clearState()
     {
     }
-
-    /** Creates an {@link OutputWriter} for provided query file */
-    OutputWriter createOutputWriter(IQueryFile queryFile);
 }

@@ -285,9 +285,9 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void execute(IQueryFile queryFile, OutputWriter writer, Object query) throws Exception
     {
-        synchronized (queryFile)
+        JdbcEngineState engineState = (JdbcEngineState) queryFile.getEngineState();
+        synchronized (engineState)
         {
-            JdbcEngineState engineState = (JdbcEngineState) queryFile.getEngineState();
             ConnectionState state = engineState.connectionState;
             JdbcDatabase jdbcDatabase;
             String queryText;
@@ -475,6 +475,11 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void focus(IQueryFile queryFile)
     {
+        if (quickProperties == null)
+        {
+            return;
+        }
+
         suppressEvents = true;
 
         try

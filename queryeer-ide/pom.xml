@@ -23,6 +23,7 @@
         <jasypt.version>1.9.3</jasypt.version>
         <freemarker.version> 2.3.32</freemarker.version>
         <commons-lang3.version>3.14.0</commons-lang3.version>
+        <jfreechart.version>1.5.5</jfreechart.version>
     </properties>
 
     <dependencies>
@@ -100,6 +101,11 @@
             <groupId>com.fifesoft</groupId>
             <artifactId>autocomplete</artifactId>
             <version>${autocomplete.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jfree</groupId>
+            <artifactId>jfreechart</artifactId>
+            <version>${jfreechart.version}</version>
         </dependency>
         <!-- TEST -->
         <dependency>

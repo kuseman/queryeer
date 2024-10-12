@@ -18,6 +18,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -527,6 +528,7 @@ class QueryeerController implements PropertyChangeListener
             case TABLE:
                 componentToSelect = ITableOutputComponent.class;
                 ow = fileView.getOutputComponent(componentToSelect)
+                        .getExtension()
                         .createOutputWriter(fileView);
                 break;
             case TEXT:
@@ -602,7 +604,30 @@ class QueryeerController implements PropertyChangeListener
         Object query = fileView.getEditor()
                 .getValue();
 
-        QueryService.executeQuery(fileView, writer, query, false);
+        QueryService.executeQuery(fileView, getOutputWriter(fileView, writer), query, false);
+    }
+
+    /** Creates a proxy outputwriter that writes to multiple output writers. */
+    private OutputWriter getOutputWriter(QueryFileView fileView, OutputWriter masterWriter)
+    {
+        List<OutputWriter> activeAutoPopulatedWriters = fileView.getOutputComponents()
+                .stream()
+                .filter(o -> o.getExtension()
+                        .isAutoPopulated()
+                        && o.active())
+                .map(o -> o.getExtension()
+                        .createOutputWriter(fileView))
+                .toList();
+
+        // No auto populating components return the master writer
+        if (activeAutoPopulatedWriters.isEmpty())
+        {
+            return masterWriter;
+        }
+
+        List<OutputWriter> result = new ArrayList<>(activeAutoPopulatedWriters);
+        result.add(0, masterWriter);
+        return new ProxyOutputWriter(result);
     }
 
     /** New query action. */

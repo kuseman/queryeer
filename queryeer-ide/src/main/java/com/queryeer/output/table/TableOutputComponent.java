@@ -47,14 +47,12 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
-import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.IExtensionAction;
+import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.dialog.ValueDialog;
-
-import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
@@ -65,11 +63,13 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private final List<Table> tables = new ArrayList<>();
     private final TableClickedCell lastClickedCell = new TableClickedCell();
     private final TableFindDialog findDialog;
+    private final IOutputExtension extension;
 
     private List<ITableContextMenuAction> contextMenuActions;
 
-    TableOutputComponent(List<ITableContextMenuActionFactory> contextMenuActionFactories)
+    TableOutputComponent(IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories)
     {
+        this.extension = requireNonNull(extension, "extension");
         this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
         setLayout(new BorderLayout());
 
@@ -102,9 +102,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     };
 
     @Override
-    public OutputWriter createOutputWriter(IQueryFile queryFile)
+    public IOutputExtension getExtension()
     {
-        return new TableOutputWriter(queryFile);
+        return extension;
     }
 
     @Override
@@ -253,6 +253,18 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     public ClickedCell getLastClickedCell()
     {
         return lastClickedCell;
+    }
+
+    @Override
+    public void selectRow(int tableIndex, int row)
+    {
+        Table table = tables.get(tableIndex);
+
+        Rectangle bounds = new Rectangle(table.getBounds());
+        table.scrollRectToVisible(bounds);
+
+        table.changeSelection(row, 0, false, false);
+        table.scrollRectToVisible(new Rectangle(table.getCellRect(row, 0, true)));
     }
 
     void showFind()

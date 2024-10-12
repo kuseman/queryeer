@@ -5,9 +5,14 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 import java.io.File;
 import java.io.IOException;
 
+import javax.swing.JComponent;
+import javax.swing.RepaintManager;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.api.action.IActionRegistry;
 import com.queryeer.api.extensions.engine.IQueryEngine;
@@ -21,6 +26,8 @@ import com.queryeer.api.service.ITemplateService;
 /** Main of Queryeer */
 public class Main
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
+
     /** Main */
     public static void main(String[] args) throws Exception
     {
@@ -56,6 +63,10 @@ public class Main
         // Start all Swing applications on the EDT.
         SwingUtilities.invokeLater(() ->
         {
+            if (System.getProperty("devEnv") != null)
+            {
+                RepaintManager.setCurrentManager(new CheckThreadViolationRepaintManager());
+            }
             controller.getView()
                     .setVisible(true);
         });
@@ -99,5 +110,68 @@ public class Main
 
         // Initalize config with all query engines
         config.init(serviceLoader.getAll(IQueryEngine.class));
+    }
+
+    static class CheckThreadViolationRepaintManager extends RepaintManager
+    {
+        // it is recommended to pass the complete check
+        private boolean completeCheck = true;
+
+        public boolean isCompleteCheck()
+        {
+            return completeCheck;
+        }
+
+        public void setCompleteCheck(boolean completeCheck)
+        {
+            this.completeCheck = completeCheck;
+        }
+
+        @Override
+        public synchronized void addInvalidComponent(JComponent component)
+        {
+            checkThreadViolations(component);
+            super.addInvalidComponent(component);
+        }
+
+        @Override
+        public void addDirtyRegion(JComponent component, int x, int y, int w, int h)
+        {
+            checkThreadViolations(component);
+            super.addDirtyRegion(component, x, y, w, h);
+        }
+
+        private void checkThreadViolations(JComponent c)
+        {
+            if (!SwingUtilities.isEventDispatchThread()
+                    && (completeCheck
+                            || c.isShowing()))
+            {
+                Exception exception = new Exception();
+                boolean repaint = false;
+                boolean fromSwing = false;
+                StackTraceElement[] stackTrace = exception.getStackTrace();
+                for (StackTraceElement st : stackTrace)
+                {
+                    if (repaint
+                            && st.getClassName()
+                                    .startsWith("javax.swing."))
+                    {
+                        fromSwing = true;
+                    }
+                    if ("repaint".equals(st.getMethodName()))
+                    {
+                        repaint = true;
+                    }
+                }
+                if (repaint
+                        && !fromSwing)
+                {
+                    // no problems here, since repaint() is thread safe
+                    return;
+                }
+                LOGGER.error("EDT fail", exception);
+            }
+        }
     }
 }

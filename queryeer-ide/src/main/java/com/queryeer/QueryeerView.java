@@ -50,6 +50,7 @@ import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
 
@@ -110,7 +111,7 @@ class QueryeerView extends JFrame
     private Consumer<String> openRecentFileConsumer;
     private Consumer<IQueryEngine> newQueryConsumer;
     private Consumer<ViewAction> actionHandler;
-    private boolean catalogsCollapsed;
+    private boolean quickProperitesCollapsed;
     private int prevCatalogsDividerLocation;
     private final QueryFileTabbedPane tabbedPane;
     private final TasksDialog tasksDialog;
@@ -386,7 +387,10 @@ class QueryeerView extends JFrame
         DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) comboOutput.getModel();
         for (IOutputExtension outputExtension : actualOutputExtensions)
         {
-            outputComboModel.addElement(outputExtension);
+            if (!outputExtension.isAutoPopulated())
+            {
+                outputComboModel.addElement(outputExtension);
+            }
         }
 
         comboFormat = new JComboBox<>();
@@ -525,16 +529,19 @@ class QueryeerView extends JFrame
         InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         for (IOutputExtension outputExtension : outputExtensions)
         {
-            inputMap.put(outputExtension.getKeyStroke(), outputExtension);
-            topPanel.getActionMap()
-                    .put(outputExtension, new AbstractAction()
-                    {
-                        @Override
-                        public void actionPerformed(ActionEvent e)
+            if (!outputExtension.isAutoPopulated())
+            {
+                inputMap.put(outputExtension.getKeyStroke(), outputExtension);
+                topPanel.getActionMap()
+                        .put(outputExtension, new AbstractAction()
                         {
-                            comboOutput.setSelectedItem(outputExtension);
-                        }
-                    });
+                            @Override
+                            public void actionPerformed(ActionEvent e)
+                            {
+                                comboOutput.setSelectedItem(outputExtension);
+                            }
+                        });
+            }
         }
     }
 
@@ -648,16 +655,16 @@ class QueryeerView extends JFrame
         public void actionPerformed(ActionEvent e)
         {
             // Expanded
-            if (!catalogsCollapsed)
+            if (!quickProperitesCollapsed)
             {
                 prevCatalogsDividerLocation = splitPane.getDividerLocation();
                 splitPane.setDividerLocation(0.0d);
-                catalogsCollapsed = true;
+                quickProperitesCollapsed = true;
             }
             else
             {
                 splitPane.setDividerLocation(prevCatalogsDividerLocation);
-                catalogsCollapsed = false;
+                quickProperitesCollapsed = false;
             }
         }
     };
@@ -837,10 +844,19 @@ class QueryeerView extends JFrame
 
     private void setQueryEngineProperties(IQueryEngine queryEngine)
     {
-        panelQueryEngineProperties.removeAll();
-        panelQueryEngineProperties.add(queryEngine.getQuickPropertiesComponent(), BorderLayout.CENTER);
-        panelQueryEngineProperties.revalidate();
-        panelQueryEngineProperties.repaint();
+        SwingUtilities.invokeLater(() ->
+        {
+            panelQueryEngineProperties.removeAll();
+            panelQueryEngineProperties.add(queryEngine.getQuickPropertiesComponent(), BorderLayout.CENTER);
+            panelQueryEngineProperties.revalidate();
+            panelQueryEngineProperties.repaint();
+
+            if (prevCatalogsDividerLocation == 0)
+            {
+                splitPane.setDividerLocation(panelQueryEngineProperties.getPreferredSize().width);
+                prevCatalogsDividerLocation = splitPane.getDividerLocation();
+            }
+        });
     }
 
     void setRecentFiles(List<String> recentFiles)

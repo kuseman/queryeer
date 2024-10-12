@@ -125,7 +125,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     public void execute(IQueryFile queryFile, OutputWriter writer, Object query)
     {
         PayloadbuilderState state = (PayloadbuilderState) queryFile.getEngineState();
-        synchronized (queryFile)
+        synchronized (state)
         {
             state.abort = false;
 

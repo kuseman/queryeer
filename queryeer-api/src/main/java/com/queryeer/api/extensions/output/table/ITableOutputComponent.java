@@ -8,6 +8,9 @@ public interface ITableOutputComponent extends IOutputComponent
     /** Returns the value in the cell the was last clicked. Ie. the cell that a context menu was opened at. etc */
     ClickedCell getLastClickedCell();
 
+    /** Select row in a table in this component. */
+    void selectRow(int tableIndex, int row);
+
     /** Definition of a clicked cell */
     interface ClickedCell
     {

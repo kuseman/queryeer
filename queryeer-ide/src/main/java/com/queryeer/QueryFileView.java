@@ -1,5 +1,6 @@
 package com.queryeer;
 
+import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -26,6 +27,7 @@ import javax.swing.JToolBar;
 import javax.swing.OverlayLayout;
 import javax.swing.Timer;
 
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import com.queryeer.QueryFileModel.State;
@@ -39,7 +41,6 @@ import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
-import com.queryeer.api.service.IEventBus;
 import com.queryeer.component.TabComponent;
 
 /** Content of a query editor. Engine editor and a result panel separated with a split panel */
@@ -48,7 +49,6 @@ class QueryFileView extends JPanel implements IQueryFile
     private final QueryFileModel model;
     private final JSplitPane splitPane;
     private final JTabbedPane resultTabs;
-    private final List<IOutputComponent> outputComponents;
     private final List<IOutputToolbarActionFactory> toolbarActionFactories;
     private final JLabel labelRunTime;
     private final JLabel labelRowCount;
@@ -58,13 +58,14 @@ class QueryFileView extends JPanel implements IQueryFile
     private final Timer executionTimer;
     private final JToolBar outputComponentToolbar = new JToolBar();
     private final QueryFileChangeListener queryFileChangeListener = new QueryFileChangeListener();
+
+    private List<IOutputComponent> outputComponents;
     private boolean resultCollapsed;
     private int prevDividerLocation;
 
-    QueryFileView(QueryFileModel model, IEventBus eventBus, List<IOutputComponent> outputComponents, List<IOutputToolbarActionFactory> toolbarActionFactories)
+    QueryFileView(QueryFileModel model, List<IOutputToolbarActionFactory> toolbarActionFactories)
     {
         this.model = model;
-        this.outputComponents = requireNonNull(outputComponents, "outputComponents");
         this.toolbarActionFactories = requireNonNull(toolbarActionFactories, "toolbarActionFactories");
 
         setLayout(new BorderLayout());
@@ -87,20 +88,6 @@ class QueryFileView extends JPanel implements IQueryFile
 
         tabPanel.add(outputComponentToolbar);
         tabPanel.add(resultTabs);
-
-        int index = 0;
-        for (IOutputComponent ouputComponent : outputComponents)
-        {
-            resultTabs.add(ouputComponent.getComponent());
-            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(ouputComponent));
-            index++;
-        }
-
-        // Populate toolbar
-        if (index > 0)
-        {
-            outputComponentChanged();
-        }
 
         resultTabs.addChangeListener(l -> outputComponentChanged());
 
@@ -141,7 +128,10 @@ class QueryFileView extends JPanel implements IQueryFile
     private void outputComponentChanged()
     {
         OutputComponentTabComponent tabComponent = (OutputComponentTabComponent) resultTabs.getTabComponentAt(resultTabs.getSelectedIndex());
-        tabComponent.populateToolbar();
+        if (tabComponent != null)
+        {
+            tabComponent.populateToolbar();
+        }
     }
 
     private void handleStateChanged(QueryFileModel file, State state)
@@ -159,12 +149,15 @@ class QueryFileView extends JPanel implements IQueryFile
                 // Only switch if we are executing without context, with context the output is provided
                 boolean switchOutputComponent = state == State.EXECUTING;
 
-                // Clear state of output components
-                int count = outputComponents.size();
-                for (int i = 0; i < count; i++)
+                if (outputComponents != null)
                 {
-                    IOutputComponent outputComponent = outputComponents.get(i);
-                    outputComponent.clearState();
+                    // Clear state of output components
+                    int count = outputComponents.size();
+                    for (int i = 0; i < count; i++)
+                    {
+                        IOutputComponent outputComponent = outputComponents.get(i);
+                        outputComponent.clearState();
+                    }
                 }
 
                 if (switchOutputComponent)
@@ -199,7 +192,8 @@ class QueryFileView extends JPanel implements IQueryFile
         }
     }
 
-    void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass)
+    @Override
+    public void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass)
     {
         if (outputComponentClass == null)
         {
@@ -216,6 +210,12 @@ class QueryFileView extends JPanel implements IQueryFile
         }
     }
 
+    @Override
+    public IOutputComponent getSelectedOutputComponent()
+    {
+        return ((OutputComponentTabComponent) resultTabs.getTabComponentAt(resultTabs.getSelectedIndex())).outputComponent;
+    }
+
     /* IQueryFile */
 
     @Override
@@ -227,6 +227,11 @@ class QueryFileView extends JPanel implements IQueryFile
     @Override
     public void focusMessages()
     {
+        if (outputComponents == null)
+        {
+            return;
+        }
+
         int count = outputComponents.size();
         for (int i = 0; i < count; i++)
         {
@@ -248,13 +253,16 @@ class QueryFileView extends JPanel implements IQueryFile
     @Override
     public <T extends IOutputComponent> T getOutputComponent(Class<T> clazz)
     {
-        int count = outputComponents.size();
-        for (int i = 0; i < count; i++)
+        if (outputComponents != null)
         {
-            IOutputComponent component = outputComponents.get(i);
-            if (clazz.isAssignableFrom(component.getClass()))
+            int count = outputComponents.size();
+            for (int i = 0; i < count; i++)
             {
-                return clazz.cast(component);
+                IOutputComponent component = outputComponents.get(i);
+                if (clazz.isAssignableFrom(component.getClass()))
+                {
+                    return clazz.cast(component);
+                }
             }
         }
 
@@ -337,6 +345,33 @@ class QueryFileView extends JPanel implements IQueryFile
     QueryFileModel getModel()
     {
         return model;
+    }
+
+    List<IOutputComponent> getOutputComponents()
+    {
+        return outputComponents;
+    }
+
+    void setOutputComponents(List<IOutputComponent> outputComponents)
+    {
+        if (this.outputComponents != null)
+        {
+            throw new IllegalArgumentException("Cannot set already set outputcompoentns");
+        }
+        this.outputComponents = ObjectUtils.defaultIfNull(outputComponents, emptyList());
+        int index = 0;
+        for (IOutputComponent ouputComponent : outputComponents)
+        {
+            resultTabs.add(ouputComponent.getComponent());
+            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(ouputComponent));
+            index++;
+        }
+
+        // Populate toolbar
+        if (index > 0)
+        {
+            outputComponentChanged();
+        }
     }
 
     @Override

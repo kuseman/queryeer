@@ -44,9 +44,9 @@ class TableOutputExtension implements IOutputExtension
     }
 
     @Override
-    public IOutputComponent createResultComponent()
+    public IOutputComponent createResultComponent(IQueryFile queryFile)
     {
-        return new TableOutputComponent(contextMenuActionFactories);
+        return new TableOutputComponent(this, contextMenuActionFactories);
     }
 
     @Override

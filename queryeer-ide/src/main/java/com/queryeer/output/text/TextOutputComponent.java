@@ -30,24 +30,23 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.TextSelection;
-import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
-import com.queryeer.api.service.IQueryFileProvider;
-
-import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
 {
     private static final String WARNING_LOCATION = "warningLocation";
-    private final IQueryFileProvider queryFileProvider;
+    private final IQueryFile queryFile;
     private final JTextPane text;
     private final PrintWriter printWriter;
+    private final IOutputExtension extension;
 
-    TextOutputComponent(IQueryFileProvider queryFileProvider)
+    TextOutputComponent(IOutputExtension extension, IQueryFile queryFile)
     {
         super(new JTextPane());
-        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        this.extension = requireNonNull(extension, "extension");
+        this.queryFile = requireNonNull(queryFile, "queryFile");
         this.text = (JTextPane) getViewport().getComponent(0);
         this.text.setFont(new Font("Consolas", Font.PLAIN, 13));
         this.text.addMouseListener(new TextMouseListener());
@@ -64,6 +63,12 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     public Icon icon()
     {
         return FontIcon.of(FontAwesome.FILE_TEXT_O);
+    }
+
+    @Override
+    public IOutputExtension getExtension()
+    {
+        return extension;
     }
 
     @Override
@@ -92,18 +97,6 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         warning.addAttribute(WARNING_LOCATION, textSelection);
 
         appendText(text + System.lineSeparator(), warning);
-    }
-
-    @Override
-    public OutputWriter createOutputWriter(IQueryFile queryFile)
-    {
-        IOutputFormatExtension outputFormat = queryFile.getOutputFormat();
-        if (outputFormat == null)
-        {
-            throw new IllegalArgumentException("No output format selected");
-        }
-
-        return outputFormat.createOutputWriter(queryFile, queryFile.getMessagesWriter());
     }
 
     private PrintWriter createPrintWriter()
@@ -181,14 +174,10 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                         // Mark whole warning text
                         text.setSelectionStart(element.getStartOffset());
                         text.setSelectionEnd(element.getEndOffset());
-                        IQueryFile currentFile = queryFileProvider.getCurrentFile();
-                        if (currentFile != null)
+                        IEditor editor = queryFile.getEditor();
+                        if (editor instanceof ITextEditor)
                         {
-                            IEditor editor = currentFile.getEditor();
-                            if (editor instanceof ITextEditor)
-                            {
-                                ((ITextEditor) editor).select(warningLocation);
-                            }
+                            ((ITextEditor) editor).select(warningLocation);
                         }
                     }
                 }
