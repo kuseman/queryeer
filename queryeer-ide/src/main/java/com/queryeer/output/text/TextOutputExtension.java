@@ -1,7 +1,6 @@
 package com.queryeer.output.text;
 
-import static java.util.Objects.requireNonNull;
-
+import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 
@@ -13,7 +12,6 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
-import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
@@ -22,12 +20,6 @@ class TextOutputExtension implements IOutputExtension
 {
     static final ObjectMapper MAPPER = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     static final String NAME = "com.queryeer.output.text.TextOutputExtension";
-    private final IQueryFileProvider queryFileProvider;
-
-    TextOutputExtension(IQueryFileProvider queryFileProvider)
-    {
-        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
-    }
 
     @Override
     public String getTitle()
@@ -50,13 +42,14 @@ class TextOutputExtension implements IOutputExtension
     @Override
     public KeyStroke getKeyStroke()
     {
-        return KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK + InputEvent.SHIFT_DOWN_MASK);
+        return KeyStroke.getKeyStroke(KeyEvent.VK_T, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx() + InputEvent.SHIFT_DOWN_MASK);
     }
 
     @Override
-    public IOutputComponent createResultComponent()
+    public IOutputComponent createResultComponent(IQueryFile queryFile)
     {
-        return new TextOutputComponent(queryFileProvider);
+        return new TextOutputComponent(this, queryFile);
     }
 
     @Override

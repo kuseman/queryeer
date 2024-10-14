@@ -336,6 +336,10 @@ class PLBParser extends AbstractParser implements DocumentListener
 
     private TokenOffset findTokenFromOffset(ParseTree tree, int offset)
     {
+        if (tree == null)
+        {
+            return null;
+        }
         List<ParseTree> queue = new ArrayList<>();
         queue.add(tree);
 

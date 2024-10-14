@@ -27,6 +27,12 @@ public interface IQueryFile
      */
     <T extends IOutputComponent> T getOutputComponent(Class<T> clazz);
 
+    /** Selects output component with provided class. */
+    void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass);
+
+    /** Return the selected output component. */
+    IOutputComponent getSelectedOutputComponent();
+
     /** Increment the row counter to let status etc. update */
     void incrementTotalRowCount();
 

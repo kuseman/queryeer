@@ -287,11 +287,15 @@ class QueryeerView extends JFrame
         toolBar.setFloatable(false);
         topPanel.add(toolBar, BorderLayout.SOUTH);
 
-        KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
         KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
-        KeyStroke newQueryKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_N, InputEvent.CTRL_DOWN_MASK);
-        KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, InputEvent.CTRL_DOWN_MASK);
-        KeyStroke toggleCommentKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_7, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke newQueryKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_N, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        KeyStroke toggleCommentKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_7, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
 
         InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         inputMap.put(executeKeyStroke, EXECUTE);
@@ -360,7 +364,10 @@ class QueryeerView extends JFrame
         DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) comboOutput.getModel();
         for (IOutputExtension outputExtension : actualOutputExtensions)
         {
-            outputComboModel.addElement(outputExtension);
+            if (!outputExtension.isAutoPopulated())
+            {
+                outputComboModel.addElement(outputExtension);
+            }
         }
 
         comboFormat = new JComboBox<>();
@@ -407,6 +414,7 @@ class QueryeerView extends JFrame
         panelCatalogs = new JPanel();
         panelCatalogs.setLayout(new GridBagLayout());
         splitPane.setLeftComponent(new JScrollPane(panelCatalogs));
+        splitPane.setDividerLocation(260);
 
         setIconImages(Constants.APPLICATION_ICONS);
 
@@ -449,16 +457,19 @@ class QueryeerView extends JFrame
         InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         for (IOutputExtension outputExtension : outputExtensions)
         {
-            inputMap.put(outputExtension.getKeyStroke(), outputExtension);
-            topPanel.getActionMap()
-                    .put(outputExtension, new AbstractAction()
-                    {
-                        @Override
-                        public void actionPerformed(ActionEvent e)
+            if (!outputExtension.isAutoPopulated())
+            {
+                inputMap.put(outputExtension.getKeyStroke(), outputExtension);
+                topPanel.getActionMap()
+                        .put(outputExtension, new AbstractAction()
                         {
-                            comboOutput.setSelectedItem(outputExtension);
-                        }
-                    });
+                            @Override
+                            public void actionPerformed(ActionEvent e)
+                            {
+                                comboOutput.setSelectedItem(outputExtension);
+                            }
+                        });
+            }
         }
     }
 
@@ -659,5 +670,4 @@ class QueryeerView extends JFrame
     {
         return (QueryFileView) tabbedPane.getSelectedComponent();
     }
-
 }
