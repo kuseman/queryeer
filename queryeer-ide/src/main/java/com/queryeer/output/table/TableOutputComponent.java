@@ -8,8 +8,8 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
-import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -48,6 +48,7 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
 import com.queryeer.api.extensions.IExtensionAction;
+import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
@@ -62,15 +63,18 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private final List<Table> tables = new ArrayList<>();
     private final TableClickedCell lastClickedCell = new TableClickedCell();
     private final TableFindDialog findDialog;
+    private final IOutputExtension extension;
 
     private List<ITableContextMenuAction> contextMenuActions;
 
-    TableOutputComponent(List<ITableContextMenuActionFactory> contextMenuActionFactories)
+    TableOutputComponent(IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories)
     {
+        this.extension = requireNonNull(extension, "extension");
         this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
         setLayout(new BorderLayout());
 
-        KeyStroke findKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK);
+        KeyStroke findKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
         InputMap inputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
         inputMap.put(findKeyStroke, FIND);
         getActionMap().put(FIND, showFindDialogAction);
@@ -97,6 +101,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             findDialog.setVisible(true);
         }
     };
+
+    @Override
+    public IOutputExtension getExtension()
+    {
+        return extension;
+    }
 
     @Override
     public String getSelectedText()
@@ -244,6 +254,18 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     public ClickedCell getLastClickedCell()
     {
         return lastClickedCell;
+    }
+
+    @Override
+    public void selectRow(int tableIndex, int row)
+    {
+        Table table = tables.get(tableIndex);
+
+        Rectangle bounds = new Rectangle(table.getBounds());
+        table.scrollRectToVisible(bounds);
+
+        table.changeSelection(row, 0, false, false);
+        table.scrollRectToVisible(new Rectangle(table.getCellRect(row, 0, true)));
     }
 
     void showFind()

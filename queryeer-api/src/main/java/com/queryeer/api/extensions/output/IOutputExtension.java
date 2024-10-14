@@ -16,6 +16,14 @@ public interface IOutputExtension extends IExtension
     /** Get title for this extension. Shown in comboxes etc. */
     String getTitle();
 
+    /**
+     * Returns true if this extension is auto populated. If true then this extension is not selectable as an output in toolbar and will always get the result written to it.
+     */
+    default boolean isAutoPopulated()
+    {
+        return false;
+    }
+
     /** The order in which the extension is shown in combobox in toolbar and in result tab pane */
     default int order()
     {
@@ -47,7 +55,7 @@ public interface IOutputExtension extends IExtension
      *
      * @return Created result component
      */
-    default IOutputComponent createResultComponent()
+    default IOutputComponent createResultComponent(IQueryFile file)
     {
         return null;
     }

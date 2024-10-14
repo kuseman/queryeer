@@ -31,12 +31,16 @@ class QueryFileViewFactory
 
     QueryFileView create(QueryFileModel model)
     {
+        QueryFileView fileView = new QueryFileView(model, eventBus, outputToolbarActionFactories, completionInstaller);
+
         List<IOutputComponent> outputComponents = outputExtensions.stream()
                 .sorted(Comparator.comparingInt(IOutputExtension::order))
-                .map(e -> e.createResultComponent())
+                .map(e -> e.createResultComponent(fileView))
                 .filter(Objects::nonNull)
                 .collect(toList());
 
-        return new QueryFileView(model, eventBus, outputComponents, outputToolbarActionFactories, completionInstaller);
+        fileView.setOutputComponents(outputComponents);
+
+        return fileView;
     }
 }

@@ -2,7 +2,7 @@ package com.queryeer.output.table;
 
 import static java.util.Objects.requireNonNull;
 
-import java.awt.event.InputEvent;
+import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
 import java.util.List;
 
@@ -40,13 +40,14 @@ class TableOutputExtension implements IOutputExtension
     @Override
     public KeyStroke getKeyStroke()
     {
-        return KeyStroke.getKeyStroke(KeyEvent.VK_T, InputEvent.CTRL_DOWN_MASK);
+        return KeyStroke.getKeyStroke(KeyEvent.VK_T, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
     }
 
     @Override
-    public IOutputComponent createResultComponent()
+    public IOutputComponent createResultComponent(IQueryFile queryFile)
     {
-        return new TableOutputComponent(contextMenuActionFactories);
+        return new TableOutputComponent(this, contextMenuActionFactories);
     }
 
     @Override

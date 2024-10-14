@@ -162,12 +162,12 @@ class QueryeerController implements PropertyChangeListener
             QueryFileView file = view.getCurrentFile();
 
             // See if the file has been modified outside of application
-            if (!file.getFile()
+            if (!file.getModel()
                     .isNew())
             {
-                long lastModified = file.getFile()
+                long lastModified = file.getModel()
                         .getLastModified();
-                File ioFile = new File(file.getFile()
+                File ioFile = new File(file.getModel()
                         .getFilename());
 
                 if (lastModified != ioFile.lastModified())
@@ -181,13 +181,13 @@ class QueryeerController implements PropertyChangeListener
                     // Reload content
                     if (result == JOptionPane.YES_OPTION)
                     {
-                        file.getFile()
+                        file.getModel()
                                 .reloadFromFile();
                     }
                     // ... mark the file as dirty
                     else
                     {
-                        file.getFile()
+                        file.getModel()
                                 .setDirty(true);
                     }
                 }
@@ -196,7 +196,7 @@ class QueryeerController implements PropertyChangeListener
             queryFileProvider.setQueryFile(file);
             eventBus.publish(new QueryFileChangedEvent(file));
             /* Publish caret change to update the current since there is no editor change when switching tab */
-            eventBus.publish(new CaretChangedEvent(file.getFile()
+            eventBus.publish(new CaretChangedEvent(file.getModel()
                     .getCaret()));
         }
     }
@@ -326,7 +326,7 @@ class QueryeerController implements PropertyChangeListener
     @Subscribe
     private void closeQueryFile(QueryFileClosingEvent event)
     {
-        QueryFileModel file = ((QueryFileView) event.getQueryFile()).getFile();
+        QueryFileModel file = ((QueryFileView) event.getQueryFile()).getModel();
         if (file.isDirty())
         {
             int result = JOptionPane.showConfirmDialog(view, "Save changes ?", "Save", JOptionPane.YES_NO_CANCEL_OPTION);
@@ -416,12 +416,12 @@ class QueryeerController implements PropertyChangeListener
         QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null)
         {
-            queryFile.getFile()
+            queryFile.getModel()
                     .setOutput((IOutputExtension) view.getOutputCombo()
                             .getSelectedItem());
 
             // Set output format accordingly
-            IOutputFormatExtension outputFormat = queryFile.getFile()
+            IOutputFormatExtension outputFormat = queryFile.getModel()
                     .getOutputFormat();
             if (outputFormat == null)
             {
@@ -445,7 +445,7 @@ class QueryeerController implements PropertyChangeListener
         QueryFileView queryFile = view.getCurrentFile();
         if (queryFile != null)
         {
-            queryFile.getFile()
+            queryFile.getModel()
                     .setOutputFormat((IOutputFormatExtension) view.getFormatCombo()
                             .getSelectedItem());
         }
@@ -482,10 +482,10 @@ class QueryeerController implements PropertyChangeListener
         if (queryFile != null)
         {
             ((QuerySession) queryFile.getSession()).fireAbortQueryListeners();
-            if (queryFile.getFile()
+            if (queryFile.getModel()
                     .getState() == State.EXECUTING)
             {
-                queryFile.getFile()
+                queryFile.getModel()
                         .setState(State.ABORTED);
             }
         }
@@ -500,7 +500,7 @@ class QueryeerController implements PropertyChangeListener
             return;
         }
 
-        QueryFileModel queryFile = fileView.getFile();
+        QueryFileModel queryFile = fileView.getModel();
 
         if (queryFile.getState() == State.EXECUTING)
         {

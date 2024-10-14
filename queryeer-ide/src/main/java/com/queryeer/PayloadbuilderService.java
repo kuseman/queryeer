@@ -3,6 +3,8 @@ package com.queryeer;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -43,7 +45,7 @@ class PayloadbuilderService
     /** Execute query for provider query file */
     static void executeQuery(final QueryFileView fileView, Runnable queryFinnishedCallback)
     {
-        final QueryFileModel file = fileView.getFile();
+        final QueryFileModel file = fileView.getModel();
         String queryString = file.getQuery(true);
         if (isBlank(queryString))
         {
@@ -51,14 +53,16 @@ class PayloadbuilderService
             return;
         }
 
-        final OutputWriter writer = file.getOutputExtension()
+        OutputWriter w = file.getOutputExtension()
                 .createOutputWriter(fileView);
 
-        if (writer == null)
+        if (w == null)
         {
             queryFinnishedCallback.run();
             return;
         }
+
+        OutputWriter writer = getOutputWriter(fileView, w);
 
         EXECUTOR.execute(() ->
         {
@@ -176,5 +180,28 @@ class PayloadbuilderService
                 }
             }
         });
+    }
+
+    /** Creates a proxy outputwriter that writes to multiple output writers. */
+    private static OutputWriter getOutputWriter(QueryFileView fileView, OutputWriter masterWriter)
+    {
+        List<OutputWriter> activeAutoPopulatedWriters = fileView.getOutputComponents()
+                .stream()
+                .filter(o -> o.getExtension()
+                        .isAutoPopulated()
+                        && o.active())
+                .map(o -> o.getExtension()
+                        .createOutputWriter(fileView))
+                .toList();
+
+        // No auto populating components return the master writer
+        if (activeAutoPopulatedWriters.isEmpty())
+        {
+            return masterWriter;
+        }
+
+        List<OutputWriter> result = new ArrayList<>(activeAutoPopulatedWriters);
+        result.add(0, masterWriter);
+        return new ProxyOutputWriter(result);
     }
 }

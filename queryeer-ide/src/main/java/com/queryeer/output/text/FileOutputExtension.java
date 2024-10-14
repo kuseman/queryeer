@@ -2,6 +2,7 @@ package com.queryeer.output.text;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.io.BufferedWriter;
@@ -53,7 +54,8 @@ class FileOutputExtension implements IOutputExtension
     @Override
     public KeyStroke getKeyStroke()
     {
-        return KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK + InputEvent.SHIFT_DOWN_MASK);
+        return KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx() + InputEvent.SHIFT_DOWN_MASK);
     }
 
     @Override

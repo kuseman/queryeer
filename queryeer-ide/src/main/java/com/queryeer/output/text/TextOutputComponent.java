@@ -28,21 +28,23 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.TextSelection;
+import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
-import com.queryeer.api.service.IQueryFileProvider;
 
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
 {
     private static final String WARNING_LOCATION = "warningLocation";
-    private final IQueryFileProvider queryFileProvider;
+    private final IQueryFile queryFile;
     private final JTextPane text;
     private final PrintWriter printWriter;
+    private final IOutputExtension extension;
 
-    TextOutputComponent(IQueryFileProvider queryFileProvider)
+    TextOutputComponent(IOutputExtension extension, IQueryFile queryFile)
     {
         super(new JTextPane());
-        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        this.extension = requireNonNull(extension, "extension");
+        this.queryFile = requireNonNull(queryFile, "queryFile");
         this.text = (JTextPane) getViewport().getComponent(0);
         this.text.setFont(new Font("Consolas", Font.PLAIN, 13));
         this.text.addMouseListener(new TextMouseListener());
@@ -59,6 +61,12 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     public Icon icon()
     {
         return FontIcon.of(FontAwesome.FILE_TEXT_O);
+    }
+
+    @Override
+    public IOutputExtension getExtension()
+    {
+        return extension;
     }
 
     @Override
@@ -164,11 +172,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                         // Mark whole warning text
                         text.setSelectionStart(element.getStartOffset());
                         text.setSelectionEnd(element.getEndOffset());
-                        IQueryFile currentFile = queryFileProvider.getCurrentFile();
-                        if (currentFile != null)
-                        {
-                            currentFile.select(warningLocation);
-                        }
+                        queryFile.select(warningLocation);
                     }
                 }
             }
