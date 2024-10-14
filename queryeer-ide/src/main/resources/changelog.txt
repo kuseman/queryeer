@@ -2,6 +2,9 @@ CHANGELOG
 
 Queryeer
 
+v1.7.0
+feat: Add Graph output component to be able to graph result sets into bar or line graphs.
+
 v1.6.0
 fix: Bump payloadbuilder
 chore: Change version semantics to have revision part free for fixes as it should have been
