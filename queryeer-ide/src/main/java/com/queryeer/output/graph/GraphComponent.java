@@ -520,7 +520,8 @@ class GraphComponent extends JPanel
                 if (event.getEntity() instanceof XYItemEntity xyie)
                 {
                     int index = xyie.getItem();
-                    RegularTimePeriod timePeriod = timeSeriesDataset.getSeries(0)
+
+                    RegularTimePeriod timePeriod = timeSeriesDataset.getSeries(xyie.getSeriesIndex())
                             .getTimePeriod(index);
 
                     ITableOutputComponent table = queryFile.getOutputComponent(ITableOutputComponent.class);
@@ -664,6 +665,12 @@ class GraphComponent extends JPanel
             return;
         }
 
+        // Mark the start row in result set for new buckets
+        if (!bucketStartRow.containsKey(xbucket))
+        {
+            bucketStartRow.put(xbucket, rowNumber - 1);
+        }
+
         // Break down time series
         if (hasBreakDownSetting)
         {
@@ -711,7 +718,6 @@ class GraphComponent extends JPanel
             QTimeSeriesDataItem dataItem = (QTimeSeriesDataItem) timeSeries[i].getDataItem(xbucket);
             if (dataItem == null)
             {
-                bucketStartRow.put(xbucket, rowNumber - 1);
                 timeSeries[i].add(new QTimeSeriesDataItem(xbucket, (Number) values[i]));
             }
             else

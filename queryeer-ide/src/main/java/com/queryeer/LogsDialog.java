@@ -20,9 +20,9 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 
 import org.apache.log4j.AppenderSkeleton;
+import org.apache.log4j.EnhancedPatternLayout;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
-import org.apache.log4j.PatternLayout;
 import org.apache.log4j.spi.LoggingEvent;
 
 /** Logs dialog */
@@ -126,7 +126,7 @@ class LogsDialog extends JFrame
 
         LogsAppender()
         {
-            setLayout(new PatternLayout("%d{ISO8601} [%t] %p %c %x - %m%n"));
+            setLayout(new EnhancedPatternLayout("%d{ISO8601} [%t] %p %c %x - %m%n%throwable"));
         }
 
         @Override
