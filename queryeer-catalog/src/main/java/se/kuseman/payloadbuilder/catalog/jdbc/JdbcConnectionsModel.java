@@ -146,6 +146,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 
             connection.setRuntimePassword(credentials.getPassword());
             // Try creating connection
+            // TODO: dialog with spinner
             try (java.sql.Connection con = createConnection(connection))
             {
             }

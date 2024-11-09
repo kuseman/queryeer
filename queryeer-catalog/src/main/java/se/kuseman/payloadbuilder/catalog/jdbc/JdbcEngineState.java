@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.queryeer.api.editor.ITextEditorDocumentParser;
@@ -14,8 +15,12 @@ import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 
 class JdbcEngineState implements IQueryEngine.IState, IConnectionState
 {
+    private List<Runnable> changeListeners;
     final TextEditorDocumentParserProxy documentParser;
     ConnectionState connectionState;
+
+    boolean includeQueryPlan;
+    boolean estimateQueryPlan;
 
     JdbcEngineState()
     {
@@ -26,6 +31,7 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     {
         this.connectionState = connectionState;
         this.documentParser = new TextEditorDocumentParserProxy();
+
         resetParser();
     }
 
@@ -44,6 +50,14 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
         this.connectionState = connectionState;
         documentParser.currentParser = null;
         resetParser();
+
+        if (changeListeners != null)
+        {
+            for (Runnable r : changeListeners)
+            {
+                r.run();
+            }
+        }
     }
 
     void resetParser()
@@ -55,6 +69,36 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
                     .getParser(this);
 
         }
+    }
+
+    void addChangeListener(Runnable r)
+    {
+        if (changeListeners == null)
+        {
+            changeListeners = new ArrayList<>();
+        }
+        changeListeners.add(r);
+    }
+
+    void removeChangeListener(Runnable r)
+    {
+        if (changeListeners == null)
+        {
+            return;
+        }
+        changeListeners.remove(r);
+    }
+
+    @Override
+    public boolean isIncludeQueryPlan()
+    {
+        return includeQueryPlan;
+    }
+
+    @Override
+    public boolean isEstimateQueryPlan()
+    {
+        return estimateQueryPlan;
     }
 
     @Override

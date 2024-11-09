@@ -285,6 +285,7 @@
                         </goals>
                         <phase>validate</phase>
                         <configuration>
+                            <excludes>**/generated/**/*</excludes>
                             <sourceDirectories>
                                 <sourceDirectory>src/main/</sourceDirectory>
                             </sourceDirectories>
@@ -301,6 +302,7 @@
                         </goals>
                         <phase>validate</phase>
                         <configuration>
+                            <excludes>**/generated/**/*</excludes>
                             <sourceDirectories>
                                 <sourceDirectory>src/test/</sourceDirectory>
                             </sourceDirectories>

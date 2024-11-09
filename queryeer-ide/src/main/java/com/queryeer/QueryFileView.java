@@ -25,6 +25,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToolBar;
 import javax.swing.OverlayLayout;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import org.apache.commons.lang3.ObjectUtils;
@@ -264,8 +265,45 @@ class QueryFileView extends JPanel implements IQueryFile
                 }
             }
         }
+        return null;
+    }
 
-        throw new RuntimeException("No output component found with extension class " + clazz);
+    @Override
+    public void addOutputComponent(IOutputComponent outputComponent)
+    {
+        if (outputComponents == null)
+        {
+            throw new RuntimeException("Query file not initalized yet, cannot add new output components");
+        }
+
+        Class<?> clazz = outputComponent.getClass();
+        int count = outputComponents.size();
+        for (int i = 0; i < count; i++)
+        {
+            IOutputComponent component = outputComponents.get(i);
+            if (clazz.isAssignableFrom(component.getClass()))
+            {
+                // Already added, just return
+                return;
+            }
+        }
+
+        Runnable r = () ->
+        {
+            outputComponents.add(outputComponent);
+            resultTabs.add(outputComponent.getComponent());
+            resultTabs.setTabComponentAt(resultTabs.getTabCount() - 1, new OutputComponentTabComponent(outputComponent));
+        };
+
+        if (SwingUtilities.isEventDispatchThread())
+        {
+            r.run();
+        }
+        else
+        {
+            SwingUtilities.invokeLater(r);
+        }
+
     }
 
     @Override
@@ -359,10 +397,10 @@ class QueryFileView extends JPanel implements IQueryFile
         }
         this.outputComponents = ObjectUtils.defaultIfNull(outputComponents, emptyList());
         int index = 0;
-        for (IOutputComponent ouputComponent : outputComponents)
+        for (IOutputComponent outputComponent : outputComponents)
         {
-            resultTabs.add(ouputComponent.getComponent());
-            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(ouputComponent));
+            resultTabs.add(outputComponent.getComponent());
+            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(outputComponent));
             index++;
         }
 

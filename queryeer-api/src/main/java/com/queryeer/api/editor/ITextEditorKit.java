@@ -1,8 +1,12 @@
 package com.queryeer.api.editor;
 
+import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 
+import java.util.List;
 import java.util.Map;
+
+import javax.swing.Action;
 
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
@@ -21,6 +25,12 @@ public interface ITextEditorKit
     default ITextEditorDocumentParser getDocumentParser()
     {
         return null;
+    }
+
+    /** Return editor kit unique actions. */
+    default List<Action> getActions()
+    {
+        return emptyList();
     }
 
     /**

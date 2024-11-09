@@ -61,4 +61,16 @@ class OracleDatabase extends BaseDatabase implements JdbcDatabase
         }
         return "";
     }
+
+    /*
+     * Query plans -----------
+     * 
+     * - Estimated EXPLAIN PLAN FOR <query>
+     * 
+     * select dbms_xplan.display_plan(format=>'ALL', type=>'xml') from dual
+     * 
+     * - Actual
+     * 
+     * 
+     */
 }

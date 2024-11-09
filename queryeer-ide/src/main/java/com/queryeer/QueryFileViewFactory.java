@@ -28,6 +28,7 @@ class QueryFileViewFactory
         QueryFileView fileView = new QueryFileView(model, outputToolbarActionFactories);
 
         List<IOutputComponent> outputComponents = outputExtensions.stream()
+                .filter(IOutputExtension::isAutoAdded)
                 .sorted(Comparator.comparingInt(IOutputExtension::order))
                 .map(e -> e.createResultComponent(fileView))
                 .filter(Objects::nonNull)

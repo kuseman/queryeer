@@ -85,6 +85,18 @@ class JdbcCompletionProvider implements ICompletionProvider
             {
                 return model.createConnection(jdbcConnection);
             }
+
+            @Override
+            public boolean isIncludeQueryPlan()
+            {
+                return false;
+            }
+
+            @Override
+            public boolean isEstimateQueryPlan()
+            {
+                return false;
+            }
         };
 
         Catalog catalog = crawlService.getCatalog(state, database);

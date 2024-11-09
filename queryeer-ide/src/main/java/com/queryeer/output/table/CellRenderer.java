@@ -78,6 +78,7 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
 
         super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 
+        putClientProperty("html.disable", Boolean.TRUE);
         if (!table.isEditing()
                 && this.row == row
                 && this.col == column
@@ -90,6 +91,7 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
                 str = StringUtils.abbreviate(str, 170);
             }
 
+            putClientProperty("html.disable", Boolean.FALSE);
             setText("<html><u><font color='blue'>" + StringEscapeUtils.escapeHtml4(str));
         }
         else if (value != null)

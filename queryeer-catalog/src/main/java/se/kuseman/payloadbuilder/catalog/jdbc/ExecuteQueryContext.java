@@ -12,7 +12,7 @@ public class ExecuteQueryContext
     private final String database;
     private final String query;
 
-    /** Context used when a query should be executed in the current query files context with it's connection etc. */
+    /** Context used when a query should be executed in the current query files context with it's connection etc. If query is null then the current editors text will be used. */
     public ExecuteQueryContext(String query)
     {
         this.jdbcConnection = null;
@@ -30,22 +30,22 @@ public class ExecuteQueryContext
         this.query = requireNonNull(query);
     }
 
-    public JdbcConnection getJdbcConnection()
+    JdbcConnection getJdbcConnection()
     {
         return jdbcConnection;
     }
 
-    public JdbcDatabase getJdbcDatabase()
+    JdbcDatabase getJdbcDatabase()
     {
         return jdbcDatabase;
     }
 
-    public String getDatabase()
+    String getDatabase()
     {
         return database;
     }
 
-    public String getQuery()
+    String getQuery()
     {
         return query;
     }

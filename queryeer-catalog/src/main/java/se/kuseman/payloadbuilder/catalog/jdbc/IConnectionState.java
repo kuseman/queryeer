@@ -19,4 +19,10 @@ public interface IConnectionState
 
     /** Create a new {@link Connection} for this state */
     Connection createConnection() throws SQLException;
+
+    /** Returns true if the query should include a query plan. */
+    boolean isIncludeQueryPlan();
+
+    /** Returns true if the query should include an estimated query plan. */
+    boolean isEstimateQueryPlan();
 }

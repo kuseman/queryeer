@@ -14,6 +14,8 @@
         <maven.deploy.skip>true</maven.deploy.skip>
 
         <antlr4.version>4.13.0</antlr4.version>
+        <bind-api.version>4.0.2</bind-api.version>
+        <jaxb-runtime.version>4.0.5</jaxb-runtime.version>
     </properties>
 
     <dependencies>
@@ -50,6 +52,17 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <dependency>
+            <groupId>jakarta.xml.bind</groupId>
+            <artifactId>jakarta.xml.bind-api</artifactId>
+            <version>${bind-api.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jaxb</groupId>
+            <artifactId>jaxb-runtime</artifactId>
+            <version>${jaxb-runtime.version}</version>
+        </dependency>
+
         <!-- Provided driver to be able to handle exceptions etc. -->
         <dependency>
             <groupId>com.microsoft.sqlserver</groupId>
@@ -114,6 +127,26 @@
                             <listener>false</listener>
                             <sourceDirectory>${basedir}/src/main/resources/antlr4</sourceDirectory>
                             <outputDirectory>${project.build.directory}/generated-sources/antlr4</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jvnet.jaxb</groupId>
+                <artifactId>jaxb-maven-plugin</artifactId>
+                <version>4.0.8</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <schemaDirectory>src/main/resources/xsd</schemaDirectory>
+                            <generateDirectory>${project.build.directory}/generated-sources/xjc</generateDirectory>
+                            <generatePackage>se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019</generatePackage>
+                            <schemaIncludes>
+                                <include>/sqlserver2019queryplan.xsd</include>
+                            </schemaIncludes>
                         </configuration>
                     </execution>
                 </executions>

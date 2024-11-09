@@ -16,4 +16,7 @@ public interface ITextEditor extends IEditor
 
     /** Force a re-parsing of text editor content */
     void parse();
+
+    /** Return editor kit on editor. */
+    ITextEditorKit getEditorKit();
 }

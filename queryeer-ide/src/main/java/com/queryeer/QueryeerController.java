@@ -45,6 +45,7 @@ import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputComponent;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
@@ -523,13 +524,22 @@ class QueryeerController implements PropertyChangeListener
         OutputWriter ow = null;
         Writer w;
         Class<? extends IOutputComponent> componentToSelect = null;
+        Class<? extends IOutputComponent> componentToSelectAfterQuery = null;
+
         switch (event.getOutputType())
         {
+            case QUERY_PLAN:
             case TABLE:
                 componentToSelect = ITableOutputComponent.class;
                 ow = fileView.getOutputComponent(componentToSelect)
                         .getExtension()
                         .createOutputWriter(fileView);
+
+                if (event.getOutputType() == OutputType.QUERY_PLAN)
+                {
+                    componentToSelectAfterQuery = IQueryPlanOutputComponent.class;
+                }
+
                 break;
             case TEXT:
                 componentToSelect = ITextOutputComponent.class;
@@ -567,7 +577,14 @@ class QueryeerController implements PropertyChangeListener
         }
         fileView.selectOutputComponent(componentToSelect);
 
-        QueryService.executeQuery(fileView, ow, event.getContext(), true);
+        Class<? extends IOutputComponent> c = componentToSelectAfterQuery;
+        QueryService.executeQuery(fileView, ow, event.getContext(), true, () ->
+        {
+            if (c != null)
+            {
+                SwingUtilities.invokeLater(() -> fileView.selectOutputComponent(c));
+            }
+        });
     }
 
     /** Execute listener. */
@@ -604,7 +621,9 @@ class QueryeerController implements PropertyChangeListener
         Object query = fileView.getEditor()
                 .getValue();
 
-        QueryService.executeQuery(fileView, getOutputWriter(fileView, writer), query, false);
+        QueryService.executeQuery(fileView, getOutputWriter(fileView, writer), query, false, () ->
+        {
+        });
     }
 
     /** Creates a proxy outputwriter that writes to multiple output writers. */

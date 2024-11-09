@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
 
+import javax.swing.SwingUtilities;
+
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,9 @@ import com.microsoft.sqlserver.jdbc.SQLServerException;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.editor.TextSelection;
+import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputComponent;
+import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputExtension;
+import com.queryeer.api.extensions.output.queryplan.Node;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
@@ -55,8 +61,10 @@ class SqlServerDatabase implements JdbcDatabase
     private final TreeNodeSupplier treeNodeSupplier;
     private final Icons icons;
     private final ITemplateService templateService;
+    private final IQueryPlanOutputExtension queryPlanOutputExtension;
 
-    public SqlServerDatabase(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService)
+    public SqlServerDatabase(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
+            IQueryPlanOutputExtension queryPlanOutputExtension)
     {
         this.crawlerService = crawlerService;
         this.eventBus = eventBus;
@@ -64,6 +72,7 @@ class SqlServerDatabase implements JdbcDatabase
         this.queryActionsConfigurable = queryActionsConfigurable;
         this.treeNodeSupplier = new SqlServerTreeNodeSupplier(this, eventBus, icons, queryActionsConfigurable, templateService);
         this.templateService = templateService;
+        this.queryPlanOutputExtension = queryPlanOutputExtension;
     }
 
     @Override
@@ -262,6 +271,62 @@ class SqlServerDatabase implements JdbcDatabase
         {
             throw new RuntimeException(e);
         }
+    }
+
+    @Override
+    public void beforeExecuteQuery(Connection connection, IConnectionState connectionState) throws SQLException
+    {
+        try (Statement stm = connection.createStatement())
+        {
+            stm.execute("SET STATISTICS XML " + (!connectionState.isEstimateQueryPlan()
+                    && connectionState.isIncludeQueryPlan() ? "ON"
+                            : "OFF"));
+            stm.execute("SET SHOWPLAN_XML " + (connectionState.isEstimateQueryPlan() ? "ON"
+                    : "OFF"));
+        }
+    }
+
+    @Override
+    public boolean processResultSet(IQueryFile queryFile, IConnectionState connectionState, ResultSet rs) throws SQLException
+    {
+        if ((connectionState.isIncludeQueryPlan()
+                || connectionState.isEstimateQueryPlan())
+                && rs.getMetaData()
+                        .getColumnCount() == 1
+                && StringUtils.containsIgnoreCase(rs.getMetaData()
+                        .getColumnLabel(1), "Showplan")
+                && StringUtils.startsWithIgnoreCase(rs.getString(1), "<ShowPlanXML"))
+        {
+            Node node = SqlServerQueryPlanParser.parseXml(rs.getString(1));
+            if (node != null)
+            {
+                SwingUtilities.invokeLater(() ->
+                {
+                    IQueryPlanOutputComponent outputComponent = queryFile.getOutputComponent(IQueryPlanOutputComponent.class);
+                    if (outputComponent == null)
+                    {
+                        outputComponent = (IQueryPlanOutputComponent) queryPlanOutputExtension.createResultComponent(queryFile);
+                        queryFile.addOutputComponent(outputComponent);
+                    }
+                    outputComponent.addQueryPlan(node);
+                });
+            }
+        }
+
+        // Keep processing and show the plan, might have setting to hide the xml
+        return true;
+    }
+
+    @Override
+    public boolean supportsIncludeQueryPlanAction()
+    {
+        return true;
+    }
+
+    @Override
+    public boolean supportsShowEstimatedQueryPlanAction()
+    {
+        return true;
     }
 
     private TableSource.Type tableSourceTypeFrom(String type)

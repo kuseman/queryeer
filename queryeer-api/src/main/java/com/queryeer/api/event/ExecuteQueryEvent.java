@@ -36,6 +36,8 @@ public class ExecuteQueryEvent extends Event
         /** Output result to new query. NOTE! Will write result in plain/text format */
         NEW_QUERY,
         /** Output to clipboard. NOTE! Will write result in plain/text format */
-        CLIPBOARD
+        CLIPBOARD,
+        /** Outputs result to table but switches the active tab to query plan. */
+        QUERY_PLAN;
     }
 }

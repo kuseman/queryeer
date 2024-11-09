@@ -217,7 +217,9 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
         });
 
         //@formatter:off
-        List<Action> actions = asList(
+        List<Action> actions = new ArrayList<>();
+        actions.addAll(editorKit.getActions());
+        actions.addAll(asList(
                 toggleShowWhiteSpaceAction,
                 toggleCommentAction,
                 showFindDialogAction,
@@ -226,7 +228,7 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
                 pasteSpecialAction,
                 lowerCaseSelection,
                 upperCaseSelection
-                );
+                ));
         //@formatter:on
 
         putClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS, actions);
@@ -390,6 +392,12 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
                 parser.currentToolTip = null;
             }
         }
+    }
+
+    @Override
+    public ITextEditorKit getEditorKit()
+    {
+        return editorKit;
     }
 
     @Override
@@ -620,7 +628,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 4);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_Y, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK));
             putValue(Action.ACTION_COMMAND_KEY, "lowercaseSelection");
         }
     };
@@ -632,7 +641,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 5);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_X, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_X, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK));
             putValue(Action.ACTION_COMMAND_KEY, "uppercaseSelection");
         }
     };
@@ -659,7 +669,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
         {
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_TOOLBAR, true);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 9);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_7, InputEvent.CTRL_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_7, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx()));
             putValue(Action.ACTION_COMMAND_KEY, "toggleComments");
             putValue(Action.SHORT_DESCRIPTION, "Toggle Comments On Selected Lines");
         }
@@ -677,7 +688,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 3);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_V, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_V, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK));
             putValue(Action.ACTION_COMMAND_KEY, "pasteSpecial");
         }
 
@@ -742,7 +754,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 0);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx()));
             putValue(Action.ACTION_COMMAND_KEY, "find");
         }
 
@@ -764,7 +777,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 1);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_H, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx()));
             putValue(Action.ACTION_COMMAND_KEY, "replace");
         }
 
@@ -787,7 +801,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 2);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_L, InputEvent.CTRL_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_L, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx()));
             putValue(Action.ACTION_COMMAND_KEY, "goto");
         }
 
@@ -1129,12 +1144,15 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
 
         private MouseMotionListener hideLinkActionsListener = new MouseAdapter()
         {
+            private static final int LINK_MASK = RTextAreaBase.isOSX() ? InputEvent.META_DOWN_MASK
+                    : InputEvent.CTRL_DOWN_MASK;
+
             @Override
             public void mouseMoved(MouseEvent e)
             {
                 // Hide popup if we're not looking for links anymore
                 if (linkActionsPopup.isVisible()
-                        && !((e.getModifiersEx() & KeyEvent.CTRL_DOWN_MASK) == KeyEvent.CTRL_DOWN_MASK))
+                        && !((e.getModifiersEx() & LINK_MASK) == LINK_MASK))
                 {
                     linkActionsPopup.setVisible(false);
                 }

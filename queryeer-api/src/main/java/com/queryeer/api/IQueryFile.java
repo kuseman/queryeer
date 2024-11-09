@@ -27,6 +27,9 @@ public interface IQueryFile
     /** Selects output component with provided class. */
     void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass);
 
+    /** Add a new output component to query file. */
+    void addOutputComponent(IOutputComponent outputComponent);
+
     /** Return the selected output component. */
     IOutputComponent getSelectedOutputComponent();
 

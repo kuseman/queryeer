@@ -353,7 +353,9 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         {
             ParseTree current = queue.remove(0);
 
-            if (current instanceof ParserRuleContext cctx)
+            if (current instanceof ParserRuleContext cctx
+                    && cctx.start != null
+                    && cctx.stop != null)
             {
                 if (offset >= cctx.start.getStartIndex()
                         && offset < cctx.stop.getStopIndex())

@@ -23,7 +23,7 @@ class QueryService
             .build());
 
     /** Execute query for provider query file */
-    static void executeQuery(final QueryFileView fileView, OutputWriter writer, Object query, boolean byEvent)
+    static void executeQuery(final QueryFileView fileView, OutputWriter writer, Object query, boolean byEvent, Runnable afterQuery)
     {
         final QueryFileModel file = fileView.getModel();
         final IQueryEngine queryEngine = file.getQueryEngine();
@@ -77,6 +77,8 @@ class QueryService
                 textOutput.getTextWriter()
                         .println("Finished: " + ZonedDateTime.now()
                                 .toString());
+
+                afterQuery.run();
             }
         });
     }

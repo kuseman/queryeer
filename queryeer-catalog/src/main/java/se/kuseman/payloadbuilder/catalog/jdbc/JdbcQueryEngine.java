@@ -260,7 +260,7 @@ class JdbcQueryEngine implements IQueryEngine
     public IEditor createEditor(IState state, String filename)
     {
         JdbcEngineState engineState = (JdbcEngineState) state;
-        JdbcTextEditorKit editorKit = new JdbcTextEditorKit(this, engineState);
+        JdbcTextEditorKit editorKit = new JdbcTextEditorKit(this, engineState, icons.getIconFactory(), eventBus);
         return editorFactory.createTextEditor(editorKit);
     }
 
@@ -298,6 +298,10 @@ class JdbcQueryEngine implements IQueryEngine
             if (query instanceof ExecuteQueryContext ctx)
             {
                 queryText = ctx.getQuery();
+                if (queryText == null)
+                {
+                    queryText = String.valueOf(((ITextEditor) queryFile.getEditor()).getValue());
+                }
 
                 // Execute the context query with a new connection etc.
                 if (ctx.getJdbcConnection() != null)
@@ -336,6 +340,8 @@ class JdbcQueryEngine implements IQueryEngine
             try
             {
                 Connection connection = state.getConnection();
+                jdbcDatabase.beforeExecuteQuery(connection, engineState);
+
                 // Only set status on regular queries
                 if (!closeState)
                 {
@@ -367,7 +373,7 @@ class JdbcQueryEngine implements IQueryEngine
                                     break;
                                 }
 
-                                rowCount += writeResultSet(rs, writer, state);
+                                rowCount += writeResultSet(queryFile, rs, writer, engineState);
                             }
 
                             if (!state.isAbort())
@@ -410,6 +416,12 @@ class JdbcQueryEngine implements IQueryEngine
             }
             finally
             {
+                // Switch state of estimate, that is a one time action
+                if (engineState.estimateQueryPlan)
+                {
+                    engineState.estimateQueryPlan = false;
+                }
+
                 if (!closeState)
                 {
                     state.afterQuery();
@@ -475,10 +487,12 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void focus(IQueryFile queryFile)
     {
-        if (quickProperties == null)
+        if (quickProperties == null
+                || databasesModel == null)
         {
             return;
         }
+
         suppressEvents = true;
 
         try
@@ -492,6 +506,10 @@ class JdbcQueryEngine implements IQueryEngine
                 // Force a reparse when we focus a new file
                 if (queryFile.getEditor() instanceof ITextEditor textEditor)
                 {
+                    if (textEditor.getEditorKit() instanceof JdbcTextEditorKit kit)
+                    {
+                        kit.updateActionStatuses();
+                    }
                     textEditor.parse();
                 }
 
@@ -517,7 +535,7 @@ class JdbcQueryEngine implements IQueryEngine
         }
     }
 
-    private int writeResultSet(ResultSet rs, OutputWriter writer, ConnectionState state) throws SQLException, IOException
+    private int writeResultSet(IQueryFile queryFile, ResultSet rs, OutputWriter writer, JdbcEngineState state) throws SQLException, IOException
     {
         int rowCount = 0;
         Pair<int[], String[]> pair = getColumnsMeta(rs);
@@ -526,12 +544,23 @@ class JdbcQueryEngine implements IQueryEngine
         writer.initResult(columns);
 
         int count = columns.length;
+        boolean first = true;
 
         while (rs.next())
         {
-            if (state.isAbort())
+            if (state.connectionState.isAbort())
             {
                 break;
+            }
+
+            if (first)
+            {
+                if (!state.getJdbcDatabase()
+                        .processResultSet(queryFile, state, rs))
+                {
+                    return 0;
+                }
+                first = false;
             }
 
             writer.startRow();

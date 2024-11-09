@@ -2,6 +2,7 @@ package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import com.queryeer.api.IQueryFile;
@@ -12,7 +13,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 
 /** Definition of a JDBC database. This is the glue that is missing from plain JDBC to do quirks and specials for different RDBMS:es */
-public interface JdbcDatabase// extends SqlDialect
+public interface JdbcDatabase
 {
     /** Name of this database. Used in configurations etc. */
     String name();
@@ -82,5 +83,37 @@ public interface JdbcDatabase// extends SqlDialect
     default Catalog getCatalog(IConnectionState connectionState, String database)
     {
         return null;
+    }
+
+    /** Called before query execution to let jdbcdatabases perform init. operations like include query plans etc. */
+    default void beforeExecuteQuery(Connection connection, IConnectionState state) throws SQLException
+    {
+        return;
+    }
+
+    /**
+     * Process result set and perform actions. NOTE! Result set is placed on first row when passed.
+     *
+     * @return Return true if engine should proceed and write result set to output otherwise false. When false this result set is discarded.
+     */
+    default boolean processResultSet(IQueryFile queryFile, IConnectionState state, ResultSet rs) throws SQLException
+    {
+        return true;
+    }
+
+    /**
+     * Returns true if this database supports show estimated query plan action.
+     */
+    default boolean supportsShowEstimatedQueryPlanAction()
+    {
+        return false;
+    }
+
+    /**
+     * Returns true if this database supports show estimated query plan action.
+     */
+    default boolean supportsIncludeQueryPlanAction()
+    {
+        return false;
     }
 }

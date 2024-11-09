@@ -387,7 +387,8 @@ class QueryeerView extends JFrame
         DefaultComboBoxModel<IOutputExtension> outputComboModel = (DefaultComboBoxModel<IOutputExtension>) comboOutput.getModel();
         for (IOutputExtension outputExtension : actualOutputExtensions)
         {
-            if (!outputExtension.isAutoPopulated())
+            if (!outputExtension.isAutoPopulated()
+                    && outputExtension.isAutoAdded())
             {
                 outputComboModel.addElement(outputExtension);
             }
@@ -529,7 +530,8 @@ class QueryeerView extends JFrame
         InputMap inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         for (IOutputExtension outputExtension : outputExtensions)
         {
-            if (!outputExtension.isAutoPopulated())
+            if (!outputExtension.isAutoPopulated()
+                    && outputExtension.isAutoAdded())
             {
                 inputMap.put(outputExtension.getKeyStroke(), outputExtension);
                 topPanel.getActionMap()
