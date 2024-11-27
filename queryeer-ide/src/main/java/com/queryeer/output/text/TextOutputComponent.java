@@ -10,6 +10,9 @@ import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.Writer;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.swing.Icon;
 import javax.swing.JScrollPane;
@@ -17,6 +20,7 @@ import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
 import javax.swing.text.SimpleAttributeSet;
@@ -37,6 +41,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     private static final String WARNING_LOCATION = "warningLocation";
     private final IQueryFile queryFile;
     private final JTextPane text;
+    private final Document document;
     private final PrintWriter printWriter;
     private final IOutputExtension extension;
 
@@ -46,6 +51,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         this.extension = requireNonNull(extension, "extension");
         this.queryFile = requireNonNull(queryFile, "queryFile");
         this.text = (JTextPane) getViewport().getComponent(0);
+        this.document = this.text.getDocument();
         this.text.setFont(new Font("Consolas", Font.PLAIN, 13));
         this.text.addMouseListener(new TextMouseListener());
         this.printWriter = createPrintWriter();
@@ -97,6 +103,86 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         appendText(text + System.lineSeparator(), warning);
     }
 
+    private record TextBatch(int offset, String text)
+    {
+    }
+
+    /** Batch writer that doesn't access the text panes document after each write to improve UI exp. */
+    PrintWriter createBatchWriter()
+    {
+        // CSOFF
+        Writer writer = new Writer()
+        // CSON
+        {
+            private int prevOffset = 0;
+            private volatile boolean abort = false;
+            private List<TextBatch> batch = new ArrayList<>(500);
+
+            @Override
+            public void write(char[] cbuf, int off, int len) throws IOException
+            {
+                String string = new String(cbuf, off, len);
+                batch.add(new TextBatch(prevOffset, string));
+                prevOffset += string.length();
+                if (batch.size() >= 500)
+                {
+                    addBatch();
+                }
+            }
+
+            @Override
+            public void flush() throws IOException
+            {
+                addBatch();
+            }
+
+            @Override
+            public void close() throws IOException
+            {
+                // We abort the writer upon close. If this is a regular write
+                // with no forced abort everything should be written in flush
+                // but if we get an abort, close is called and if we are writing alot of queued up batches
+                // we must abort to avoid hanging UI.
+                abort = true;
+            }
+
+            private void addBatch()
+            {
+                if (batch.isEmpty())
+                {
+                    return;
+                }
+
+                try
+                {
+                    SwingUtilities.invokeAndWait(() ->
+                    {
+                        for (TextBatch b : batch)
+                        {
+                            if (abort)
+                            {
+                                break;
+                            }
+                            try
+                            {
+                                document.insertString(b.offset, b.text, null);
+                            }
+                            catch (BadLocationException e)
+                            {
+                            }
+                        }
+                        batch.clear();
+                    });
+                }
+                catch (InvocationTargetException | InterruptedException e)
+                {
+                }
+            }
+        };
+
+        return new PrintWriter(writer, true);
+    }
+
     private PrintWriter createPrintWriter()
     {
         // CSOFF
@@ -135,13 +221,20 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     {
         Runnable r = () ->
         {
-            Document doc = text.getDocument();
+            // Detach document before update
+            int endOffset = document.getLength();
+            text.setDocument(new DefaultStyledDocument());
             try
             {
-                doc.insertString(doc.getLength(), string, attributeSet);
+                document.insertString(document.getLength(), string, attributeSet);
             }
             catch (BadLocationException e)
             {
+            }
+            finally
+            {
+                text.setDocument(document);
+                text.setCaretPosition(endOffset);
             }
         };
         if (SwingUtilities.isEventDispatchThread())

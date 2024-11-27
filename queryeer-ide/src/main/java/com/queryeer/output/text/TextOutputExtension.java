@@ -12,6 +12,7 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
@@ -67,6 +68,7 @@ class TextOutputExtension implements IOutputExtension
             throw new IllegalArgumentException("No output format selected");
         }
 
-        return outputFormat.createOutputWriter(file, file.getMessagesWriter());
+        TextOutputComponent outputComponent = (TextOutputComponent) file.getOutputComponent(ITextOutputComponent.class);
+        return outputFormat.createOutputWriter(file, outputComponent.createBatchWriter());
     }
 }

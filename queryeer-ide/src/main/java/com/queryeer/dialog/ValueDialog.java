@@ -1,6 +1,7 @@
 package com.queryeer.dialog;
 
 import java.awt.Component;
+import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
@@ -10,14 +11,23 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import javax.swing.AbstractAction;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
+import javax.swing.UIManager;
 import javax.swing.WindowConstants;
 
+import org.fife.rsta.ui.search.FindDialog;
+import org.fife.rsta.ui.search.SearchEvent;
+import org.fife.rsta.ui.search.SearchListener;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
+import org.fife.ui.rtextarea.SearchContext;
+import org.fife.ui.rtextarea.SearchEngine;
+import org.fife.ui.rtextarea.SearchResult;
 
 import com.queryeer.Constants;
 
@@ -66,6 +76,40 @@ public final class ValueDialog
         JFrame frame = new JFrame(title);
         frame.setIconImages(Constants.APPLICATION_ICONS);
         RSyntaxTextArea rta = new RSyntaxTextArea();
+
+        FindDialog findDialog = new FindDialog(frame, new ValueSearchListener(rta))
+        {
+            {
+                context.setSearchWrap(true);
+                context.setMatchCase(false);
+                context.setMarkAll(false);
+            }
+
+            @Override
+            public void setVisible(boolean b)
+            {
+                if (b)
+                {
+                    setLocationRelativeTo(getParent());
+                }
+                super.setVisible(b);
+            }
+        };
+
+        rta.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx()), "FIND");
+        rta.getActionMap()
+                .put("FIND", new AbstractAction()
+                {
+
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        findDialog.setVisible(true);
+                    }
+                });
+
         rta.setCodeFoldingEnabled(true);
         rta.setBracketMatchingEnabled(true);
         // CSOFF
@@ -122,6 +166,60 @@ public final class ValueDialog
         Format(String syntax)
         {
             this.syntax = syntax;
+        }
+    }
+
+    private static class ValueSearchListener implements SearchListener
+    {
+        private final RSyntaxTextArea textArea;
+
+        ValueSearchListener(RSyntaxTextArea textArea)
+        {
+            this.textArea = textArea;
+        }
+
+        @Override
+        public String getSelectedText()
+        {
+            return textArea.getSelectedText();
+        }
+
+        @Override
+        public void searchEvent(SearchEvent e)
+        {
+            SearchEvent.Type type = e.getType();
+            SearchContext context = e.getSearchContext();
+            SearchResult result;
+
+            switch (type)
+            {
+                default:
+                case MARK_ALL:
+                    result = SearchEngine.markAll(textArea, context);
+                    break;
+                case FIND:
+                    result = SearchEngine.find(textArea, context);
+                    if (!result.wasFound()
+                            || result.isWrapped())
+                    {
+                        UIManager.getLookAndFeel()
+                                .provideErrorFeedback(textArea);
+                    }
+                    break;
+                case REPLACE:
+                    result = SearchEngine.replace(textArea, context);
+                    if (!result.wasFound()
+                            || result.isWrapped())
+                    {
+                        UIManager.getLookAndFeel()
+                                .provideErrorFeedback(textArea);
+                    }
+                    break;
+                case REPLACE_ALL:
+                    result = SearchEngine.replaceAll(textArea, context);
+                    JOptionPane.showMessageDialog(null, result.getCount() + " occurrences replaced.");
+                    break;
+            }
         }
     }
 }

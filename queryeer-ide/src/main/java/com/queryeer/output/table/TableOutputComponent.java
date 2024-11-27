@@ -596,6 +596,10 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 initialSearch = false;
                 return;
             }
+            if (currentTable == null)
+            {
+                return;
+            }
             currentCol++;
             if (currentCol >= currentTable.getColumnCount())
             {

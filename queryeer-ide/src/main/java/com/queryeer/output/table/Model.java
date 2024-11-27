@@ -42,7 +42,7 @@ class Model implements TableModel
         rows.add(row);
         if (rows.size() >= TableOutputComponent.COLUMN_ADJUST_ROW_LIMIT)
         {
-            notifyChanges();
+            notifyChanges(false);
         }
     }
 
@@ -132,10 +132,11 @@ class Model implements TableModel
     }
 
     /** Notifies changes since last notify */
-    void notifyChanges()
+    void notifyChanges(boolean force)
     {
         int size = rows.size() - 1;
-        if (size >= lastNotifyRowIndex)
+        if (size >= lastNotifyRowIndex
+                || force)
         {
             TableModelEvent event = new TableModelEvent(this, lastNotifyRowIndex, size, TableModelEvent.ALL_COLUMNS, TableModelEvent.INSERT);
             if (SwingUtilities.isEventDispatchThread())
