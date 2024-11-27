@@ -127,6 +127,11 @@ class CryptoService implements ICryptoService, IConfigurable
     }
 
     @Override
+    public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
+    {
+    }
+
+    @Override
     public Component getComponent()
     {
         if (configurableComponent == null)

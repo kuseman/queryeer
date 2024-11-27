@@ -16,7 +16,7 @@ import javax.swing.UIManager;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
-/** Icons in Queryeer */
+/** Constants in Queryeer */
 public interface Constants
 {
     public static final Dimension DEFAULT_DIALOG_SIZE = new Dimension(1000, 800);
@@ -34,11 +34,9 @@ public interface Constants
     static final Icon FILE_TEXT_O = FontIcon.of(FontAwesome.FILE_TEXT_O);
     static final Icon ARROWS_V = FontIcon.of(FontAwesome.ARROWS_V);
     static final Icon ARROWS_H = FontIcon.of(FontAwesome.ARROWS_H);
-    static final Icon INDENT = FontIcon.of(FontAwesome.INDENT);
+    static final Icon PARAGRAPH = FontIcon.of(FontAwesome.PARAGRAPH);
     static final Icon EDIT = FontIcon.of(FontAwesome.EDIT);
     static final Icon COG = FontIcon.of(FontAwesome.COG);
-    static final Icon SEARCH = FontIcon.of(FontAwesome.SEARCH);
-    static final Icon SHARE = FontIcon.of(FontAwesome.SHARE);
     public static final int SCROLLBAR_WIDTH = ((Integer) UIManager.get("ScrollBar.width")).intValue();
     public static final List<? extends Image> APPLICATION_ICONS = asList("icons8-database-administrator-48.png", "icons8-database-administrator-96.png").stream()
             .map(name -> QueryeerView.class.getResource("/icons/" + name))

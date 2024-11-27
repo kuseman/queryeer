@@ -37,9 +37,14 @@ public interface IConfigurable extends IExtension
     String groupName();
 
     /**
-     * Add a dirty sate consumer for this configurable. Should be called each time the dirty state changes.
+     * Add a dirty sate consumer to this configurable. Should be called each time the dirty state changes.
      */
     void addDirtyStateConsumer(Consumer<Boolean> consumer);
+
+    /**
+     * Remove a dirty sate consumer from this configurable. Should be called each time the dirty state changes.
+     */
+    void removeDirtyStateConsumer(Consumer<Boolean> consumer);
 
     /**
      * Commits changes made to configurable.

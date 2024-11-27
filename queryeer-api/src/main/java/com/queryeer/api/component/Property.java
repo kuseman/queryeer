@@ -36,4 +36,7 @@ public @interface Property
 
     /** Return tooltip that should be displayed on this property */
     String tooltip() default "";
+
+    /** Should the parent (UI) be reloaded when this property changes. Useful if other properties is set when this property is set to properly reflect that in UI. */
+    boolean reloadParentOnChange() default false;
 }
