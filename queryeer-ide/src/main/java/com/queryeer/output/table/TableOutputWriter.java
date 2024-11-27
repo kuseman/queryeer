@@ -73,6 +73,12 @@ class TableOutputWriter implements OutputWriter
     }
 
     @Override
+    public void flush()
+    {
+        model.notifyChanges(true);
+    }
+
+    @Override
     public void endRow()
     {
         queryFile.incrementTotalRowCount();

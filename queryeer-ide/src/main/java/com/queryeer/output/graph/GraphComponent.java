@@ -611,7 +611,6 @@ class GraphComponent extends JPanel
     private void populateTimeSeriesData(int rowNumber, List<String> rowColumns, List<Object> rowValues)
     {
         boolean hasBreakDownSetting = !settings.breakDownColumns.isEmpty();
-
         // No value columns -> count
         // Break down column -> switch time series
         // value columns -> many series with many values
@@ -670,6 +669,9 @@ class GraphComponent extends JPanel
         {
             bucketStartRow.put(xbucket, rowNumber - 1);
         }
+        List<String> lowerColumns = rowColumns.stream()
+                .map(StringUtils::lowerCase)
+                .toList();
 
         // Break down time series
         if (hasBreakDownSetting)
@@ -677,7 +679,7 @@ class GraphComponent extends JPanel
             List<Object> breakDownValue = new ArrayList<>(settings.breakDownColumns.size());
             for (String col : settings.breakDownColumns)
             {
-                int index = rowColumns.indexOf(col);
+                int index = lowerColumns.indexOf(col);
                 breakDownValue.add(index >= 0 ? rowValues.get(index)
                         : NULL);
             }
@@ -695,7 +697,7 @@ class GraphComponent extends JPanel
             size = settings.valueColumns.size();
             for (int i = 0; i < size; i++)
             {
-                int index = rowColumns.indexOf(settings.valueColumns.get(i));
+                int index = lowerColumns.indexOf(settings.valueColumns.get(i));
                 values[i] = index >= 0 ? rowValues.get(index)
                         : NULL;
 
@@ -738,6 +740,9 @@ class GraphComponent extends JPanel
     private void populateCategoryChart(int rowNumber, List<String> rowColumns, List<Object> rowValues)
     {
         Comparable<?> categoryRowValue = null;
+        List<String> lowerColumns = rowColumns.stream()
+                .map(StringUtils::lowerCase)
+                .toList();
 
         // First find category row value
         int size = rowColumns.size();
@@ -776,7 +781,7 @@ class GraphComponent extends JPanel
             List<Object> breakDownValue = new ArrayList<>(settings.breakDownColumns.size());
             for (String col : settings.breakDownColumns)
             {
-                int index = rowColumns.indexOf(col);
+                int index = lowerColumns.indexOf(col);
                 breakDownValue.add(index >= 0 ? rowValues.get(index)
                         : NULL);
             }
@@ -785,7 +790,7 @@ class GraphComponent extends JPanel
             Object value = 1;
             if (!settings.valueColumns.isEmpty())
             {
-                int index = rowColumns.indexOf(settings.valueColumns.get(0));
+                int index = lowerColumns.indexOf(settings.valueColumns.get(0));
                 value = index >= 0 ? rowValues.get(index)
                         : NULL;
             }
@@ -798,7 +803,7 @@ class GraphComponent extends JPanel
             categoryColumns = settings.valueColumns;
             valueSupplier = col ->
             {
-                int index = rowColumns.indexOf(col);
+                int index = lowerColumns.indexOf(col);
                 if (index < 0)
                 {
                     return 0;
