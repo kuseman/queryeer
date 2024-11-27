@@ -8,19 +8,12 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.swing.ImageIcon;
-
 import com.fasterxml.jackson.core.type.TypeReference;
 
 /** Variuos utils used by Queryeer */
 final class Utils
 {
     private static final Pattern VERSION_PATTERN = Pattern.compile("(\\d+)(?:\\.)?");
-
-    static ImageIcon getResouceIcon(String name)
-    {
-        return new ImageIcon(Utils.class.getResource(name));
-    }
 
     /** Compare 2 semver strings */
     static int compareVersions(String nameA, String nameB)
@@ -56,13 +49,6 @@ final class Utils
             }
         }
         return components;
-    }
-
-    /** Return true or false depending on if value is between start and end. Both inclusive */
-    static boolean between(int start, int end, int value)
-    {
-        return value >= start
-                && value <= end;
     }
 
     /** Fetches latest version (tag) from github */

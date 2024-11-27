@@ -24,6 +24,12 @@ public interface IOutputExtension extends IExtension
         return false;
     }
 
+    /** Returns true if this extension is auto added to result tabs. If false then this is extension is added programmatically by external events. */
+    default boolean isAutoAdded()
+    {
+        return true;
+    }
+
     /** The order in which the extension is shown in combobox in toolbar and in result tab pane */
     default int order()
     {

@@ -178,7 +178,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
     }
 
     /** Get indices for provided connection. */
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({ "unchecked", "resource" })
     List<Index> getIndices(Connection connection, boolean forceReload)
     {
         reloadButtons.forEach(b -> b.setEnabled(false));
