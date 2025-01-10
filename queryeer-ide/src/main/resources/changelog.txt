@@ -2,6 +2,41 @@ CHANGELOG
 
 Queryeer
 
+v2.0.0
+feat: Support for different query engines
+- Now different query engines can be added to Queryeer and not only Payloadbuilder which makes Queeyeer a much more versatile editor
+
+feat: Query shortcuts in Texteditor with support for override rules that triggers differently depending on active query engine etc.
+
+feat: JDBC engine added
+- A new JDBC engine is built with support for plain JDBC which pretty much makes Queryeer a regular SQL query editor.
+  * Support for code completion
+  * Support for links in editor and navigation tree (via CTRL/META mouse hoover)
+  * Support for visualizing query plans
+  NOTE! All features above depends on implementation status for different RDBMS:es (MSSQL has most support, some parts for Oracle)
+
+feat: Project View
+- A project view with support for adding folders that are tracked for changes and integrates with Queryeer.
+  * Opens new files
+  * Switch to an open file
+  * Fast search for files in tree
+
+feat: General file hadling
+- Many improvements in file handling in general
+  * A dialog with currently open windows where files can be saved, activated etc.
+  * Fast selecting a open file from menu
+  * Sorting open files on name/activity/etc.
+  * Backup system where all edited files (even new unsaved ones) are persisted to disk which means
+    all edits are preserved during a restart of Queryeer
+fix: Alot of bug fixes etc.
+fix: Add search dialog in value popup dialog
+fix: Improve performance in text output that don't hangs UI
+fix: Fix case insensitiveness in graph component when configuring column namesv1.7.0
+fix: Small improvement in table output to flush rows earlier from model to UI
+fix: Include throwables in logs dialog
+fix: Fix index out of bounds when clicking bars in graph component
+fix: Bump payloadbuilder
+
 v1.7.0
 feat: Add Graph output component to be able to graph result sets into bar or line graphs.
 
@@ -61,6 +96,28 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.7.0
+feat: Implement a full expression transpiler that generates an ES query from a PLB expression. Handle nested and/or/not's etc.
+feat: Add support for having outer references in inner/left joins when the inner is of expression scan type
+fix: Fixed issue where in expression did not work for temporary table indices
+fix: Hash Any values the same way as regular types to be able to get correct results in hash match etc.
+fix: Evaluate set statements during complie phase to be able to use variables fully in UseStatements etc.
+feat: Add string_split scalar function
+fix: Include indices in temporary tables meta query
+fix: Double the buffer capacity when resizing to avoid to much allocation/copying
+fix: Increase performance by precalculating table stats. upon create instead of when used
+fix: Fixed issue where some columns did not appear in a schema less query with asterisk selects
+fix: Move logical plan rule SubQueryExpressionPushDown to before ColumnResolver to remove alot of complex code.
+fix: Fix issue with order by ordinal along with an asterisk select that yielded an ambiguity
+build(deps): Bump commons-io:commons-io from 2.13.0 to 2.14.0
+fix: Drop out of writing if there is an abort signal in session
+feat: Add parseDuration and parseDatasize scalar functions
+fix: Improve performance in AInMemoryCache by avoiding compute section in concurrent hashmap
+fix: Javadoc newlines
+fix: Fix support for assaignment expressions in aggregates
+fix: Fixed issue when seek predicate had a null value on first row then whole join broke
+fix: Guard against calling downstream datasource in index seek operator if all seek values was null => no possible result
 
 v1.6.0
 build: Don't run sql server 2017 when the container fails to start. Happens somehow in GITHUB actions
