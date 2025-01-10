@@ -145,7 +145,8 @@ class ProjectsView extends JPanel
 
                 File file = chooser.getSelectedFile();
                 Project project = new Project();
-                project.folder = file;
+                project.folder = file.getAbsolutePath();
+                project.folderFile = file;
                 projectsConfig.projects.add(project);
                 saveConfig();
                 addProject(project);
@@ -877,7 +878,7 @@ class ProjectsView extends JPanel
         String name = "";
 
         @JsonProperty
-        File folder;
+        String folder;
 
         @JsonProperty
         String filterRegex = "";
@@ -889,6 +890,18 @@ class ProjectsView extends JPanel
         Pattern filterRegexPattern;
         @JsonIgnore
         boolean filterRegexIsSet = false;
+        @JsonIgnore
+        File folderFile;
+
+        @JsonIgnore
+        File getFolder()
+        {
+            if (folderFile == null)
+            {
+                folderFile = new File(folder);
+            }
+            return folderFile;
+        }
 
         @JsonIgnore
         Pattern getFilterRegex()
@@ -1056,7 +1069,7 @@ class ProjectsView extends JPanel
 
         private ProjectTreeNode(Project project)
         {
-            super(project.folder);
+            super(project.getFolder());
             this.project = project;
         }
 

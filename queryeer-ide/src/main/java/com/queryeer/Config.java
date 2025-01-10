@@ -87,7 +87,14 @@ class Config implements IConfig
         sessionFile = new File(etcFolder, SESSION);
         if (sessionFile.exists())
         {
-            session = MAPPER.readValue(sessionFile, QueryeerSession.class);
+            try
+            {
+                session = MAPPER.readValue(sessionFile, QueryeerSession.class);
+            }
+            catch (IOException e)
+            {
+                LOGGER.error("Error loading session config", e);
+            }
         }
         if (session == null)
         {

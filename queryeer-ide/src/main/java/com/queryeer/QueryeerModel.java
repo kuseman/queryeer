@@ -7,6 +7,7 @@ import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.StandardWatchEventKinds;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import javax.swing.SwingUtilities;
 import javax.swing.event.SwingPropertyChangeSupport;
 
+import org.apache.commons.lang3.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +42,7 @@ class QueryeerModel
     private final List<QueryFileModel> removedFiles = new ArrayList<>();
     private final FileWatchService watchService;
     private QueryFileModel selectedFile;
+    private Thread maintenanceThread;
 
     QueryeerModel(Config config, File backupPath, FileWatchService watchService)
     {
@@ -51,7 +54,7 @@ class QueryeerModel
     /** Init model. Start maintenance task etc. */
     void init()
     {
-        Thread maintenanceThread = new Thread(() ->
+        maintenanceThread = new Thread(() ->
         {
             while (!Thread.interrupted())
             {
@@ -61,15 +64,16 @@ class QueryeerModel
                 }
                 catch (InterruptedException e)
                 {
-                    Thread.currentThread()
-                            .interrupt();
+                    break;
                 }
 
                 performBackupTask();
             }
         });
         maintenanceThread.setName("QueryeerBackupMaintenance");
-        maintenanceThread.setDaemon(true);
+        // No daemon here to left this run to completion upon close to not write half
+        // files etc.
+        maintenanceThread.setDaemon(false);
         maintenanceThread.start();
     }
 
@@ -201,6 +205,11 @@ class QueryeerModel
             file.dispose();
         }
 
+        maintenanceThread.interrupt();
+        while (maintenanceThread.isAlive())
+        {
+            ThreadUtils.sleepQuietly(Duration.ofMillis(50));
+        }
         // Make backups etc. before exit
         performBackupTask();
 
@@ -232,6 +241,8 @@ class QueryeerModel
 
     private void performBackupTask()
     {
+        LOGGER.debug("Running backup task");
+
         QueryeerSession session = config.getSession();
         List<QueryeerSessionFile> sessionFiles = new ArrayList<>();
         int activeFileIndex = 0;
@@ -322,5 +333,7 @@ class QueryeerModel
             }
         }
         removedFiles.clear();
+
+        LOGGER.debug("Finnished running backup task");
     }
 }
