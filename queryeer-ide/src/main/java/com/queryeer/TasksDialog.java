@@ -3,10 +3,8 @@ package com.queryeer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Point;
-import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.time.LocalDateTime;
@@ -21,12 +19,10 @@ import javax.swing.AbstractCellEditor;
 import javax.swing.Action;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
-import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JToolBar;
-import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
@@ -40,6 +36,7 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.component.AnimatedIcon;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.dialog.ValueDialog;
@@ -48,7 +45,7 @@ import com.queryeer.event.TaskCompletedEvent;
 import com.queryeer.event.TaskStartedEvent;
 
 /** Tasks dialog */
-class TasksDialog extends JFrame
+class TasksDialog extends DialogUtils.AFrame
 {
     private static final Icon CHECK_CIRCLE = FontIcon.of(FontAwesome.CHECK_CIRCLE);
     private static final Icon EXCLAMATION_CIRCLE = FontIcon.of(FontAwesome.EXCLAMATION_CIRCLE);
@@ -70,22 +67,9 @@ class TasksDialog extends JFrame
         this.timer.stop();
     }
 
-    @Override
-    public void setVisible(boolean b)
-    {
-        if (b)
-        {
-            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
-                    .getActiveWindow();
-            setLocationRelativeTo(activeWindow);
-        }
-        super.setVisible(b);
-    }
-
     private void initDialog()
     {
         setTitle("Tasks");
-        setIconImages(Constants.APPLICATION_ICONS);
         getContentPane().setLayout(new BorderLayout());
 
         tasksTableModel = new TasksTableModel();
@@ -106,7 +90,7 @@ class TasksDialog extends JFrame
                     if (col == TasksTableModel.STATUS_COLUMN_INDEX)
                     {
                         TaskRow taskRow = tasksTableModel.tasks.get(row);
-                        ValueDialog.showValueDialog(TasksDialog.this, "Task status - " + taskRow.task.getName(), tasksTable.getValueAt(row, col), ValueDialog.Format.UNKOWN);
+                        ValueDialog.showValueDialog("Task status - " + taskRow.task.getName(), tasksTable.getValueAt(row, col), ValueDialog.Format.UNKOWN);
                     }
                 }
             }
@@ -127,15 +111,6 @@ class TasksDialog extends JFrame
                 .setCellEditor(cellEditor);
 
         getContentPane().add(new JScrollPane(tasksTable), BorderLayout.CENTER);
-
-        getRootPane().registerKeyboardAction(new ActionListener()
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                setVisible(false);
-            }
-        }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
         setPreferredSize(Constants.DEFAULT_DIALOG_SIZE);

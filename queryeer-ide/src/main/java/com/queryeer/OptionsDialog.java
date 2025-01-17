@@ -5,10 +5,6 @@ import static java.util.Objects.requireNonNull;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Frame;
-import java.awt.Window;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
@@ -19,15 +15,12 @@ import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
 import javax.swing.JButton;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTree;
-import javax.swing.KeyStroke;
 import javax.swing.WindowConstants;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -35,10 +28,11 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.extensions.IConfigurable;
 
 /** Options dialog */
-class OptionsDialog extends JDialog
+class OptionsDialog extends DialogUtils.ADialog
 {
     private final List<IConfigurable> configurables;
     private final List<Configurable> configurableNodes = new ArrayList<>();
@@ -54,18 +48,6 @@ class OptionsDialog extends JDialog
         this.configurables = requireNonNull(configurables, "configurables");
         root = initRootNode();
         initDialog();
-    }
-
-    @Override
-    public void setVisible(boolean b)
-    {
-        if (b)
-        {
-            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
-                    .getActiveWindow();
-            setLocationRelativeTo(activeWindow);
-        }
-        super.setVisible(b);
     }
 
     private DefaultMutableTreeNode initRootNode()
@@ -91,7 +73,6 @@ class OptionsDialog extends JDialog
 
     private void initDialog()
     {
-        setIconImages(Constants.APPLICATION_ICONS);
         getContentPane().setLayout(new BorderLayout());
 
         JSplitPane options = new JSplitPane();
@@ -131,7 +112,6 @@ class OptionsDialog extends JDialog
 
         options.setLeftComponent(new JScrollPane(optionsTree));
         options.setRightComponent(new JScrollPane(configComponentPanel));
-        // options.setDividerLocation(0.15);
         options.setResizeWeight(0.15);
 
         getContentPane().add(options, BorderLayout.CENTER);
@@ -147,7 +127,7 @@ class OptionsDialog extends JDialog
         cancel.setEnabled(false);
         cancel.addActionListener(l1 ->
         {
-            if (close())
+            if (shouldClose())
             {
                 setVisible(false);
             }
@@ -162,21 +142,12 @@ class OptionsDialog extends JDialog
             @Override
             public void windowClosing(WindowEvent e)
             {
-                if (close())
+                if (shouldClose())
                 {
                     setVisible(false);
                 }
             }
         });
-
-        getRootPane().registerKeyboardAction(new ActionListener()
-        {
-            @Override
-            public void actionPerformed(ActionEvent e)
-            {
-                setVisible(false);
-            }
-        }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         getContentPane().add(bottomPanel, BorderLayout.SOUTH);
 
@@ -231,7 +202,8 @@ class OptionsDialog extends JDialog
         cancel.setEnabled(false);
     }
 
-    private boolean close()
+    @Override
+    protected boolean shouldClose()
     {
         if (configurableNodes.stream()
                 .anyMatch(c -> c.dirty))

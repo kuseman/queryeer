@@ -14,8 +14,6 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
@@ -43,8 +41,6 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -53,7 +49,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
-import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -76,6 +71,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.Constants;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.ADocumentListenerAdapter;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.IEditorFactory;
 import com.queryeer.api.editor.ITextEditor;
@@ -963,7 +959,7 @@ class TableActionsConfigurable implements IConfigurable
         }
     }
 
-    private class ActionTesterComponent extends JDialog
+    private class ActionTesterComponent extends DialogUtils.ADialog
     {
         private final ITextEditor model;
         private final ITextEditor templateQuery;
@@ -980,7 +976,6 @@ class TableActionsConfigurable implements IConfigurable
         ActionTesterComponent()
         {
             setTitle("Test Actions");
-            setIconImages(Constants.APPLICATION_ICONS);
             setResizable(true);
             getContentPane().setLayout(new BorderLayout());
 
@@ -1188,15 +1183,6 @@ class TableActionsConfigurable implements IConfigurable
                     return;
                 }
             });
-
-            getRootPane().registerKeyboardAction(new ActionListener()
-            {
-                @Override
-                public void actionPerformed(ActionEvent e)
-                {
-                    setVisible(false);
-                }
-            }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
             add(rootSplit, BorderLayout.CENTER);
 

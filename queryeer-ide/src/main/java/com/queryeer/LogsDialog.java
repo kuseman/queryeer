@@ -3,7 +3,6 @@ package com.queryeer;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
-import java.awt.Window;
 
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -26,8 +25,10 @@ import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.spi.LoggingEvent;
 
+import com.queryeer.api.component.DialogUtils;
+
 /** Logs dialog */
-class LogsDialog extends JFrame
+class LogsDialog extends DialogUtils.AFrame
 {
     static JTextPane textPane;
 
@@ -45,22 +46,9 @@ class LogsDialog extends JFrame
                 .addAppender(new LogsAppender());
     }
 
-    @Override
-    public void setVisible(boolean b)
-    {
-        if (b)
-        {
-            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
-                    .getActiveWindow();
-            setLocationRelativeTo(activeWindow);
-        }
-        super.setVisible(b);
-    }
-
     private void initDialog()
     {
         setTitle("Logs");
-        setIconImages(Constants.APPLICATION_ICONS);
         getContentPane().setLayout(new BorderLayout());
 
         textPane = new JTextPane();

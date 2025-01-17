@@ -10,8 +10,6 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Toolkit;
 import java.awt.Window;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
@@ -30,7 +28,6 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -58,6 +55,7 @@ import com.queryeer.api.action.IActionRegistry;
 import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.action.IActionRegistry.KeyboardShortcut;
 import com.queryeer.api.component.ADocumentListenerAdapter;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.engine.IQueryEngine;
@@ -604,24 +602,12 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
     // CSOFF
     private void openOverrideDialog(TextEditorQueryShortcutOverride override, String shortcutText)
     {
-        // Create the override dialog
-        JDialog dialog = new JDialog();
+        DialogUtils.ADialog dialog = new DialogUtils.ADialog();
         dialog.setModal(true);
-        dialog.setIconImages(Constants.APPLICATION_ICONS);
         dialog.setTitle("Override: " + override.getRule());
         dialog.setSize(Constants.DEFAULT_DIALOG_SIZE);
         dialog.setLayout(new GridBagLayout());
-        // Close dialog on escape
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        dialog.getRootPane()
-                .registerKeyboardAction(new ActionListener()
-                {
-                    @Override
-                    public void actionPerformed(ActionEvent e)
-                    {
-                        dialog.setVisible(false);
-                    }
-                }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         // Rule input
         JLabel ruleLabel = new JLabel("Rule:", FontIcon.of(FontAwesome.INFO), SwingConstants.LEADING);

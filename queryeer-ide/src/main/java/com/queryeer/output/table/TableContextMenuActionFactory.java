@@ -2,7 +2,6 @@ package com.queryeer.output.table;
 
 import static java.util.Arrays.asList;
 
-import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.event.ActionEvent;
 import java.net.URI;
@@ -59,7 +58,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 {
                     ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
                     Object value = selectedRow.getCellValue();
-                    ValueDialog.showValueDialog((Component) e.getSource(), "Json viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.JSON);
+                    ValueDialog.showValueDialog("Json viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.JSON);
                 }
             };
         }
@@ -125,7 +124,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 {
                     ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
                     Object value = selectedRow.getCellValue();
-                    ValueDialog.showValueDialog((Component) e.getSource(), "XML viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.XML);
+                    ValueDialog.showValueDialog("XML viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.XML);
                 }
             };
         }

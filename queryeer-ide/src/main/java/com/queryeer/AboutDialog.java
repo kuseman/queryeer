@@ -8,7 +8,6 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
-import java.awt.Window;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -19,7 +18,6 @@ import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
-import javax.swing.JDialog;
 import javax.swing.JEditorPane;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -33,10 +31,12 @@ import javax.swing.event.HyperlinkEvent;
 
 import org.apache.commons.io.IOUtils;
 
+import com.queryeer.api.component.DialogUtils;
+
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
 
 /** About dialog */
-class AboutDialog extends JDialog
+class AboutDialog extends DialogUtils.ADialog
 {
     private static final String CHANGELOG = readChangeLog();
     private final String version;
@@ -54,7 +54,6 @@ class AboutDialog extends JDialog
     private void initDialog()
     {
         setTitle("About Queryeer IDE");
-        setIconImages(Constants.APPLICATION_ICONS);
         getContentPane().setLayout(new BorderLayout());
 
         JPanel bottomPanel = new JPanel();
@@ -110,18 +109,6 @@ class AboutDialog extends JDialog
             message = "<html>New version " + latest + " is available. Get at <a href=\"https://github.com/kuseman/queryeer/releases\">Releases</a>!";
         }
         return message;
-    }
-
-    @Override
-    public void setVisible(boolean b)
-    {
-        if (b)
-        {
-            Window activeWindow = javax.swing.FocusManager.getCurrentManager()
-                    .getActiveWindow();
-            setLocationRelativeTo(activeWindow);
-        }
-        super.setVisible(b);
     }
 
     void showNewVersionMessage(String message)

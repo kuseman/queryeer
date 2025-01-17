@@ -1,10 +1,8 @@
 package com.queryeer.dialog;
 
-import java.awt.Component;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -13,8 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import javax.swing.AbstractAction;
-import javax.swing.JComponent;
-import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
 import javax.swing.UIManager;
@@ -31,12 +27,13 @@ import org.fife.ui.rtextarea.SearchEngine;
 import org.fife.ui.rtextarea.SearchResult;
 
 import com.queryeer.Constants;
+import com.queryeer.api.component.DialogUtils;
 
 /** Factory for creating value dialogs with formatted content */
 public final class ValueDialog
 {
     /** Show a value dialog with provided title value and format */
-    public static void showValueDialog(Component parent, String title, Object val, Format format)
+    public static void showValueDialog(String title, Object val, Format format)
     {
         Object value = val;
         switch (format)
@@ -51,10 +48,10 @@ public final class ValueDialog
                 break;
         }
 
-        showValueDialog(parent, title, value, format.syntax);
+        showValueDialog(title, value, format.syntax);
     }
 
-    private static void showValueDialog(Component parent, String title, Object val, String preferredSyntax)
+    private static void showValueDialog(String title, Object val, String preferredSyntax)
     {
         Object value = val;
         if (value == null)
@@ -74,8 +71,7 @@ public final class ValueDialog
             value = list;
         }
 
-        JFrame frame = new JFrame(title);
-        frame.setIconImages(Constants.APPLICATION_ICONS);
+        DialogUtils.AFrame frame = new DialogUtils.AFrame(title);
         RSyntaxTextArea rta = new RSyntaxTextArea();
 
         FindDialog findDialog = new FindDialog(frame, new ValueSearchListener(rta))
@@ -139,21 +135,7 @@ public final class ValueDialog
         frame.getContentPane()
                 .add(sp);
         frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        // Close dialog on escape
-        frame.getRootPane()
-                .registerKeyboardAction(new ActionListener()
-                {
-                    @Override
-                    public void actionPerformed(ActionEvent e)
-                    {
-                        frame.setVisible(false);
-                    }
-                }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
         frame.pack();
-        if (parent != null)
-        {
-            frame.setLocationRelativeTo(parent);
-        }
         frame.setSize(Constants.DEFAULT_DIALOG_SIZE);
         frame.setVisible(true);
     }

@@ -16,7 +16,6 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -41,7 +40,6 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -53,7 +51,6 @@ import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.JTree;
-import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
@@ -82,6 +79,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.api.component.ADocumentListenerAdapter;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.editor.IEditorFactory;
 import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.ITextEditorKit;
@@ -118,7 +116,6 @@ class QueryActionsConfigurable implements IConfigurable
     private final IEditorFactory editorFactory;
     private final List<Consumer<Boolean>> dirtyStateConsumers = new ArrayList<>();
     private final Icon infoIcon;
-    private final IIconFactory iconFactory;
 
     private QueryActionsConfigurableComponent component;
     private QueryActions queryActions;
@@ -128,10 +125,7 @@ class QueryActionsConfigurable implements IConfigurable
         this.config = requireNonNull(config, "config");
         this.expressionEvaluator = requireNonNull(expressionEvaluator, "expressionEvaluator");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
-        this.iconFactory = requireNonNull(iconFactory, "iconFactory");
-        requireNonNull(iconFactory);
-
-        infoIcon = iconFactory.getIcon(Provider.FONTAWESOME, "INFO");
+        infoIcon = requireNonNull(iconFactory).getIcon(Provider.FONTAWESOME, "INFO");
         load();
     }
 
@@ -1195,24 +1189,12 @@ class QueryActionsConfigurable implements IConfigurable
     void openOverrideDialog(QueryActionOverride override, DefaultMutableTreeNode queries)
     {
         component.notify = false;
-        // Create the override dialog
-        JDialog dialog = new JDialog();
-        dialog.setIconImages(iconFactory.getApplicationIcons());
+        DialogUtils.ADialog dialog = new DialogUtils.ADialog();
         dialog.setModal(true);
         dialog.setTitle("Override: " + override.getRule());
         dialog.setSize(800, 600);
         dialog.setLayout(new GridBagLayout());
-        // Close dialog on escape
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        dialog.getRootPane()
-                .registerKeyboardAction(new ActionListener()
-                {
-                    @Override
-                    public void actionPerformed(ActionEvent e)
-                    {
-                        dialog.setVisible(false);
-                    }
-                }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
