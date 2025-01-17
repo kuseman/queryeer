@@ -2,6 +2,15 @@ CHANGELOG
 
 Queryeer
 
+v2.2.0
+feat: Add support for custom table query actions that can generate queries unique to the cell or row that was clicked
+feat: Add support for configuring a custom shared folder path to make upgrades easier
+
+v2.1.0
+fix: Wait for backup thread to complete upon exit Queryeer to avoid closing the JVM in the middle of writing files
+fix: Don't de/serialize java.io.File on Projects view, use a string instead
+fix: Catch errors when loading session config else Queryeer won't start
+
 v2.0.0
 feat: Support for different query engines
 - Now different query engines can be added to Queryeer and not only Payloadbuilder which makes Queeyeer a much more versatile editor
@@ -96,6 +105,16 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.8.0
+fix: Don't write an initial newline in CsvOutputWriter when there are no columns or only empty columns
+fix: Guard against NPE in mutable object vector for implementations that don't check size correctly
+fix: Don't call initResult on OutputWriter until we actually have a result
+fix: Add fix for jsonoutputwriter where there are no rows along with all resultsets as arrays where we tried to write endarray when no startarray was emited
+fix: Don't log error when we try to fetch datastreams on aliases
+fix: Add proper implicit casts to getString in ValueVector
+fix: Remove support for variables to be a QualifiedName, otherwise it's impossible to dereference variables ala '@var.object.key'
+fix: Make cleanup thread in JdbcCatalog daemon
 
 v1.7.0
 feat: Implement a full expression transpiler that generates an ES query from a PLB expression. Handle nested and/or/not's etc.
