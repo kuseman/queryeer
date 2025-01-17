@@ -37,7 +37,6 @@ import java.util.regex.PatternSyntaxException;
 import javax.swing.BoxLayout;
 import javax.swing.FocusManager;
 import javax.swing.JButton;
-import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -71,6 +70,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.queryeer.FileWatchService.FileWatchListener;
 import com.queryeer.api.component.ADocumentListenerAdapter;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.service.IEventBus;
 
@@ -728,7 +728,7 @@ class ProjectsView extends JPanel
         }
     }
 
-    private class ProjectSettingDialog extends JDialog
+    private class ProjectSettingDialog extends DialogUtils.ADialog
     {
         private final JTextField name;
         private final JTextField filter;
@@ -737,7 +737,6 @@ class ProjectsView extends JPanel
 
         ProjectSettingDialog()
         {
-            setIconImages(Constants.APPLICATION_ICONS);
             getContentPane().setLayout(new GridBagLayout());
 
             GridBagConstraints gbc = new GridBagConstraints();

@@ -372,7 +372,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         // Don't trigger link actions on double click
                         if (action == null)
                         {
-                            ValueDialog.showValueDialog(TableOutputComponent.this, "Value viewer - " + table.getColumnName(col), value, ValueDialog.Format.UNKOWN);
+                            ValueDialog.showValueDialog("Value viewer - " + table.getColumnName(col), value, ValueDialog.Format.UNKOWN);
                         }
                     }
                 }

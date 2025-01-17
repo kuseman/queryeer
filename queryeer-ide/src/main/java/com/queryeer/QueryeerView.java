@@ -76,6 +76,7 @@ import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryeerController.ViewAction;
 import com.queryeer.api.component.AnimatedIcon;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
@@ -1050,26 +1051,15 @@ class QueryeerView extends JFrame
         return (QueryFileView) tabbedPane.getSelectedComponent();
     }
 
-    private class WindowsDialog extends JDialog
+    private class WindowsDialog extends DialogUtils.ADialog
     {
         private final FileModel tableModel;
 
         WindowsDialog()
         {
             setTitle("Windows");
-            setIconImages(Constants.APPLICATION_ICONS);
             getContentPane().setLayout(new GridBagLayout());
-
             setModal(true);
-            getRootPane().registerKeyboardAction(new ActionListener()
-            {
-                @Override
-                public void actionPerformed(ActionEvent e)
-                {
-                    setVisible(false);
-                }
-            }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
-
             JTextArea preview = new JTextArea();
             preview.setEditable(false);
 

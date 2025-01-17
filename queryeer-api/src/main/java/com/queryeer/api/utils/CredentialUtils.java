@@ -5,16 +5,12 @@ import static com.queryeer.api.utils.StringUtils.isBlank;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.Image;
 import java.awt.Insets;
-import java.awt.Window;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -23,23 +19,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.BoxLayout;
-import javax.swing.FocusManager;
 import javax.swing.Icon;
 import javax.swing.JButton;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
 import javax.swing.JTextField;
-import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentListener;
 
 import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.AnimatedIcon;
+import com.queryeer.api.component.DialogUtils;
 
 /** CredentialUtils */
 public final class CredentialUtils
@@ -72,26 +65,7 @@ public final class CredentialUtils
     /** Show dialog that ask for credentials */
     public static Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername, ValidationHandler validationHandler)
     {
-        Window activeWindow = FocusManager.getCurrentManager()
-                .getActiveWindow();
-
-        JDialog dialog = new JDialog();
-        if (activeWindow != null)
-        {
-            // Find first window in hierarchy that has icon images else use null
-            List<Image> iconImages = activeWindow.getIconImages();
-            while (activeWindow != null
-                    && (iconImages == null
-                            || iconImages.isEmpty()))
-            {
-                activeWindow = activeWindow.getParent() instanceof Window w ? w
-                        : null;
-                iconImages = activeWindow != null ? activeWindow.getIconImages()
-                        : null;
-            }
-
-            dialog.setIconImages(iconImages);
-        }
+        DialogUtils.ADialog dialog = new DialogUtils.ADialog();
         dialog.setTitle("Enter Credentials");
         dialog.setModal(true);
         dialog.getContentPane()
@@ -291,17 +265,6 @@ public final class CredentialUtils
             }
         });
 
-        dialog.getRootPane()
-                .registerKeyboardAction(new ActionListener()
-                {
-                    @Override
-                    public void actionPerformed(ActionEvent e)
-                    {
-                        dialog.dispose();
-                        dialog.setVisible(false);
-                    }
-                }, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
-
         passwordField.addKeyListener(new KeyAdapter()
         {
             @Override
@@ -321,7 +284,6 @@ public final class CredentialUtils
                 && usernameField.getText()
                         .length() > 0);
 
-        dialog.setLocationRelativeTo(activeWindow);
         dialog.setPreferredSize(new Dimension(300, 170));
         dialog.pack();
         dialog.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
