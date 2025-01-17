@@ -53,9 +53,11 @@ class PluginHandler
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(PluginHandler.class);
     private final Map<String, Plugin> plugins = new LinkedHashMap<>();
+    private final Config config;
 
-    PluginHandler()
+    PluginHandler(Config config)
     {
+        this.config = config;
         load();
     }
 
@@ -194,16 +196,15 @@ class PluginHandler
 
     private URLClassLoader createSharedClassLoader()
     {
-        String sharedProperty = System.getProperty("shared");
-        if (sharedProperty == null)
+        File sharedDir = config.getSharedFolder();
+        if (sharedDir == null)
         {
             return null;
         }
 
-        File sharedDir = new File(sharedProperty);
         if (!sharedDir.exists())
         {
-            throw new IllegalArgumentException("Shared directory: " + sharedProperty + " does not exists");
+            throw new IllegalArgumentException("Shared directory: " + sharedDir + " does not exists");
         }
 
         final URL[] urls = Arrays.stream(Optional.of(sharedDir.listFiles())

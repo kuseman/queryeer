@@ -17,6 +17,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.table.JTableHeader;
+import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
@@ -25,6 +26,7 @@ import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 class Table extends JTable
 {
     static final String POPUP_TRIGGER_LOCATION = "popupTriggerLocation";
+    private final CellRenderer cellRenderer;
     private final TableColumnAdjuster adjuster = new TableColumnAdjuster(this, 10);
     private final List<Integer> adjustedWidths = new ArrayList<>();
     final JPopupMenu tablePopupMenu = new JPopupMenu();
@@ -36,7 +38,7 @@ class Table extends JTable
         setBorder(BorderFactory.createEmptyBorder());
         setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         setCellSelectionEnabled(true);
-        CellRenderer cellRenderer = new CellRenderer(actions);
+        cellRenderer = new CellRenderer(actions);
         setDefaultRenderer(Object.class, cellRenderer);
         addMouseListener(cellRenderer);
         addMouseMotionListener(cellRenderer);
@@ -68,6 +70,13 @@ class Table extends JTable
 
         setComponentPopupMenu(tablePopupMenu);
         setTransferHandler(new TableTransferHandler());
+    }
+
+    @Override
+    public TableCellRenderer getCellRenderer(int row, int column)
+    {
+        // We want our custom cellrenderer for all columns
+        return cellRenderer;
     }
 
     @Override

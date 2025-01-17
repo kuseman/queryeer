@@ -18,7 +18,6 @@ import com.queryeer.api.extensions.output.queryplan.Node;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
-import com.queryeer.api.extensions.output.table.ITableOutputComponent.ClickedCell;
 import com.queryeer.api.service.IQueryFileProvider;
 
 /** Tries to parse an XML cell in table to a query plan */
@@ -52,8 +51,8 @@ class SqlServerQueryPlanActionFactory implements ITableContextMenuActionFactory
                     @Override
                     public void actionPerformed(ActionEvent e)
                     {
-                        ClickedCell clickedCell = outputcomponent.getLastClickedCell();
-                        Object value = clickedCell.getValue();
+                        ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
+                        Object value = selectedRow.getCellValue();
                         String xml = String.valueOf(value);
                         if (isSqlServerQueryPlan(xml))
                         {
@@ -68,9 +67,9 @@ class SqlServerQueryPlanActionFactory implements ITableContextMenuActionFactory
             }
 
             @Override
-            public boolean showContextMenu(Object value, String header)
+            public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
             {
-                return isSqlServerQueryPlan(String.valueOf(value));
+                return isSqlServerQueryPlan(String.valueOf(selectedRow.getCellValue()));
             }
         });
     }

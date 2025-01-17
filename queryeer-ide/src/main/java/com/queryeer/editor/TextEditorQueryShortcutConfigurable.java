@@ -57,6 +57,7 @@ import com.queryeer.Constants;
 import com.queryeer.api.action.IActionRegistry;
 import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.action.IActionRegistry.KeyboardShortcut;
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.engine.IQueryEngine;
@@ -642,7 +643,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         for (IQueryEngine engine : config.getQueryEngines())
         {
             List<MetaParameter> meta = engine.createState()
-                    .getMetaParameters();
+                    .getMetaParameters(true);
             if (meta.isEmpty())
             {
                 continue;

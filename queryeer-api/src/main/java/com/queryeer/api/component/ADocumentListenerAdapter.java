@@ -1,9 +1,9 @@
-package com.queryeer.editor;
+package com.queryeer.api.component;
 
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
-/** Document listener adapter */
+/** Document listener adapter that makes it easier to add listeners on documents to matter what type of change it is. */
 public abstract class ADocumentListenerAdapter implements DocumentListener
 {
     @Override

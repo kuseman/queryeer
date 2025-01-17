@@ -3,16 +3,26 @@ package com.queryeer;
 import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
+import java.beans.IndexedPropertyChangeEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import javax.swing.AbstractAction;
+import javax.swing.JComponent;
 import javax.swing.JTabbedPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 
 import org.apache.commons.io.FilenameUtils;
 
+import com.queryeer.api.action.IActionRegistry;
+import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.component.TabComponent;
 import com.queryeer.event.QueryFileClosingEvent;
@@ -20,6 +30,7 @@ import com.queryeer.event.QueryFileClosingEvent;
 /** Tabbed pane for query files */
 class QueryFileTabbedPane extends JTabbedPane
 {
+    private static final String CLOSE_TAB_ACTION = "TabComponent.CloseTab";
     private final QueryeerModel queryeerModel;
     private final IEventBus eventBus;
     private final QueryFileViewFactory queryFileViewFactory;
@@ -27,7 +38,7 @@ class QueryFileTabbedPane extends JTabbedPane
 
     private boolean fireChangeEvent = true;
 
-    QueryFileTabbedPane(QueryeerModel queryeerModel, IEventBus eventBus, QueryFileViewFactory queryFileViewFactory)
+    QueryFileTabbedPane(QueryeerModel queryeerModel, IEventBus eventBus, QueryFileViewFactory queryFileViewFactory, ActionRegistry actionRegistry)
     {
         super(SwingConstants.TOP);
         this.queryeerModel = requireNonNull(queryeerModel, "queryeerModel");
@@ -50,6 +61,30 @@ class QueryFileTabbedPane extends JTabbedPane
                 if (component != null)
                 {
                     queryeerModel.setSelectedFile(component.file);
+                }
+            }
+        });
+
+        KeyStroke keyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_W, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+
+        actionRegistry.register(CLOSE_TAB_ACTION, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(keyStroke)));
+
+        // Register quick close of tabs (META/CTRL-W)
+        getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(keyStroke, CLOSE_TAB_ACTION);
+        getActionMap().put(CLOSE_TAB_ACTION, new AbstractAction()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                int index = getSelectedIndex();
+                if (index >= 0)
+                {
+                    QueryFileView view = (QueryFileView) getComponentAt(index);
+                    if (view != null)
+                    {
+                        eventBus.publish(new QueryFileClosingEvent(view));
+                    }
                 }
             }
         });
@@ -82,11 +117,13 @@ class QueryFileTabbedPane extends JTabbedPane
                 {
                     final QueryFileModel file = (QueryFileModel) evt.getNewValue();
 
-                    // QueryFileView factory
+                    int index = evt instanceof IndexedPropertyChangeEvent ievt ? ievt.getIndex()
+                            : queryeerModel.getFiles()
+                                    .size() - 1;
+
                     QueryFileView view = queryFileViewFactory.create(file);
                     QueryFileTabComponent component = new QueryFileTabComponent(file, () -> eventBus.publish(new QueryFileClosingEvent(view)));
-                    add(view);
-                    int index = QueryFileTabbedPane.this.getTabCount() - 1;
+                    add(view, index);
                     setTabComponentAt(index, component);
                     setToolTipTextAt(index, file.getFile()
                             .getAbsolutePath());

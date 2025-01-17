@@ -49,8 +49,6 @@ import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.WindowConstants;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -72,6 +70,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.queryeer.FileWatchService.FileWatchListener;
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.service.IEventBus;
 
@@ -236,27 +235,10 @@ class ProjectsView extends JPanel
 
         search = new JTextField();
         search.getDocument()
-                .addDocumentListener(new DocumentListener()
+                .addDocumentListener(new ADocumentListenerAdapter()
                 {
                     @Override
-                    public void removeUpdate(DocumentEvent e)
-                    {
-                        search();
-                    }
-
-                    @Override
-                    public void insertUpdate(DocumentEvent e)
-                    {
-                        search();
-                    }
-
-                    @Override
-                    public void changedUpdate(DocumentEvent e)
-                    {
-                        search();
-                    }
-
-                    private void search()
+                    protected void update()
                     {
                         if (isBlank(search.getText()))
                         {
@@ -376,7 +358,6 @@ class ProjectsView extends JPanel
                     {
                         DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
                         if (node instanceof ProjectFileTreeNode treeNode
-                                && treeNode.fileModel == null
                                 && treeNode.file.isFile())
                         {
                             eventBus.publish(new NewQueryFileEvent(treeNode.file));

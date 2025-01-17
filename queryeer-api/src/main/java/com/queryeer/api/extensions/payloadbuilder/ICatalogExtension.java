@@ -1,8 +1,12 @@
 package com.queryeer.api.extensions.payloadbuilder;
 
+import static java.util.Collections.emptyList;
+
 import java.awt.Component;
+import java.util.List;
 
 import com.queryeer.api.extensions.IConfigurable;
+import com.queryeer.api.extensions.engine.IQueryEngine.IState.MetaParameter;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
@@ -42,6 +46,12 @@ public interface ICatalogExtension
     default ICompletionProvider getAutoCompletionProvider()
     {
         return null;
+    }
+
+    /** Get meta parameters for this catalog. Used in UI and rules etc. */
+    default List<MetaParameter> getMetaParameters(IQuerySession querySession, boolean testData)
+    {
+        return emptyList();
     }
 
     /**

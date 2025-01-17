@@ -98,6 +98,7 @@ import org.slf4j.LoggerFactory;
 
 import com.queryeer.Constants;
 import com.queryeer.api.action.ActionUtils;
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
@@ -147,8 +148,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
         setLayout(new BorderLayout());
 
         textEditor = new TextEditorPane();
-        textEditor.setColumns(80);
-        textEditor.setRows(40);
+        textEditor.setColumns(editorKit.getColumns());
+        textEditor.setRows(editorKit.getRows());
         textEditor.setCodeFoldingEnabled(true);
         textEditor.setBracketMatchingEnabled(true);
         textEditor.setTabSize(2);
@@ -526,6 +527,7 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
     public void setValue(Object value)
     {
         textEditor.setText(String.valueOf(value));
+        textEditor.setCaretPosition(0);
     }
 
     // SearchListener

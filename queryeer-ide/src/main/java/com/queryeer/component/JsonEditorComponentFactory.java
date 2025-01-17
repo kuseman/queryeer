@@ -28,8 +28,8 @@ import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.IJsonEditorComponentFactory;
-import com.queryeer.editor.ADocumentListenerAdapter;
 
 /** Factory for json editors. Uses RSyntax texteditor and jackson mapper to edit json and deserialize result */
 class JsonEditorComponentFactory implements IJsonEditorComponentFactory

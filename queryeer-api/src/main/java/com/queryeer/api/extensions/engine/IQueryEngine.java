@@ -91,7 +91,7 @@ public interface IQueryEngine extends IExtension
     /**
      * Create a {@link ExecuteQueryEvent} for a query and output type that should be executed in the current query file context.
      */
-    default ExecuteQueryEvent getExecuteQueryEvent(String query, OutputType outputType)
+    default ExecuteQueryEvent getExecuteQueryEvent(String query, String newQueryName, OutputType outputType)
     {
         return null;
     }
@@ -104,15 +104,21 @@ public interface IQueryEngine extends IExtension
 
         /**
          * Return list of meta parameters for this state. These parameters can be used in different places for evaluating rules etc. depending on context. Query actions/shortcuts etc.
+         *
+         * @param testData If true then this call is from UI where we don't have a real state and test data should be returned otherwise false
          */
-        default List<MetaParameter> getMetaParameters()
+        default List<MetaParameter> getMetaParameters(boolean testData)
         {
             return emptyList();
         }
 
         /** A meta parameter. Key/value plus description. */
-        record MetaParameter(String name, Object value, String description)
+        record MetaParameter(String name, Object value, String description, List<MetaParameter> subParameters)
         {
+            public MetaParameter(String name, Object value, String description)
+            {
+                this(name, value, description, emptyList());
+            }
         }
     }
 }

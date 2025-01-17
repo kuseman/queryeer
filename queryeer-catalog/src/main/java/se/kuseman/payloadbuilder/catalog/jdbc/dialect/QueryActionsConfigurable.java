@@ -58,8 +58,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -83,6 +81,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.editor.IEditorFactory;
 import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.ITextEditorKit;
@@ -837,27 +836,10 @@ class QueryActionsConfigurable implements IConfigurable
             JTextField tite = new JTextField();
             tite.setText(action.getTitle());
             tite.getDocument()
-                    .addDocumentListener(new DocumentListener()
+                    .addDocumentListener(new ADocumentListenerAdapter()
                     {
                         @Override
-                        public void removeUpdate(DocumentEvent e)
-                        {
-                            update();
-                        }
-
-                        @Override
-                        public void insertUpdate(DocumentEvent e)
-                        {
-                            update();
-                        }
-
-                        @Override
-                        public void changedUpdate(DocumentEvent e)
-                        {
-                            update();
-                        }
-
-                        private void update()
+                        protected void update()
                         {
                             action.setTitle(tite.getText());
                             model.nodeChanged(node);
@@ -1299,27 +1281,10 @@ class QueryActionsConfigurable implements IConfigurable
         gbc.weightx = 1.0d;
         gbc.weighty = 1.0d;
         ruleField.getDocument()
-                .addDocumentListener(new DocumentListener()
+                .addDocumentListener(new ADocumentListenerAdapter()
                 {
                     @Override
-                    public void removeUpdate(DocumentEvent e)
-                    {
-                        update();
-                    }
-
-                    @Override
-                    public void insertUpdate(DocumentEvent e)
-                    {
-                        update();
-                    }
-
-                    @Override
-                    public void changedUpdate(DocumentEvent e)
-                    {
-                        update();
-                    }
-
-                    private void update()
+                    protected void update()
                     {
                         override.setRule(ruleField.getText());
                         notifyDirtyStateConsumers();
@@ -1358,27 +1323,10 @@ class QueryActionsConfigurable implements IConfigurable
             JTextField queryName = new JTextField();
             queryName.setText(actionQuery.getName());
             queryName.getDocument()
-                    .addDocumentListener(new DocumentListener()
+                    .addDocumentListener(new ADocumentListenerAdapter()
                     {
                         @Override
-                        public void removeUpdate(DocumentEvent e)
-                        {
-                            update();
-                        }
-
-                        @Override
-                        public void insertUpdate(DocumentEvent e)
-                        {
-                            update();
-                        }
-
-                        @Override
-                        public void changedUpdate(DocumentEvent e)
-                        {
-                            update();
-                        }
-
-                        private void update()
+                        protected void update()
                         {
                             actionQuery.setName(queryName.getText());
                             model.nodeChanged(node);

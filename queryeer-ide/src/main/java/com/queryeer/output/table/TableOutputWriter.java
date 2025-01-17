@@ -75,7 +75,10 @@ class TableOutputWriter implements OutputWriter
     @Override
     public void flush()
     {
-        model.notifyChanges(true);
+        if (model != null)
+        {
+            model.notifyChanges(true);
+        }
     }
 
     @Override

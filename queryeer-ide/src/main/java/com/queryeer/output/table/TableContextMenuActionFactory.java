@@ -21,7 +21,6 @@ import com.queryeer.Constants;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
-import com.queryeer.api.extensions.output.table.ITableOutputComponent.ClickedCell;
 import com.queryeer.dialog.ValueDialog;
 import com.queryeer.output.table.Model.QueryeerImage;
 
@@ -58,9 +57,9 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    ClickedCell lastClickedCell = outputcomponent.getLastClickedCell();
-                    Object value = lastClickedCell.getValue();
-                    ValueDialog.showValueDialog((Component) e.getSource(), "Json viewer - " + lastClickedCell.getColumnHeader(), value, ValueDialog.Format.JSON);
+                    ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
+                    Object value = selectedRow.getCellValue();
+                    ValueDialog.showValueDialog((Component) e.getSource(), "Json viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.JSON);
                 }
             };
         }
@@ -95,9 +94,9 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
 
         @Override
-        public boolean showContextMenu(Object value, String header)
+        public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
         {
-            return showLink(value);
+            return showLink(selectedRow.getCellValue());
         }
     }
 
@@ -124,9 +123,9 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    ClickedCell lastClickedCell = outputcomponent.getLastClickedCell();
-                    Object value = lastClickedCell.getValue();
-                    ValueDialog.showValueDialog((Component) e.getSource(), "XML viewer - " + lastClickedCell.getColumnHeader(), value, ValueDialog.Format.XML);
+                    ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
+                    Object value = selectedRow.getCellValue();
+                    ValueDialog.showValueDialog((Component) e.getSource(), "XML viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.XML);
                 }
             };
         }
@@ -147,9 +146,9 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
 
         @Override
-        public boolean showContextMenu(Object value, String header)
+        public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
         {
-            return showLink(value);
+            return showLink(selectedRow.getCellValue());
         }
     }
 
@@ -176,8 +175,8 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    ClickedCell lastClickedCell = outputcomponent.getLastClickedCell();
-                    Object value = lastClickedCell.getValue();
+                    ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
+                    Object value = selectedRow.getCellValue();
                     if (value == null)
                     {
                         return;
@@ -217,9 +216,9 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
 
         @Override
-        public boolean showContextMenu(Object value, String header)
+        public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
         {
-            return showLink(value);
+            return showLink(selectedRow.getCellValue());
         }
     }
 }

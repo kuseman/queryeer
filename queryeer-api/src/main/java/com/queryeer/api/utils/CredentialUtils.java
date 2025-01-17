@@ -36,9 +36,9 @@ import javax.swing.JPasswordField;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.AnimatedIcon;
 
 /** CredentialUtils */
@@ -136,27 +136,10 @@ public final class CredentialUtils
         JTextField usernameField = new JTextField();
         JPasswordField passwordField = new JPasswordField(PASSWORD_FIELD_LENGTH);
         JButton okButton = new JButton("OK");
-        DocumentListener documentListener = new DocumentListener()
+        DocumentListener documentListener = new ADocumentListenerAdapter()
         {
             @Override
-            public void removeUpdate(DocumentEvent e)
-            {
-                update();
-            }
-
-            @Override
-            public void insertUpdate(DocumentEvent e)
-            {
-                update();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent e)
-            {
-                update();
-            }
-
-            private void update()
+            protected void update()
             {
                 okButton.setEnabled(passwordField.getPassword() != null
                         && passwordField.getPassword().length > 0

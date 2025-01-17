@@ -22,9 +22,9 @@ import com.queryeer.api.extensions.output.IOutputExtension;
 
 class GraphOutputComponent implements IOutputComponent
 {
+    private final IQueryFile queryFile;
     private final IOutputExtension extension;
     private final ChartComponent component;
-    private IQueryFile queryFile;
 
     GraphOutputComponent(IOutputExtension extension, IQueryFile queryFile)
     {

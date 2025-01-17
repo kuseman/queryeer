@@ -5,6 +5,7 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -33,17 +34,46 @@ class Model implements TableModel
     private int lastNotifyRowIndex = 0;
     private EventListenerList listenerList = new EventListenerList();
 
+    private List<Class<?>> columnTypes = new ArrayList<>();
+
     Map<Object, Object> internCache = new HashMap<>();
 
     /** Add row */
     void addRow(RowList row)
     {
-        // Intern values to minimize heap allocations
         int size = row.size();
+        int diff = Math.max(size, columnTypes.size()) - columnTypes.size();
+        if (diff > 0)
+        {
+            columnTypes.addAll(Collections.nCopies(diff, null));
+        }
+
         for (int i = 0; i < size; i++)
         {
             Object value = row.get(i);
+            // Intern values to minimize heap allocations
             row.set(i, internCache.computeIfAbsent(value, k -> value));
+
+            // Try to determine types of columns
+            Class<?> clazz = value == null ? null
+                    : value.getClass();
+            if (clazz != null
+                    && clazz != Boolean.class)
+            {
+                Class<?> columnType = columnTypes.get(i);
+
+                // No class set, set the values class
+                if (columnType == null)
+                {
+                    columnTypes.set(i, clazz);
+                }
+                // .. the class differs from previous values => set to Object.class which is the default in a swing table
+                else if (columnType != Object.class
+                        && columnType != clazz)
+                {
+                    columnTypes.set(i, Object.class);
+                }
+            }
         }
 
         rows.add(row);
@@ -141,7 +171,10 @@ class Model implements TableModel
     @Override
     public Class<?> getColumnClass(int columnIndex)
     {
-        return Object.class;
+        Class<?> clazz = columnIndex < columnTypes.size() ? columnTypes.get(columnIndex)
+                : null;
+        return clazz == null ? Object.class
+                : clazz;
     }
 
     @Override

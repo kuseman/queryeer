@@ -36,12 +36,17 @@ class Config implements IConfig
 
     private static final int MAX_RECENT_FILES = 10;
     private final File etcFolder;
+    private final File sharedFolder;
     private final File sessionFile;
 
+    @JsonProperty
+    private String sharedFolderPath;
     @JsonProperty
     private String lastOpenPath;
     @JsonProperty
     private final List<String> recentFiles = new ArrayList<>();
+    @JsonProperty
+    private boolean openNewFilesLast = true;
 
     /** Class name of the default query engine for new files */
     @JsonProperty
@@ -100,6 +105,26 @@ class Config implements IConfig
         {
             session = new QueryeerSession();
         }
+
+        sharedFolder = getSharedFolderInternal();
+    }
+
+    private File getSharedFolderInternal()
+    {
+        // First prio is configued shared folder
+        if (!isBlank(sharedFolderPath))
+        {
+            return new File(sharedFolderPath);
+        }
+        // Second prio is env
+        String sharedProperty = System.getProperty("shared");
+        if (!isBlank(sharedProperty))
+        {
+            return new File(sharedProperty);
+        }
+
+        // Else we don't have a shared folder conf
+        return null;
     }
 
     List<IQueryEngine> getEngines()
@@ -110,6 +135,32 @@ class Config implements IConfig
     File getEtcFolder()
     {
         return etcFolder;
+    }
+
+    File getSharedFolder()
+    {
+        return sharedFolder;
+    }
+
+    String getSharedFolderPath()
+    {
+        return sharedFolderPath;
+    }
+
+    void setSharedFolderPath(File sharedFolderPath)
+    {
+        this.sharedFolderPath = sharedFolderPath != null ? sharedFolderPath.getAbsolutePath()
+                : "";
+    }
+
+    void setOpenNewFilesLast(boolean openNewFilesLast)
+    {
+        this.openNewFilesLast = openNewFilesLast;
+    }
+
+    boolean isOpenNewFilesLast()
+    {
+        return openNewFilesLast;
     }
 
     /** Init config with discovered engines */
@@ -351,6 +402,8 @@ class Config implements IConfig
         /** The active file index. */
         @JsonProperty
         int activeFileIndex;
+        @JsonProperty
+        int previousActiveIndex;
         /** Opened files. */
         @JsonProperty
         List<QueryeerSessionFile> files = new ArrayList<>();

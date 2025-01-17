@@ -17,6 +17,7 @@ import java.util.concurrent.Executors;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import javax.swing.JLabel;
 import javax.swing.JTable;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -57,6 +58,7 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
         this.actions = new ArrayList<>(actions);
         this.actions.removeIf(a -> !a.supportsLinks());
         this.actionsSize = this.actions.size();
+        setHorizontalAlignment(JLabel.LEFT);
     }
 
     @Override

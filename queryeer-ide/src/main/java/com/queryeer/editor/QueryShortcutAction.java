@@ -80,7 +80,7 @@ class QueryShortcutAction extends AbstractAction
                 }
                 else
                 {
-                    if (expressionEvaluator.evaluatePredicate(rule, engineState.getMetaParameters()))
+                    if (expressionEvaluator.evaluatePredicate(rule, engineState.getMetaParameters(false)))
                     {
                         queryTemplate = override.getQuery();
                         output = ObjectUtils.defaultIfNull(override.getOutput(), output);
@@ -100,7 +100,7 @@ class QueryShortcutAction extends AbstractAction
 
         String query = templateService.process("TextEditor.QueryShortcut", queryTemplate, Map.of("selectedText", selectedText));
         ExecuteQueryEvent queryEvent = engineState.getQueryEngine()
-                .getExecuteQueryEvent(query, output);
+                .getExecuteQueryEvent(query, null, output);
         if (queryEvent != null)
         {
             eventBus.publish(queryEvent);

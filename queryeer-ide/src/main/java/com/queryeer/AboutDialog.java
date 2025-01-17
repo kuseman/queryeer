@@ -1,5 +1,7 @@
 package com.queryeer;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.FlowLayout;
@@ -36,14 +38,16 @@ import se.kuseman.payloadbuilder.core.Payloadbuilder;
 /** About dialog */
 class AboutDialog extends JDialog
 {
+    private static final String CHANGELOG = readChangeLog();
     private final String version;
     private final File etcFolder;
-    private static final String CHANGELOG = readChangeLog();
+    private final File sharedFolder;
 
-    AboutDialog(JFrame parent, String version, File etcFolder)
+    AboutDialog(JFrame parent, String version, File etcFolder, File sharedFolder)
     {
         this.version = version;
-        this.etcFolder = etcFolder;
+        this.etcFolder = requireNonNull(etcFolder);
+        this.sharedFolder = sharedFolder;
         initDialog();
     }
 
@@ -182,6 +186,9 @@ class AboutDialog extends JDialog
                 .getImplementationVersion(), "Dev"));
         sb.append("\n");
         sb.append("Config Location: " + etcFolder.getAbsolutePath());
+        sb.append("\n");
+        sb.append("Shared Location: " + (sharedFolder != null ? sharedFolder.getAbsolutePath()
+                : ""));
         sb.append("\n\n");
         sb.append("(C) Copyright Marcus Henriksson 2025");
 
