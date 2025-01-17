@@ -17,8 +17,8 @@ public interface ITableContextMenuAction extends IExtensionAction
         return false;
     }
 
-    /** Should this action be shown for provided value/header. */
-    default boolean showContextMenu(Object value, String header)
+    /** Should this action be shown for provided row. */
+    default boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
     {
         return true;
     }

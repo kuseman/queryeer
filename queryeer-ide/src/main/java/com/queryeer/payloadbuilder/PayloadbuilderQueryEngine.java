@@ -81,7 +81,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
         QuerySession querySession = new QuerySession(new CatalogRegistry());
         querySession.setGenericCache(GENERIC_CACHE);
         initCatalogs(querySession);
-        PayloadbuilderState state = new PayloadbuilderState(this, querySession);
+        PayloadbuilderState state = new PayloadbuilderState(this, catalogsConfigurable, querySession);
         querySession.setAbortSupplier(state);
         return state;
     }

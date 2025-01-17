@@ -30,7 +30,7 @@ class TemplateService implements ITemplateService
 
     /** Process template with provided model. */
     @Override
-    public String process(String name, String template, Map<String, Object> model)
+    public String process(String name, String template, Map<String, Object> model, boolean throwErrors)
     {
         try
         {
@@ -41,6 +41,11 @@ class TemplateService implements ITemplateService
         }
         catch (Exception e)
         {
+            if (throwErrors)
+            {
+                throw e instanceof RuntimeException re ? re
+                        : new RuntimeException(e);
+            }
             LOGGER.error("Error generating template {}", name, e);
             return "";
         }

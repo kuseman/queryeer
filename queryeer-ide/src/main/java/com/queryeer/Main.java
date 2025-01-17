@@ -32,6 +32,14 @@ public class Main
     /** Main */
     public static void main(String[] args) throws Exception
     {
+        /* Trap CMD-q on OSX to properly run shutdown hooks etc. */
+        System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
+
+        /* Set mnemontics for option pane */
+        UIManager.put("OptionPane.yesButtonMnemonic", "89");
+        UIManager.put("OptionPane.noButtonMnemonic", "78");
+        UIManager.put("OptionPane.cancelButtonMnemonic", "67");
+
         String etcProp = System.getProperty("etc");
 
         if (isBlank(etcProp))
@@ -117,8 +125,10 @@ public class Main
 
         serviceLoader.register(IIconFactory.class, new IconFactory());
 
+        PluginHandler pluginHandler = new PluginHandler(config);
+
         // Inject plugins last
-        serviceLoader.injectExtensions();
+        serviceLoader.injectExtensions(pluginHandler);
 
         // Initalize config with all query engines
         config.init(serviceLoader.getAll(IQueryEngine.class));

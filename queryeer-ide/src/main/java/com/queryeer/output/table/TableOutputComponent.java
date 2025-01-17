@@ -53,6 +53,7 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
@@ -65,16 +66,22 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 {
     private static final String FIND = "FIND";
     static final int COLUMN_ADJUST_ROW_LIMIT = 30;
+    private final IQueryFile queryFile;
+    private final TableActionsConfigurable tableActionsConfigurable;
     private final List<ITableContextMenuActionFactory> contextMenuActionFactories;
     private final List<Table> tables = new ArrayList<>();
-    private final TableClickedCell lastClickedCell = new TableClickedCell();
     private final TableFindDialog findDialog;
     private final IOutputExtension extension;
 
     private List<ITableContextMenuAction> contextMenuActions;
+    private Table lastClickedTable;
+    private int lastClickedTableRow;
+    private int lastClickedTableColumn;
 
-    TableOutputComponent(IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories)
+    TableOutputComponent(IQueryFile queryFile, IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable)
     {
+        this.queryFile = queryFile;
+        this.tableActionsConfigurable = requireNonNull(tableActionsConfigurable, "tableActionsConfigurable");
         this.extension = requireNonNull(extension, "extension");
         this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
         setLayout(new BorderLayout());
@@ -120,7 +127,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     @Override
     public String getSelectedText()
     {
-        Object value = lastClickedCell.value;
+        Object value = null;
+        if (lastClickedTable != null)
+        {
+            value = lastClickedTable.getValueAt(lastClickedTableRow, lastClickedTableColumn);
+        }
+
         return value != null ? String.valueOf(value)
                 : "";
     }
@@ -260,9 +272,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     }
 
     @Override
-    public ClickedCell getLastClickedCell()
+    public SelectedRow getSelectedRow()
     {
-        return lastClickedCell;
+        return new TableSelectedRow(lastClickedTable, lastClickedTableRow, lastClickedTableColumn);
     }
 
     @Override
@@ -275,6 +287,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 
         table.changeSelection(row, 0, false, false);
         table.scrollRectToVisible(new Rectangle(table.getCellRect(row, 0, true)));
+    }
+
+    @Override
+    public IQueryFile getQueryFile()
+    {
+        return queryFile;
     }
 
     void showFind()
@@ -339,9 +357,11 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 int row = table.rowAtPoint(point);
                 int col = table.columnAtPoint(point);
 
+                lastClickedTable = table;
+                lastClickedTableRow = row;
+                lastClickedTableColumn = col;
+
                 Object value = table.getValueAt(row, col);
-                lastClickedCell.value = value;
-                lastClickedCell.header = table.getColumnName(col);
 
                 if (e.getClickCount() == 2
                         && e.getButton() == MouseEvent.BUTTON1)
@@ -352,7 +372,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         // Don't trigger link actions on double click
                         if (action == null)
                         {
-                            ValueDialog.showValueDialog(TableOutputComponent.this, "Value viewer - " + table.getColumnName(col), lastClickedCell.value, ValueDialog.Format.UNKOWN);
+                            ValueDialog.showValueDialog(TableOutputComponent.this, "Value viewer - " + table.getColumnName(col), value, ValueDialog.Format.UNKOWN);
                         }
                     }
                 }
@@ -390,14 +410,24 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 {
                     int row = table.rowAtPoint(point);
                     int col = table.columnAtPoint(point);
-                    Object value = table.getValueAt(row, col);
-                    String header = table.getColumnName(col);
+
+                    lastClickedTable = table;
+                    lastClickedTableRow = row;
+                    lastClickedTableColumn = col;
+
+                    if (row >= 0
+                            && col >= 0)
+                    {
+                        table.setRowSelectionInterval(row, row);
+                        table.setColumnSelectionInterval(col, col);
+                    }
 
                     int count = table.tablePopupMenu.getComponentCount();
 
+                    TableSelectedRow selectedRow = new TableSelectedRow(table, row, col);
                     for (ITableContextMenuAction action : contextMenuActions)
                     {
-                        if (action.showContextMenu(value, header))
+                        if (action.showContextMenu(selectedRow))
                         {
                             JMenuItem item = new JMenuItem(action.getAction());
                             contextPopupItems.add(item);
@@ -405,6 +435,17 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         }
                     }
 
+                    // TODO: if action count exceeds a limit, wrap in a sub menu
+                    List<Action> tableActions = tableActionsConfigurable.getActions(TableOutputComponent.this, selectedRow);
+                    for (Action tableAction : tableActions)
+                    {
+                        JMenuItem item = new JMenuItem(tableAction);
+                        contextPopupItems.add(item);
+                        table.tablePopupMenu.add(item);
+                    }
+
+                    Object value = table.getValueAt(row, col);
+                    String header = table.getColumnName(col);
                     // Only show quick filter for small values
                     if (String.valueOf(value)
                             .length() <= 100)
@@ -424,16 +465,6 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     if (table.tablePopupMenu.getComponentCount() != count)
                     {
                         addSeparator(count);
-                    }
-
-                    if (row >= 0
-                            && col >= 0)
-                    {
-                        lastClickedCell.value = value;
-                        lastClickedCell.header = header;
-
-                        table.setRowSelectionInterval(row, row);
-                        table.setColumnSelectionInterval(col, col);
                     }
                 }
             }
@@ -660,21 +691,82 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 .sum();
     }
 
-    private static class TableClickedCell implements ClickedCell
+    private static class TableSelectedRow implements SelectedRow
     {
-        private String header;
-        private Object value;
+        private final Table table;
+        private final int tableRow;
+        private final int tableColumn;
 
-        @Override
-        public String getColumnHeader()
+        TableSelectedRow(Table table, int tableRow, int tableColumn)
         {
-            return header;
+            this.table = table;
+            this.tableRow = tableRow;
+            this.tableColumn = tableColumn;
         }
 
         @Override
-        public Object getValue()
+        public String getCellHeader()
         {
-            return value;
+            if (table == null)
+            {
+                return null;
+            }
+            return table.getColumnName(tableColumn);
+        }
+
+        @Override
+        public Object getCellValue()
+        {
+            if (table == null)
+            {
+                return null;
+            }
+            if (tableRow < 0
+                    || tableRow >= table.getRowCount())
+            {
+                return null;
+            }
+            if (tableColumn < 0
+                    || tableColumn >= table.getColumnCount())
+            {
+                return null;
+            }
+            return table.getValueAt(tableRow, tableColumn);
+        }
+
+        @Override
+        public int getColumnCount()
+        {
+            if (table == null)
+            {
+                return 0;
+            }
+
+            return table.getColumnCount();
+        }
+
+        @Override
+        public String getHeader(int columnIndex)
+        {
+            if (table == null)
+            {
+                return null;
+            }
+
+            return table.getColumnName(columnIndex);
+        }
+
+        @Override
+        public Object getValue(int columnIndex)
+        {
+            if (table == null
+                    || tableRow < 0
+                    || tableRow >= table.getRowCount())
+            {
+                return null;
+            }
+
+            return table.getValueAt(tableRow, columnIndex);
         }
     }
 

@@ -606,51 +606,48 @@ class QueryeerView extends JFrame
         pack();
     }
 
+    private List<JMenuItem> openFilesMenuItems = new ArrayList<>();
+
     private PropertyChangeListener queryeerModelListener = new PropertyChangeListener()
     {
         @Override
         public void propertyChange(PropertyChangeEvent evt)
         {
-            if (QueryeerModel.FILES.equalsIgnoreCase(evt.getPropertyName()))
+            if (QueryeerModel.FILES.equalsIgnoreCase(evt.getPropertyName())
+                    || QueryeerModel.ORDER.equalsIgnoreCase(evt.getPropertyName()))
             {
-                // Add
-                if (evt.getNewValue() != null)
+                // Remove current items from menu then add new ones according to model
+                for (JMenuItem item : openFilesMenuItems)
                 {
-                    // Only show 20 windows in menu list
-                    if (windowMenu.getMenuComponentCount() >= 24)
-                    {
-                        return;
-                    }
+                    windowMenu.remove(item);
+                }
 
-                    QueryFileModel fileModel = (QueryFileModel) evt.getNewValue();
-                    JMenuItem windowItem = new JMenuItem(new AbstractAction(fileModel.getFile()
+                openFilesMenuItems.clear();
+                for (QueryFileModel file : model.getFiles())
+                {
+                    JMenuItem windowItem = new JMenuItem(new AbstractAction(file.getFile()
                             .getName())
                     {
                         @Override
                         public void actionPerformed(ActionEvent e)
                         {
-                            model.setSelectedFile(fileModel);
+                            model.setSelectedFile(file);
                         }
-
                     });
-                    windowItem.putClientProperty(FILE_MODEL, fileModel);
-                    windowMenu.add(windowItem);
-                }
-                // Remove
-                else if (evt.getNewValue() == null)
-                {
-                    QueryFileModel fileModel = (QueryFileModel) evt.getOldValue();
-                    for (Component item : windowMenu.getMenuComponents())
+
+                    if (file == model.getSelectedFile())
                     {
-                        if (item instanceof JMenuItem menuItem)
-                        {
-                            QueryFileModel modelItem = (QueryFileModel) menuItem.getClientProperty(FILE_MODEL);
-                            if (fileModel == modelItem)
-                            {
-                                windowMenu.remove(menuItem);
-                                break;
-                            }
-                        }
+                        windowItem.setIcon(FontIcon.of(FontAwesome.CHECK));
+                    }
+
+                    windowItem.putClientProperty(FILE_MODEL, file);
+                    windowMenu.add(windowItem);
+                    openFilesMenuItems.add(windowItem);
+
+                    // Only add 20 windows
+                    if (openFilesMenuItems.size() >= 20)
+                    {
+                        break;
                     }
                 }
 
@@ -668,17 +665,14 @@ class QueryeerView extends JFrame
                 {
                     return;
                 }
-                for (Component item : windowMenu.getMenuComponents())
+                for (JMenuItem item : openFilesMenuItems)
                 {
-                    if (item instanceof JMenuItem menuItem)
+                    QueryFileModel modelItem = (QueryFileModel) item.getClientProperty(FILE_MODEL);
+                    item.setIcon(null);
+                    if (modelItem != null
+                            && fileModel == modelItem)
                     {
-                        QueryFileModel modelItem = (QueryFileModel) menuItem.getClientProperty(FILE_MODEL);
-                        menuItem.setIcon(null);
-                        if (modelItem != null
-                                && fileModel == modelItem)
-                        {
-                            menuItem.setIcon(FontIcon.of(FontAwesome.CHECK));
-                        }
+                        item.setIcon(FontIcon.of(FontAwesome.CHECK));
                     }
                 }
             }

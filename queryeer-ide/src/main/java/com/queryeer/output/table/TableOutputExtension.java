@@ -19,10 +19,12 @@ import se.kuseman.payloadbuilder.api.OutputWriter;
 class TableOutputExtension implements IOutputExtension
 {
     private final List<ITableContextMenuActionFactory> contextMenuActionFactories;
+    private final TableActionsConfigurable tableActionsConfigurable;
 
-    TableOutputExtension(List<ITableContextMenuActionFactory> contextMenuActionFactories)
+    TableOutputExtension(List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable)
     {
         this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
+        this.tableActionsConfigurable = requireNonNull(tableActionsConfigurable, "tableActionsConfigurable");
     }
 
     @Override
@@ -47,7 +49,7 @@ class TableOutputExtension implements IOutputExtension
     @Override
     public IOutputComponent createResultComponent(IQueryFile queryFile)
     {
-        return new TableOutputComponent(this, contextMenuActionFactories);
+        return new TableOutputComponent(queryFile, this, contextMenuActionFactories, tableActionsConfigurable);
     }
 
     @Override

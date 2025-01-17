@@ -116,13 +116,18 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     }
 
     @Override
-    public List<MetaParameter> getMetaParameters()
+    public List<MetaParameter> getMetaParameters(boolean testData)
     {
-        String url = connectionState != null ? Objects.toString(connectionState.getJdbcConnection()
-                .getJdbcURL(), "")
-                : "";
-        String database = connectionState != null ? connectionState.getDatabase()
-                : "";
+        String url = "jdbc://server/database";
+        String database = "database";
+        if (!testData)
+        {
+            url = connectionState != null ? Objects.toString(connectionState.getJdbcConnection()
+                    .getJdbcURL(), "")
+                    : "";
+            database = connectionState != null ? connectionState.getDatabase()
+                    : "";
+        }
 
         return IConnectionState.getMetaParameters(url, database);
     }

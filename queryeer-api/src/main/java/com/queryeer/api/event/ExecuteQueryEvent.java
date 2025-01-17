@@ -8,17 +8,29 @@ import com.queryeer.api.IQueryFile;
 public class ExecuteQueryEvent extends Event
 {
     private final OutputType outputType;
+    private final String newQueryName;
     private final Object context;
 
     public ExecuteQueryEvent(OutputType outputType, Object context)
     {
+        this(outputType, null, context);
+    }
+
+    public ExecuteQueryEvent(OutputType outputType, String newQueryName, Object context)
+    {
         this.outputType = requireNonNull(outputType, "outputType");
+        this.newQueryName = newQueryName;
         this.context = requireNonNull(context, "context");
     }
 
     public OutputType getOutputType()
     {
         return outputType;
+    }
+
+    public String getNewQueryName()
+    {
+        return newQueryName;
     }
 
     public Object getContext()
@@ -31,10 +43,12 @@ public class ExecuteQueryEvent extends Event
     {
         /** Output result to table */
         TABLE(true),
-        /** Output result to text. NOTE! Will write result in plain/text format */
+        /** Output result to text. */
         TEXT(true),
         /** Output result to new query. NOTE! Will write result in plain/text format */
         NEW_QUERY(true),
+        /** Output result to new query. And execute it. */
+        NEW_QUERY_EXECUTE(true),
         /** Output to clipboard. NOTE! Will write result in plain/text format */
         CLIPBOARD(true),
         /** Outputs result to table but switches the active tab to query plan. */

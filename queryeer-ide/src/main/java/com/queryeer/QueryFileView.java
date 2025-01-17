@@ -146,10 +146,11 @@ class QueryFileView extends JPanel implements IQueryFile
             case EXECUTING:
             case EXECUTING_BY_EVENT:
 
-                // Only switch if we are executing without context, with context the output is provided
-                boolean switchOutputComponent = state == State.EXECUTING;
+                boolean byEvent = state == State.EXECUTING_BY_EVENT;
 
-                if (outputComponents != null)
+                // Don't clear or switch outputs when executing by event, then it's handled already
+                if (outputComponents != null
+                        && !byEvent)
                 {
                     // Clear state of output components
                     int count = outputComponents.size();
@@ -158,10 +159,7 @@ class QueryFileView extends JPanel implements IQueryFile
                         IOutputComponent outputComponent = outputComponents.get(i);
                         outputComponent.clearState();
                     }
-                }
 
-                if (switchOutputComponent)
-                {
                     IOutputExtension selectedOutputExtension = file.getOutputExtension();
                     selectOutputComponent(selectedOutputExtension.getResultOutputComponentClass());
                 }

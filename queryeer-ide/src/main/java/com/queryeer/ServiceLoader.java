@@ -34,11 +34,8 @@ class ServiceLoader
     private final Map<Class<?>, ServiceRegistration> services = new HashMap<>();
     private final Map<Class<?>, Object> resolvedInstances = new HashMap<>();
 
-    private PluginHandler pluginHandler;
-
     ServiceLoader()
     {
-        this.pluginHandler = new PluginHandler();
     }
 
     <T> T get(Class<T> clazz)
@@ -94,7 +91,7 @@ class ServiceLoader
         register(service.getClass(), service);
     }
 
-    void injectExtensions() throws InstantiationException, IllegalAccessException
+    void injectExtensions(PluginHandler pluginHandler) throws InstantiationException, IllegalAccessException
     {
         Collection<Plugin> plugins = pluginHandler.getPlugins();
         ClassLoader[] classLoaders = new ClassLoader[1 + plugins.size()];

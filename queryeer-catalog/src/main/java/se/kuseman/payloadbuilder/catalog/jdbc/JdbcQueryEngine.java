@@ -544,9 +544,9 @@ class JdbcQueryEngine implements IQueryEngine
     }
 
     @Override
-    public ExecuteQueryEvent getExecuteQueryEvent(String query, OutputType outputType)
+    public ExecuteQueryEvent getExecuteQueryEvent(String query, String newQueryFileName, OutputType outputType)
     {
-        return new ExecuteQueryEvent(outputType, new ExecuteQueryContext(query));
+        return new ExecuteQueryEvent(outputType, newQueryFileName, new ExecuteQueryContext(query));
     }
 
     private int writeResultSet(IQueryFile queryFile, ResultSet rs, OutputWriter writer, JdbcEngineState state) throws SQLException, IOException
@@ -615,7 +615,7 @@ class JdbcQueryEngine implements IQueryEngine
                 && connectionsModel.prepare(state.getJdbcConnection(), false))
         {
             JdbcEngineState engineState = new JdbcEngineState(this, state);
-            eventBus.publish(new NewQueryFileEvent(JdbcQueryEngine.this, engineState, null));
+            eventBus.publish(new NewQueryFileEvent(JdbcQueryEngine.this, engineState, null, false, null));
             // Lazy load databases
             loadConnectionMetaData(engineState);
         }

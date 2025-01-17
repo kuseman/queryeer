@@ -42,6 +42,7 @@ class QueryeerModel
     private final List<QueryFileModel> removedFiles = new ArrayList<>();
     private final FileWatchService watchService;
     private QueryFileModel selectedFile;
+    private QueryFileModel previousSelectedFile;
     private Thread maintenanceThread;
 
     QueryeerModel(Config config, File backupPath, FileWatchService watchService)
@@ -75,6 +76,12 @@ class QueryeerModel
         // files etc.
         maintenanceThread.setDaemon(false);
         maintenanceThread.start();
+
+        if (config.getSession().previousActiveIndex >= 0
+                && config.getSession().previousActiveIndex < files.size())
+        {
+            previousSelectedFile = files.get(config.getSession().previousActiveIndex);
+        }
     }
 
     void addPropertyChangeListener(PropertyChangeListener listener)
@@ -82,11 +89,30 @@ class QueryeerModel
         pcs.addPropertyChangeListener(listener);
     }
 
-    void addFile(QueryFileModel file)
+    void addFile(QueryFileModel file, boolean forceLast)
     {
+        int index;
+        if (forceLast
+                || config.isOpenNewFilesLast())
+        {
+            index = files.size();
+        }
+        else
+        {
+            // Add new file after selected one
+            index = files.indexOf(selectedFile);
+            if (index < 0)
+            {
+                index = files.size();
+            }
+            else
+            {
+                index++;
+            }
+        }
+
         register(file);
-        int index = files.size();
-        files.add(file);
+        files.add(index, file);
 
         pcs.fireIndexedPropertyChange(FILES, index, null, file);
 
@@ -135,14 +161,24 @@ class QueryeerModel
 
         file.dispose();
 
-        files.remove(index);
+        if (files.remove(index) == previousSelectedFile)
+        {
+            previousSelectedFile = null;
+        }
+        // Prev will be re-set upon property change so store it before firing
+        QueryFileModel prevFile = previousSelectedFile;
 
         pcs.fireIndexedPropertyChange(FILES, index, file, null);
 
         removedFiles.add(file);
         QueryFileModel selectedFile;
-        // Adjust index to select
-        if (index >= files.size())
+        // Select previous or the removed files index
+        int prevIndex = files.indexOf(prevFile);
+        index = prevIndex < 0 ? index
+                : prevIndex;
+        // .. else select the last file
+        if (index < 0
+                || index >= files.size())
         {
             index = files.size() - 1;
         }
@@ -156,6 +192,7 @@ class QueryeerModel
         if (!Objects.equals(selectedFile, file))
         {
             QueryFileModel old = selectedFile;
+            previousSelectedFile = selectedFile;
             selectedFile = file;
             pcs.firePropertyChange(SELECTED_FILE, old, selectedFile);
         }
@@ -246,6 +283,7 @@ class QueryeerModel
         QueryeerSession session = config.getSession();
         List<QueryeerSessionFile> sessionFiles = new ArrayList<>();
         int activeFileIndex = 0;
+        int previousSelectedFileIndex = files.indexOf(previousSelectedFile);
 
         List<QueryFileModel> files = new ArrayList<>(this.files);
 
@@ -311,9 +349,11 @@ class QueryeerModel
             activeFileIndex = files.indexOf(selectedFile);
         }
         if (activeFileIndex != session.activeFileIndex
+                || previousSelectedFileIndex != session.previousActiveIndex
                 || !sessionFiles.equals(session.files))
         {
             session.activeFileIndex = activeFileIndex;
+            session.previousActiveIndex = previousSelectedFileIndex;
             session.files.clear();
             session.files.addAll(sessionFiles);
             config.saveSession();

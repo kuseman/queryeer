@@ -21,12 +21,20 @@ public class NewQueryFileEvent extends Event
     /** Editor content of new file */
     private final Object editorValue;
 
-    public NewQueryFileEvent(IQueryEngine queryEngine, IQueryEngine.IState state, Object editorValue)
+    /** Should the new query file be executed once initialised ? */
+    private final boolean execute;
+
+    /** Optional new query name used when opening a new non existing file. */
+    private final String newQueryName;
+
+    public NewQueryFileEvent(IQueryEngine queryEngine, IQueryEngine.IState state, Object editorValue, boolean execute, String newQueryName)
     {
         this.queryEngine = requireNonNull(queryEngine);
         this.state = state;
         this.editorValue = editorValue;
         this.file = null;
+        this.execute = execute;
+        this.newQueryName = newQueryName;
     }
 
     public NewQueryFileEvent(File file)
@@ -35,6 +43,8 @@ public class NewQueryFileEvent extends Event
         this.state = null;
         this.editorValue = null;
         this.file = requireNonNull(file, "file");
+        this.execute = false;
+        this.newQueryName = null;
     }
 
     public IQueryEngine getQueryEngine()
@@ -52,8 +62,18 @@ public class NewQueryFileEvent extends Event
         return editorValue;
     }
 
+    public String getNewQueryName()
+    {
+        return newQueryName;
+    }
+
     public File getFile()
     {
         return file;
+    }
+
+    public boolean isExecute()
+    {
+        return execute;
     }
 }

@@ -15,6 +15,18 @@ public interface ITextEditorKit
         return "text/plain";
     }
 
+    /** Get visible number of rows of editor. */
+    default int getRows()
+    {
+        return 40;
+    }
+
+    /** Get visible number fo columns of editor. */
+    default int getColumns()
+    {
+        return 80;
+    }
+
     /** Return a document parser for this kit */
     default ITextEditorDocumentParser getDocumentParser()
     {

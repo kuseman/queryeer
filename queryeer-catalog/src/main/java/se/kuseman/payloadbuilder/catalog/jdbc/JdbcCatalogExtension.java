@@ -9,6 +9,7 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -25,6 +26,7 @@ import org.apache.commons.lang3.mutable.MutableObject;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.AutoCompletionComboBox;
 import com.queryeer.api.extensions.IConfigurable;
+import com.queryeer.api.extensions.engine.IQueryEngine.IState.MetaParameter;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionView;
 import com.queryeer.api.extensions.payloadbuilder.ICompletionProvider;
@@ -88,6 +90,22 @@ class JdbcCatalogExtension implements ICatalogExtension
     public boolean hasQuickPropertieComponent()
     {
         return true;
+    }
+
+    @Override
+    public List<MetaParameter> getMetaParameters(IQuerySession querySession, boolean testData)
+    {
+        String url = "jdbc://server/database";
+        String database = "database";
+        if (!testData)
+        {
+            url = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.URL)
+                    .valueAsString(0);
+            database = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
+                    .valueAsString(0);
+        }
+
+        return IConnectionState.getMetaParameters(url, database);
     }
 
     @Override

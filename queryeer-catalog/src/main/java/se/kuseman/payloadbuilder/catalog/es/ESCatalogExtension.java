@@ -24,6 +24,7 @@ import javax.swing.event.ListDataListener;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.AutoCompletionComboBox;
 import com.queryeer.api.extensions.IConfigurable;
+import com.queryeer.api.extensions.engine.IQueryEngine.IState.MetaParameter;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionView;
 import com.queryeer.api.extensions.payloadbuilder.ICompletionProvider;
@@ -81,6 +82,27 @@ class ESCatalogExtension implements ICatalogExtension
     public boolean hasQuickPropertieComponent()
     {
         return true;
+    }
+
+    @Override
+    public List<MetaParameter> getMetaParameters(IQuerySession querySession, boolean testData)
+    {
+        String endpoint = "http://localhost:19200";
+        String index = "filebeat*";
+        if (!testData)
+        {
+            endpoint = querySession.getCatalogProperty(catalogAlias, ESCatalog.ENDPOINT_KEY)
+                    .valueAsString(0);
+            index = querySession.getCatalogProperty(catalogAlias, ESCatalog.INDEX_KEY)
+                    .valueAsString(0);
+        }
+
+        //@formatter:off
+        return List.of(
+                new MetaParameter(ESCatalog.ENDPOINT_KEY, endpoint, "Endpoint to Elastic"),
+                new MetaParameter(ESCatalog.INDEX_KEY, index, "Index pattern to query")
+                );
+        //@formatter:on
     }
 
     @Override
