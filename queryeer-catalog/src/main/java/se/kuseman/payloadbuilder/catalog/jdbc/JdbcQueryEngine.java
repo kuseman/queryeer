@@ -42,6 +42,8 @@ import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
@@ -70,6 +72,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 /** JdbcQuery engine */
 class JdbcQueryEngine implements IQueryEngine
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(JdbcQueryEngine.class);
     private static final String QUERY_NOT_CONNECTED_MESSAGE = "Query file is not connected to any data source. Right Click Or CTRL + Left click on a connection in tree.";
     static final String TEXT_SQL = "text/sql";
     static final String CATALOG_ALIAS = "JdbcQueryEngine";
@@ -410,10 +413,9 @@ class JdbcQueryEngine implements IQueryEngine
                     return;
                 }
 
-                if (e instanceof SQLException)
+                if (e instanceof SQLException sqle)
                 {
                     sqlError.setTrue();
-                    SQLException sqle = (SQLException) e;
                     if (jdbcDatabase.handleSQLException(queryFile, textOutput, sqle))
                     {
                         return;
@@ -444,7 +446,7 @@ class JdbcQueryEngine implements IQueryEngine
                     }
                     catch (IOException e)
                     {
-                        // SWALLOW
+                        LOGGER.error("Error closing temporary state", e);
                     }
                 }
 
