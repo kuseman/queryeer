@@ -6,6 +6,8 @@ import java.util.concurrent.Executors;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryFileModel.State;
 import com.queryeer.api.editor.TextSelection;
@@ -18,6 +20,7 @@ import se.kuseman.payloadbuilder.api.OutputWriter;
 /** Query serivce. This is the core class that executes the current query and delegates to choosen {@link IQueryEngine} */
 class QueryService
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryService.class);
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
             .namingPattern("QueryExecutor-#%d")
             .build());
@@ -57,11 +60,7 @@ class QueryService
 
                     String message = t.getMessage();
                     textOutput.appendWarning(message, TextSelection.EMPTY);
-
-                    if (System.getProperty("devEnv") != null)
-                    {
-                        e.printStackTrace();
-                    }
+                    LOGGER.error("Unhandled query error", e);
                 }
             }
             finally
