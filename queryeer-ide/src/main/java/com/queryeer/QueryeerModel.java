@@ -25,9 +25,11 @@ import org.slf4j.LoggerFactory;
 import com.queryeer.Config.QueryeerSession;
 import com.queryeer.Config.QueryeerSessionFile;
 import com.queryeer.FileWatchService.FileWatchListener;
+import com.queryeer.api.IQueryFile;
+import com.queryeer.api.service.IQueryFileProvider;
 
 /** Queryeer model */
-class QueryeerModel
+class QueryeerModel implements IQueryFileProvider
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueryeerModel.class);
     public static final String FILES = "files";
@@ -209,6 +211,12 @@ class QueryeerModel
     void fileSaved(QueryFileModel file)
     {
         register(file);
+    }
+
+    @Override
+    public IQueryFile getCurrentFile()
+    {
+        return selectedFile;
     }
 
     QueryFileModel getSelectedFile()

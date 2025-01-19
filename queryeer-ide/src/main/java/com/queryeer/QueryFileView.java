@@ -1,6 +1,5 @@
 package com.queryeer;
 
-import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -10,9 +9,9 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.beans.IndexedPropertyChangeEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.io.PrintWriter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -25,27 +24,18 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToolBar;
 import javax.swing.OverlayLayout;
-import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
-import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import com.queryeer.QueryFileModel.State;
-import com.queryeer.api.IQueryFile;
-import com.queryeer.api.QueryFileMetaData;
-import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.extensions.IExtensionAction;
-import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputComponent;
-import com.queryeer.api.extensions.output.IOutputExtension;
-import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
-import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.component.TabComponent;
 
 /** Content of a query editor. Engine editor and a result panel separated with a split panel */
-class QueryFileView extends JPanel implements IQueryFile
+class QueryFileView extends JPanel
 {
     private final QueryFileModel model;
     private final JSplitPane splitPane;
@@ -61,7 +51,7 @@ class QueryFileView extends JPanel implements IQueryFile
     private final QueryFileChangeListener queryFileChangeListener = new QueryFileChangeListener();
     private boolean resultCollapsed;
     private int prevDividerLocation;
-    private List<IOutputComponent> outputComponents;
+    private boolean fireEvents = true;
 
     QueryFileView(QueryFileModel model, List<IOutputToolbarActionFactory> toolbarActionFactories)
     {
@@ -88,6 +78,21 @@ class QueryFileView extends JPanel implements IQueryFile
 
         tabPanel.add(outputComponentToolbar);
         tabPanel.add(resultTabs);
+
+        // Add initial output components
+        int index = 0;
+        for (IOutputComponent outputComponent : model.getOutputComponents())
+        {
+            resultTabs.add(outputComponent.getComponent());
+            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(outputComponent));
+            index++;
+        }
+
+        // Populate toolbar
+        if (index > 0)
+        {
+            ((OutputComponentTabComponent) resultTabs.getTabComponentAt(0)).populateToolbar();
+        }
 
         resultTabs.addChangeListener(l -> outputComponentChanged());
 
@@ -127,209 +132,34 @@ class QueryFileView extends JPanel implements IQueryFile
 
     private void outputComponentChanged()
     {
+        if (!fireEvents)
+        {
+            return;
+        }
+
         OutputComponentTabComponent tabComponent = (OutputComponentTabComponent) resultTabs.getTabComponentAt(resultTabs.getSelectedIndex());
         if (tabComponent != null)
         {
-            tabComponent.populateToolbar();
+            model.selectOutputComponent(tabComponent.outputComponent.getClass());
         }
     }
 
-    private void handleStateChanged(QueryFileModel file, State state)
+    private void handleStateChanged(QueryFileModel file)
     {
+        State state = file.getState();
         labelExecutionStatus.setIcon(getIconFromState(state));
         labelExecutionStatus.setToolTipText(state.getToolTip());
 
-        // CSOFF
-        switch (state)
-        // CSON
+        if (state.isExecuting())
         {
-            case EXECUTING:
-            case EXECUTING_BY_EVENT:
-
-                boolean byEvent = state == State.EXECUTING_BY_EVENT;
-
-                // Don't clear or switch outputs when executing by event, then it's handled already
-                if (outputComponents != null
-                        && !byEvent)
-                {
-                    // Clear state of output components
-                    int count = outputComponents.size();
-                    for (int i = 0; i < count; i++)
-                    {
-                        IOutputComponent outputComponent = outputComponents.get(i);
-                        outputComponent.clearState();
-                    }
-
-                    IOutputExtension selectedOutputExtension = file.getOutputExtension();
-                    selectOutputComponent(selectedOutputExtension.getResultOutputComponentClass());
-                }
-
-                executionTimer.start();
-                file.clearForExecution();
-
-                break;
-            case COMPLETED:
-                setExecutionStats();
-                executionTimer.stop();
-                break;
-            case ABORTED:
-                setExecutionStats();
-                getMessagesWriter().println("Query was aborted!");
-                executionTimer.stop();
-                break;
-            case ERROR:
-                focusMessages();
-                break;
-        }
-
-        // No rows, then show messages
-        if (!state.isExecuting()
-                && file.getTotalRowCount() == 0)
-        {
-            focusMessages();
-        }
-    }
-
-    @Override
-    public void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass)
-    {
-        if (outputComponentClass == null)
-        {
-            return;
-        }
-        int count = outputComponents.size();
-        for (int i = 0; i < count; i++)
-        {
-            IOutputComponent outputComponent = outputComponents.get(i);
-            if (outputComponentClass.isAssignableFrom(outputComponent.getClass()))
-            {
-                resultTabs.setSelectedIndex(i);
-            }
-        }
-    }
-
-    @Override
-    public IOutputComponent getSelectedOutputComponent()
-    {
-        return ((OutputComponentTabComponent) resultTabs.getTabComponentAt(resultTabs.getSelectedIndex())).outputComponent;
-    }
-
-    /* IQueryFile */
-
-    @Override
-    public IEditor getEditor()
-    {
-        return model.getEditor();
-    }
-
-    @Override
-    public void focusMessages()
-    {
-        if (outputComponents == null)
-        {
-            return;
-        }
-
-        int count = outputComponents.size();
-        for (int i = 0; i < count; i++)
-        {
-            IOutputComponent component = outputComponents.get(i);
-            if (ITextOutputComponent.class.isAssignableFrom(component.getClass()))
-            {
-                final int index = i;
-                SwingUtilities.invokeLater(() -> resultTabs.setSelectedIndex(index));
-                return;
-            }
-        }
-    }
-
-    @Override
-    public PrintWriter getMessagesWriter()
-    {
-        return getOutputComponent(ITextOutputComponent.class).getTextWriter();
-    }
-
-    @Override
-    public <T extends IOutputComponent> T getOutputComponent(Class<T> clazz)
-    {
-        if (outputComponents != null)
-        {
-            int count = outputComponents.size();
-            for (int i = 0; i < count; i++)
-            {
-                IOutputComponent component = outputComponents.get(i);
-                if (clazz.isAssignableFrom(component.getClass()))
-                {
-                    return clazz.cast(component);
-                }
-            }
-        }
-        return null;
-    }
-
-    @Override
-    public void addOutputComponent(IOutputComponent outputComponent)
-    {
-        if (outputComponents == null)
-        {
-            throw new RuntimeException("Query file not initalized yet, cannot add new output components");
-        }
-
-        Class<?> clazz = outputComponent.getClass();
-        int count = outputComponents.size();
-        for (int i = 0; i < count; i++)
-        {
-            IOutputComponent component = outputComponents.get(i);
-            if (clazz.isAssignableFrom(component.getClass()))
-            {
-                // Already added, just return
-                return;
-            }
-        }
-
-        Runnable r = () ->
-        {
-            outputComponents.add(outputComponent);
-            resultTabs.add(outputComponent.getComponent());
-            resultTabs.setTabComponentAt(resultTabs.getTabCount() - 1, new OutputComponentTabComponent(outputComponent));
-        };
-
-        if (SwingUtilities.isEventDispatchThread())
-        {
-            r.run();
+            executionTimer.start();
         }
         else
         {
-            SwingUtilities.invokeLater(r);
+            setExecutionStats();
+            executionTimer.stop();
         }
-
     }
-
-    @Override
-    public void incrementTotalRowCount()
-    {
-        model.incrementTotalRowCount();
-    }
-
-    @Override
-    public IOutputFormatExtension getOutputFormat()
-    {
-        return model.getOutputFormat();
-    }
-
-    @Override
-    public void setMetaData(QueryFileMetaData metaData)
-    {
-        model.setMetaData(metaData);
-    }
-
-    @Override
-    public IQueryEngine.IState getEngineState()
-    {
-        return model.getEngineState();
-    }
-
-    /* END IQueryFile */
 
     void close()
     {
@@ -383,33 +213,6 @@ class QueryFileView extends JPanel implements IQueryFile
         return model;
     }
 
-    List<IOutputComponent> getOutputComponents()
-    {
-        return outputComponents;
-    }
-
-    void setOutputComponents(List<IOutputComponent> outputComponents)
-    {
-        if (this.outputComponents != null)
-        {
-            throw new IllegalArgumentException("Cannot set already set outputcompoentns");
-        }
-        this.outputComponents = ObjectUtils.defaultIfNull(outputComponents, emptyList());
-        int index = 0;
-        for (IOutputComponent outputComponent : outputComponents)
-        {
-            resultTabs.add(outputComponent.getComponent());
-            resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(outputComponent));
-            index++;
-        }
-
-        // Populate toolbar
-        if (index > 0)
-        {
-            outputComponentChanged();
-        }
-    }
-
     @Override
     public boolean requestFocusInWindow()
     {
@@ -426,12 +229,36 @@ class QueryFileView extends JPanel implements IQueryFile
         {
             if (QueryFileModel.STATE.equals(evt.getPropertyName()))
             {
-                handleStateChanged(model, (State) evt.getNewValue());
+                handleStateChanged(model);
             }
             else if (QueryFileModel.METADATA.equals(evt.getPropertyName()))
             {
                 fileStatus.setText(model.getMetaData()
                         .getDescription());
+            }
+            else if (QueryFileModel.OUTPUT_COMPONENTS.equals(evt.getPropertyName()))
+            {
+                int index = evt instanceof IndexedPropertyChangeEvent ievt ? ievt.getIndex()
+                        : resultTabs.getTabCount();
+
+                IOutputComponent outputComponent = (IOutputComponent) evt.getNewValue();
+                resultTabs.add(outputComponent.getComponent(), index);
+                resultTabs.setTabComponentAt(index, new OutputComponentTabComponent(outputComponent));
+            }
+            else if (QueryFileModel.SELECTED_OUTPUT_COMPONENT.equals(evt.getPropertyName()))
+            {
+                IOutputComponent selectedOutputComponent = model.getSelectedOutputComponent();
+                int index = model.getOutputComponents()
+                        .indexOf(selectedOutputComponent);
+                if (index >= 0
+                        && index < resultTabs.getTabCount())
+                {
+                    OutputComponentTabComponent tab = (OutputComponentTabComponent) resultTabs.getTabComponentAt(index);
+                    fireEvents = false;
+                    resultTabs.setSelectedIndex(index);
+                    tab.populateToolbar();
+                    fireEvents = true;
+                }
             }
         }
     }

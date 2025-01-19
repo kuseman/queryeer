@@ -435,7 +435,8 @@ class JdbcQueryEngine implements IQueryEngine
                 if (!closeState)
                 {
                     state.afterQuery();
-                    databasesModel.setSelectedItem(state.getDatabase());
+                    final ConnectionState cs = state;
+                    SwingUtilities.invokeLater(() -> databasesModel.setSelectedItem(cs.getDatabase()));
                 }
                 else
                 {

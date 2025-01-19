@@ -102,10 +102,6 @@ public class Main
         serviceLoader.register(IConfig.class, config);
         serviceLoader.register(config);
 
-        QueryFileProvider queryFileProvider = new QueryFileProvider();
-        serviceLoader.register(IQueryFileProvider.class, queryFileProvider);
-        serviceLoader.register(queryFileProvider);
-
         ActionRegistry actionRegistry = new ActionRegistry();
         serviceLoader.register(IActionRegistry.class, actionRegistry);
 
@@ -115,12 +111,14 @@ public class Main
         FileWatchService watchService = new FileWatchService();
         serviceLoader.register(watchService);
         // UI
-        serviceLoader.register(new QueryeerModel(config, backupFolder, watchService));
+
+        QueryeerModel queryeerModel = new QueryeerModel(config, backupFolder, watchService);
+        serviceLoader.register(IQueryFileProvider.class, queryeerModel);
+        serviceLoader.register(queryeerModel);
         serviceLoader.register(QueryeerView.class);
         serviceLoader.register(QueryeerController.class);
         serviceLoader.register(OptionsDialog.class);
         serviceLoader.register(QueryFileTabbedPane.class);
-        serviceLoader.register(QueryFileViewFactory.class);
         serviceLoader.register(ProjectsView.class);
 
         serviceLoader.register(IIconFactory.class, new IconFactory());
