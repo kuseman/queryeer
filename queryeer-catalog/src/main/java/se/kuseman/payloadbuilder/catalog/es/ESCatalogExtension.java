@@ -441,6 +441,7 @@ class ESCatalogExtension implements ICatalogExtension
                 return;
             }
 
+            IQueryFile currentFile = queryFileProvider.getCurrentFile();
             Runnable load = () ->
             {
                 try
@@ -461,11 +462,10 @@ class ESCatalogExtension implements ICatalogExtension
                 }
                 catch (Exception e)
                 {
-                    IQueryFile queryFile = queryFileProvider.getCurrentFile();
-                    if (queryFile != null)
+                    if (currentFile != null)
                     {
-                        e.printStackTrace(queryFile.getMessagesWriter());
-                        queryFile.focusMessages();
+                        e.printStackTrace(currentFile.getMessagesWriter());
+                        currentFile.focusMessages();
                     }
                     else
                     {

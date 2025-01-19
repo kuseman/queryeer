@@ -7,6 +7,9 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,22 +22,27 @@ import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.time.StopWatch;
 
 import com.queryeer.FileWatchService.FileWatchListener;
+import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.extensions.engine.IQueryEngine;
+import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 /**
  * Model of a query file. Has information about filename, execution state etc.
  **/
-class QueryFileModel
+class QueryFileModel implements IQueryFile
 {
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this, true);
     static final String DIRTY = "dirty";
     static final String FILE = "file";
     static final String STATE = "state";
     static final String METADATA = "metaData";
+    static final String SELECTED_OUTPUT_COMPONENT = "selectedOutputComponent";
+    static final String OUTPUT_COMPONENTS = "outputComponents";
 
     private final IQueryEngine queryEngine;
     private final IQueryEngine.IState engineState;
@@ -53,6 +61,8 @@ class QueryFileModel
     private int totalRowCount;
     private IOutputExtension outputExtension;
     private IOutputFormatExtension outputFormat;
+    private List<IOutputComponent> outputComponents = new ArrayList<>();
+    private IOutputComponent selectedOutputComponent;
 
     FileWatchListener watchListener;
 
@@ -94,6 +104,17 @@ class QueryFileModel
         });
     }
 
+    List<IOutputComponent> getOutputComponents()
+    {
+        return outputComponents;
+    }
+
+    /** Set output components. NOTE! Does not fire property change events. */
+    void setOutputComponents(List<IOutputComponent> outputComponents)
+    {
+        this.outputComponents = new ArrayList<>(requireNonNull(outputComponents));
+    }
+
     boolean isDirty()
     {
         return dirty;
@@ -120,6 +141,7 @@ class QueryFileModel
         return state;
     }
 
+    @SuppressWarnings("incomplete-switch")
     void setState(State state)
     {
         State oldValue = this.state;
@@ -141,6 +163,45 @@ class QueryFileModel
                 sw.stop();
             }
 
+            // CSOFF
+            switch (state)
+            // CSON
+            {
+                case EXECUTING:
+                case EXECUTING_BY_EVENT:
+
+                    boolean byEvent = state == State.EXECUTING_BY_EVENT;
+
+                    // Don't clear or switch outputs when executing by event, then it's handled already
+                    if (!byEvent)
+                    {
+                        // Clear state of output components
+                        int count = outputComponents.size();
+                        for (int i = 0; i < count; i++)
+                        {
+                            IOutputComponent outputComponent = outputComponents.get(i);
+                            outputComponent.clearState();
+                        }
+
+                        IOutputExtension selectedOutputExtension = outputExtension;
+                        selectOutputComponent(selectedOutputExtension.getResultOutputComponentClass());
+                    }
+                    break;
+                case ABORTED:
+                    getMessagesWriter().println("Query was aborted!");
+                    break;
+                case ERROR:
+                    focusMessages();
+                    break;
+            }
+
+            // No rows, then show messages
+            if (!state.isExecuting()
+                    && totalRowCount == 0)
+            {
+                focusMessages();
+            }
+
             pcs.firePropertyChange(STATE, oldValue, newValue);
         }
     }
@@ -155,7 +216,82 @@ class QueryFileModel
         return metaData;
     }
 
-    void setMetaData(QueryFileMetaData metaData)
+    @Override
+    public void selectOutputComponent(Class<? extends IOutputComponent> outputComponentClass)
+    {
+        requireNonNull(outputComponentClass);
+        int count = outputComponents.size();
+        for (int i = 0; i < count; i++)
+        {
+            IOutputComponent outputComponent = outputComponents.get(i);
+            if (outputComponentClass.isAssignableFrom(outputComponent.getClass()))
+            {
+                if (selectedOutputComponent != outputComponent)
+                {
+                    IOutputComponent old = selectedOutputComponent;
+                    selectedOutputComponent = outputComponent;
+                    pcs.firePropertyChange(SELECTED_OUTPUT_COMPONENT, old, outputComponent);
+                }
+                return;
+            }
+        }
+    }
+
+    @Override
+    public IOutputComponent getSelectedOutputComponent()
+    {
+        return selectedOutputComponent;
+    }
+
+    @Override
+    public void focusMessages()
+    {
+        selectOutputComponent(ITextOutputComponent.class);
+    }
+
+    @Override
+    public PrintWriter getMessagesWriter()
+    {
+        return getOutputComponent(ITextOutputComponent.class).getTextWriter();
+    }
+
+    @Override
+    public <T extends IOutputComponent> T getOutputComponent(Class<T> clazz)
+    {
+        int count = outputComponents.size();
+        for (int i = 0; i < count; i++)
+        {
+            IOutputComponent component = outputComponents.get(i);
+            if (clazz.isAssignableFrom(component.getClass()))
+            {
+                return clazz.cast(component);
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void addOutputComponent(IOutputComponent outputComponent)
+    {
+        Class<?> clazz = outputComponent.getClass();
+        int count = outputComponents.size();
+        for (int i = 0; i < count; i++)
+        {
+            IOutputComponent component = outputComponents.get(i);
+            if (clazz.isAssignableFrom(component.getClass()))
+            {
+                // Already added, just return
+                return;
+            }
+        }
+
+        int index = outputComponents.size();
+        outputComponents.add(outputComponent);
+        pcs.fireIndexedPropertyChange(OUTPUT_COMPONENTS, index, null, outputComponent);
+    }
+
+    @Override
+    public void setMetaData(QueryFileMetaData metaData)
     {
         QueryFileMetaData oldValue = this.metaData;
         QueryFileMetaData newValue = metaData;
@@ -285,7 +421,8 @@ class QueryFileModel
         this.outputExtension = outputExtension;
     }
 
-    IOutputFormatExtension getOutputFormat()
+    @Override
+    public IOutputFormatExtension getOutputFormat()
     {
         return outputFormat;
     }
@@ -300,12 +437,14 @@ class QueryFileModel
         return queryEngine;
     }
 
-    IEditor getEditor()
+    @Override
+    public IEditor getEditor()
     {
         return editor;
     }
 
-    void incrementTotalRowCount()
+    @Override
+    public void incrementTotalRowCount()
     {
         totalRowCount++;
     }
@@ -316,7 +455,8 @@ class QueryFileModel
         return totalRowCount;
     }
 
-    IQueryEngine.IState getEngineState()
+    @Override
+    public IQueryEngine.IState getEngineState()
     {
         return engineState;
     }

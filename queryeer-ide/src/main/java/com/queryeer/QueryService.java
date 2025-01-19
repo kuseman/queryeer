@@ -26,19 +26,18 @@ class QueryService
             .build());
 
     /** Execute query for provider query file */
-    static void executeQuery(final QueryFileView fileView, OutputWriter writer, Object query, boolean byEvent, Runnable afterQuery)
+    static void executeQuery(final QueryFileModel file, OutputWriter writer, Object query, boolean byEvent, Runnable afterQuery)
     {
-        final QueryFileModel file = fileView.getModel();
         final IQueryEngine queryEngine = file.getQueryEngine();
 
-        final ITextOutputComponent textOutput = fileView.getOutputComponent(ITextOutputComponent.class);
+        final ITextOutputComponent textOutput = file.getOutputComponent(ITextOutputComponent.class);
         file.setState(byEvent ? State.EXECUTING_BY_EVENT
                 : State.EXECUTING);
         EXECUTOR.execute(() ->
         {
             try
             {
-                queryEngine.execute(fileView, writer, query);
+                queryEngine.execute(file, writer, query);
             }
             catch (Exception e)
             {

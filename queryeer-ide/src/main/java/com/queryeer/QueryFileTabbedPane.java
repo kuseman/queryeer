@@ -23,6 +23,7 @@ import org.apache.commons.io.FilenameUtils;
 
 import com.queryeer.api.action.IActionRegistry;
 import com.queryeer.api.action.IActionRegistry.ActionScope;
+import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.component.TabComponent;
 import com.queryeer.event.QueryFileClosingEvent;
@@ -33,17 +34,17 @@ class QueryFileTabbedPane extends JTabbedPane
     private static final String CLOSE_TAB_ACTION = "TabComponent.CloseTab";
     private final QueryeerModel queryeerModel;
     private final IEventBus eventBus;
-    private final QueryFileViewFactory queryFileViewFactory;
+    private final List<IOutputToolbarActionFactory> outputToolbarActionFactories;
     private final QueryeerModelListener queryeerModelListener = new QueryeerModelListener();
 
     private boolean fireChangeEvent = true;
 
-    QueryFileTabbedPane(QueryeerModel queryeerModel, IEventBus eventBus, QueryFileViewFactory queryFileViewFactory, ActionRegistry actionRegistry)
+    QueryFileTabbedPane(QueryeerModel queryeerModel, IEventBus eventBus, ActionRegistry actionRegistry, List<IOutputToolbarActionFactory> outputToolbarActionFactories)
     {
         super(SwingConstants.TOP);
         this.queryeerModel = requireNonNull(queryeerModel, "queryeerModel");
         this.eventBus = requireNonNull(eventBus, "eventBus");
-        this.queryFileViewFactory = requireNonNull(queryFileViewFactory, "queryFileViewFactory");
+        this.outputToolbarActionFactories = requireNonNull(outputToolbarActionFactories, "outputToolbarActionFactories");
         this.queryeerModel.addPropertyChangeListener(queryeerModelListener);
 
         setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
@@ -83,7 +84,7 @@ class QueryFileTabbedPane extends JTabbedPane
                     QueryFileView view = (QueryFileView) getComponentAt(index);
                     if (view != null)
                     {
-                        eventBus.publish(new QueryFileClosingEvent(view));
+                        eventBus.publish(new QueryFileClosingEvent(view.getModel()));
                     }
                 }
             }
@@ -119,10 +120,10 @@ class QueryFileTabbedPane extends JTabbedPane
 
                     int index = evt instanceof IndexedPropertyChangeEvent ievt ? ievt.getIndex()
                             : queryeerModel.getFiles()
-                                    .size() - 1;
+                                    .size();
 
-                    QueryFileView view = queryFileViewFactory.create(file);
-                    QueryFileTabComponent component = new QueryFileTabComponent(file, () -> eventBus.publish(new QueryFileClosingEvent(view)));
+                    QueryFileView view = new QueryFileView(file, outputToolbarActionFactories);
+                    QueryFileTabComponent component = new QueryFileTabComponent(file, () -> eventBus.publish(new QueryFileClosingEvent(view.getModel())));
                     add(view, index);
                     setTabComponentAt(index, component);
                     setToolTipTextAt(index, file.getFile()
@@ -189,19 +190,6 @@ class QueryFileTabbedPane extends JTabbedPane
             }
         }
         return -1;
-    }
-
-    QueryFileView getFileView(QueryFileModel file)
-    {
-        for (int i = 0; i < getTabCount(); i++)
-        {
-            QueryFileTabComponent component = (QueryFileTabComponent) getTabComponentAt(i);
-            if (component.file == file)
-            {
-                return (QueryFileView) getComponentAt(i);
-            }
-        }
-        return null;
     }
 
     /** View for tab header component */

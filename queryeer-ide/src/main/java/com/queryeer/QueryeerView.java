@@ -676,6 +676,7 @@ class QueryeerView extends JFrame
                         item.setIcon(FontIcon.of(FontAwesome.CHECK));
                     }
                 }
+                updateState(fileModel);
             }
         }
     };
@@ -802,7 +803,10 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.TOGGLE_RESULT);
+            if (tabbedPane.getSelectedComponent() instanceof QueryFileView fileView)
+            {
+                fileView.toggleResultPane();
+            }
         }
     };
 
@@ -861,23 +865,18 @@ class QueryeerView extends JFrame
     }
 
     /** Updates combo boxes etc. to reflect the provided query file view */
-    void updateState(QueryFileView fileView)
+    private void updateState(QueryFileModel file)
     {
-        QueryFileModel file = fileView.getModel();
-
         suppressChangeEvents = true;
         try
         {
             comboOutput.setSelectedItem(file.getOutputExtension());
             comboFormat.setSelectedItem(file.getOutputFormat());
-            setQueryEngineProperties(fileView.getModel()
-                    .getQueryEngine());
+            setQueryEngineProperties(file.getQueryEngine());
             file.getQueryEngine()
-                    .focus(fileView);
-            fileView.getEditor()
+                    .focus(file);
+            file.getEditor()
                     .focused();
-
-            // populateEditorActions(file.getEditor());
         }
         finally
         {
@@ -1046,11 +1045,6 @@ class QueryeerView extends JFrame
         this.newQueryConsumer = newQueryConsumer;
     }
 
-    QueryFileView getCurrentFile()
-    {
-        return (QueryFileView) tabbedPane.getSelectedComponent();
-    }
-
     private class WindowsDialog extends DialogUtils.ADialog
     {
         private final FileModel tableModel;
@@ -1178,17 +1172,11 @@ class QueryeerView extends JFrame
                     int index = table.convertRowIndexToModel(selectedRows[i] - modifier);
                     QueryFileModel fileModel = model.getFiles()
                             .get(index);
-                    // Design here is a bit off, we need the VIEW of QueryFile but we
-                    // only have the model, the tabbedPane has the view so let it fetch it for us
-                    QueryFileView fileView = tabbedPane.getFileView(fileModel);
-                    if (fileView != null)
+                    QueryFileClosingEvent event = new QueryFileClosingEvent(fileModel);
+                    eventBus.publish(event);
+                    if (event.isCanceled())
                     {
-                        QueryFileClosingEvent event = new QueryFileClosingEvent(fileView);
-                        eventBus.publish(event);
-                        if (event.isCanceled())
-                        {
-                            break;
-                        }
+                        break;
                     }
                     modifier++;
                 }
@@ -1205,17 +1193,11 @@ class QueryeerView extends JFrame
                     int index = table.convertRowIndexToModel(selectedRows[i]);
                     QueryFileModel fileModel = model.getFiles()
                             .get(index);
-                    // Design here is a bit off, we need the VIEW of QueryFile but we
-                    // only have the model, the tabbedPane has the view so let it fetch it for us
-                    QueryFileView fileView = tabbedPane.getFileView(fileModel);
-                    if (fileView != null)
+                    QueryFileSaveEvent event = new QueryFileSaveEvent(fileModel);
+                    eventBus.publish(event);
+                    if (event.isCanceled())
                     {
-                        QueryFileSaveEvent event = new QueryFileSaveEvent(fileView);
-                        eventBus.publish(event);
-                        if (event.isCanceled())
-                        {
-                            break;
-                        }
+                        break;
                     }
                 }
                 // Redraw the table after we saved some files
