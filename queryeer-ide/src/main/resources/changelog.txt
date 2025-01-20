@@ -2,6 +2,16 @@ CHANGELOG
 
 Queryeer
 
+v2.3.0
+fix: Don't crash if queryeer config don't load
+fix: Fix crash when the last file was closed
+fix: Run show options dialog from event on EDT
+fix: TextEditor should not inherit panel due to clash with addPropertyChangeListener method that causes NPE on some LAF:s
+fix: Guard against NPE when setting image icons on dialogs
+fix: Fix broken default config of JDBC query actions where Definition submenu did not appear
+fix: Add support for setting loglevel in LogsDialog
+fix: Refactor all dialogs to a common base class to handle image icons, close shortcuts, showing relativt to current active window etc.
+
 v2.2.0
 feat: Add support for custom table query actions that can generate queries unique to the cell or row that was clicked
 feat: Add support for configuring a custom shared folder path to make upgrades easier
