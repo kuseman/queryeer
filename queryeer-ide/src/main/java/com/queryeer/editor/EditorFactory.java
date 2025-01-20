@@ -49,7 +49,8 @@ class EditorFactory implements IEditorFactory
 
     private void installQueryShortcuts(IQueryEngine.IState engineState, TextEditor editor)
     {
-        ActionMap actionMap = editor.getActionMap();
+        ActionMap actionMap = editor.getComponent()
+                .getActionMap();
         // Create actions for each query shortcut
         for (int i = 0; i < TextEditorQueryShortcutConfigurable.QUERY_SHORTCUT_COUNT; i++)
         {
@@ -64,7 +65,8 @@ class EditorFactory implements IEditorFactory
 
     private void bindQueryShortcuts(TextEditor editor)
     {
-        InputMap inputMap = editor.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        InputMap inputMap = editor.getComponent()
+                .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         inputMap.clear();
 
         for (int i = 0; i < TextEditorQueryShortcutConfigurable.QUERY_SHORTCUT_COUNT; i++)

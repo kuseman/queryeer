@@ -141,6 +141,10 @@ public final class DialogUtils
     {
         Window activeWindow = FocusManager.getCurrentManager()
                 .getActiveWindow();
+        if (activeWindow == null)
+        {
+            return;
+        }
 
         // Find first window in hierarchy that has icon images else use null
         List<Image> iconImages = activeWindow.getIconImages();

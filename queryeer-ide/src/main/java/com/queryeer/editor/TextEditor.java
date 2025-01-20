@@ -7,6 +7,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Frame;
 import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.Window;
@@ -38,7 +39,6 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
 import javax.swing.JComponent;
-import javax.swing.JFrame;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -113,7 +113,7 @@ import com.queryeer.domain.Caret;
 import com.queryeer.event.CaretChangedEvent;
 
 /** Text editor implemented with {@link RSyntaxTextArea} */
-class TextEditor extends JPanel implements ITextEditor, SearchListener
+class TextEditor implements ITextEditor, SearchListener
 {
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(5, new BasicThreadFactory.Builder().daemon(true)
             .namingPattern("TextEditor-Parser#%d")
@@ -126,6 +126,8 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
 
     private final IEventBus eventBus;
     final ITextEditorKit editorKit;
+
+    private final Panel panel;
 
     final TextEditorPane textEditor;
     private final ErrorStrip errorStrip;
@@ -145,7 +147,6 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
     {
         this.eventBus = eventBus;
         this.editorKit = requireNonNull(editorKit, "editorKit");
-        setLayout(new BorderLayout());
 
         textEditor = new TextEditorPane();
         textEditor.setColumns(editorKit.getColumns());
@@ -158,11 +159,7 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
         scrollPane = new RTextScrollPane(textEditor, true);
         errorStrip = new ErrorStrip(textEditor);
 
-        installEditorKit();
-
-        JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
-
-        findDialog = new FindDialog(topFrame, this)
+        findDialog = new FindDialog((Frame) null, this)
         {
             @Override
             public void setVisible(boolean b)
@@ -178,7 +175,7 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             }
         };
         findDialog.setIconImages(Constants.APPLICATION_ICONS);
-        replaceDialog = new ReplaceDialog(topFrame, this)
+        replaceDialog = new ReplaceDialog((Frame) null, this)
         {
             @Override
             public void setVisible(boolean b)
@@ -196,7 +193,7 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
         replaceDialog.setIconImages(Constants.APPLICATION_ICONS);
         SearchContext context = findDialog.getSearchContext();
         replaceDialog.setSearchContext(context);
-        gotoDialog = new GoToDialog(topFrame)
+        gotoDialog = new GoToDialog((Frame) null)
         {
             @Override
             public void setVisible(boolean b)
@@ -231,26 +228,6 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
             }
         });
 
-        //@formatter:off
-        List<Action> actions = new ArrayList<>();
-        actions.addAll(editorKit.getActions());
-        actions.addAll(asList(
-                toggleShowWhiteSpaceAction,
-                toggleCommentAction,
-                showFindDialogAction,
-                showReplaceDialogAction,
-                showGotoLineAction,
-                pasteSpecialAction,
-                lowerCaseSelection,
-                upperCaseSelection
-                ));
-        //@formatter:on
-
-        putClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS, actions);
-
-        add(scrollPane);
-        add(errorStrip, BorderLayout.LINE_END);
-
         // Set parsing state when document changes to avoid fetching completion items for the wrong state etc.
         textEditor.getDocument()
                 .addDocumentListener(new ADocumentListenerAdapter()
@@ -271,6 +248,38 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
                         }
                     }
                 });
+
+        //@formatter:off
+        List<Action> actions = new ArrayList<>();
+        actions.addAll(editorKit.getActions());
+        actions.addAll(asList(
+                toggleShowWhiteSpaceAction,
+                toggleCommentAction,
+                showFindDialogAction,
+                showReplaceDialogAction,
+                showGotoLineAction,
+                pasteSpecialAction,
+                lowerCaseSelection,
+                upperCaseSelection
+                ));
+        //@formatter:on
+
+        this.panel = new Panel(actions);
+    }
+
+    private class Panel extends JPanel
+    {
+        Panel(List<Action> actions)
+        {
+            setLayout(new BorderLayout());
+
+            installEditorKit();
+
+            putClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS, actions);
+
+            add(scrollPane);
+            add(errorStrip, BorderLayout.LINE_END);
+        }
     }
 
     private void installEditorKit()
@@ -352,7 +361,7 @@ class TextEditor extends JPanel implements ITextEditor, SearchListener
     @Override
     public JComponent getComponent()
     {
-        return this;
+        return panel;
     }
 
     @Override
