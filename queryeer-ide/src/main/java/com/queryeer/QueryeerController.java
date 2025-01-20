@@ -602,8 +602,11 @@ class QueryeerController implements PropertyChangeListener
 
     private void showOptionsAction(Class<? extends IConfigurable> configurableToSelect)
     {
-        optionsDialog.setSelectedConfigurable(configurableToSelect);
-        optionsDialog.setVisible(true);
+        SwingUtilities.invokeLater(() ->
+        {
+            optionsDialog.setSelectedConfigurable(configurableToSelect);
+            optionsDialog.setVisible(true);
+        });
     }
 
     private void toggleResultAction()

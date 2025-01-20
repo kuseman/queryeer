@@ -182,7 +182,9 @@ class QueryeerModel
         {
             index = files.size() - 1;
         }
-        selectedFile = files.get(index);
+        selectedFile = index >= 0
+                && index < files.size() ? files.get(index)
+                        : null;
 
         setSelectedFile(selectedFile);
     }

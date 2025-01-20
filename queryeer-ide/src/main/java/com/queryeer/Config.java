@@ -84,9 +84,16 @@ class Config implements IConfig
         }
         else
         {
-            // Read existing config
-            MAPPER.readerForUpdating(this)
-                    .readValue(file);
+            try
+            {
+                // Read existing config
+                MAPPER.readerForUpdating(this)
+                        .readValue(file);
+            }
+            catch (IOException e)
+            {
+                LOGGER.error("Error loading queryeer config", e);
+            }
         }
 
         sessionFile = new File(etcFolder, SESSION);
