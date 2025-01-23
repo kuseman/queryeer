@@ -206,6 +206,11 @@ class QueryFileModel implements IQueryFile
         }
     }
 
+    void bumpActivity()
+    {
+        lastActivity = System.currentTimeMillis();
+    }
+
     QueryFileMetaData getMetaData()
     {
         if (metaData == null)
