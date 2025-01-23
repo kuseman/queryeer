@@ -1,22 +1,29 @@
 package com.queryeer;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
+import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -28,6 +35,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.IntStream;
 
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
@@ -35,6 +43,7 @@ import javax.swing.Action;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JButton;
@@ -55,8 +64,10 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
+import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -75,6 +86,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryeerController.ViewAction;
+import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.Subscribe;
@@ -140,6 +152,8 @@ class QueryeerView extends JFrame
     private int prevPropertiesDividerLocation;
     private WindowsDialog windowsDialog;
 
+    private final QuickWindows quickWindowsWindow;
+
     private List<AbstractButton> editorToolbarActions = new ArrayList<>();
     private List<JMenuItem> editorMenuActions = new ArrayList<>();
 
@@ -155,6 +169,8 @@ class QueryeerView extends JFrame
         this.tabbedPane = requireNonNull(tabbedPane, "tabbedPane");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.model.addPropertyChangeListener(queryeerModelListener);
+
+        this.quickWindowsWindow = new QuickWindows(this, model);
 
         List<IOutputExtension> actualOutputExtensions = new ArrayList<>(outputExtensions);
         List<IOutputFormatExtension> actualOutputFormatExtensions = new ArrayList<>(outputFormatExtensions);
@@ -364,6 +380,8 @@ class QueryeerView extends JFrame
         topPanel.add(toolBar, BorderLayout.SOUTH);
 
         // CSOFF
+        KeyStroke showQuickWindowsKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
+
         KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
         KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
@@ -373,7 +391,11 @@ class QueryeerView extends JFrame
                 .getMenuShortcutKeyMaskEx());
         // CSON
 
+        String openQuickWindows = "openQuickWindows";
         inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+
+        inputMap.put(showQuickWindowsKeyStroke, openQuickWindows);
+
         inputMap.put(executeKeyStroke, EXECUTE);
         inputMap.put(stopKeyStroke, STOP);
         inputMap.put(newQueryKeyStroke, NEW_QUERY);
@@ -386,6 +408,23 @@ class QueryeerView extends JFrame
                 .put(NEW_QUERY, newQueryAction);
         topPanel.getActionMap()
                 .put(TOGGLE_RESULT, toggleResultAction);
+
+        topPanel.getActionMap()
+                .put(openQuickWindows, new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        if (quickWindowsWindow.isVisible())
+                        {
+                            return;
+                        }
+
+                        quickWindowsWindow.setLocationRelativeTo(QueryeerView.this);
+                        quickWindowsWindow.setVisible(true);
+                        quickWindowsWindow.requestFocusInWindow();
+                    }
+                });
 
         JButton newQueryButton = new JButton();
         newQueryButton.setIcon(Constants.FILE_TEXT_O);
@@ -565,6 +604,16 @@ class QueryeerView extends JFrame
                     {
                         if ("focusOwner".equalsIgnoreCase(evt.getPropertyName()))
                         {
+                            if (quickWindowsWindow.isVisible()
+                                    && evt.getNewValue() != null
+                                    && evt.getNewValue() != quickWindowsWindow)
+                            {
+                                Window owningWindow = SwingUtilities.getWindowAncestor((Component) evt.getNewValue());
+                                if (owningWindow != quickWindowsWindow)
+                                {
+                                    quickWindowsWindow.setVisible(false);
+                                }
+                            }
                             // boolean processed = false;
                             if (evt.getNewValue() instanceof JComponent comp)
                             {
@@ -1266,6 +1315,224 @@ class QueryeerView extends JFrame
                     default -> throw new IllegalArgumentException("Invalid column index");
                 };
             }
+        }
+    }
+
+    /** Quick windows window. */
+    static class QuickWindows extends JWindow
+    {
+        private final QueryeerModel model;
+        private final DefaultListModel<QueryFileModel> filesModel;
+        private final JTextField search;
+
+        public QuickWindows(Window parent, QueryeerModel model)
+        {
+            super(parent);
+            this.model = model;
+
+            KeyListener closeListener = new KeyAdapter()
+            {
+                @Override
+                public void keyTyped(KeyEvent e)
+                {
+                    if (e.getKeyChar() == KeyEvent.VK_ESCAPE)
+                    {
+                        setVisible(false);
+                    }
+                }
+            };
+
+            JList<QueryFileModel> files = new JList<>();
+            files.addKeyListener(closeListener);
+            files.addKeyListener(new KeyAdapter()
+            {
+                @Override
+                public void keyPressed(KeyEvent e)
+                {
+                    if (e.getKeyChar() == KeyEvent.VK_ENTER)
+                    {
+                        QueryFileModel selectedValue = files.getSelectedValue();
+                        if (selectedValue != null)
+                        {
+                            model.setSelectedFile(selectedValue);
+                            setVisible(false);
+                        }
+                    }
+                    else if (search.getFont()
+                            .canDisplay(e.getKeyChar()))
+                    {
+                        search.setText(search.getText() + e.getKeyChar());
+                        search.requestFocusInWindow();
+                    }
+                    super.keyPressed(e);
+                }
+            });
+            files.addMouseListener(new MouseAdapter()
+            {
+                @Override
+                public void mouseClicked(MouseEvent e)
+                {
+                    if (SwingUtilities.isLeftMouseButton(e)
+                            && e.getClickCount() == 2)
+                    {
+                        QueryFileModel selectedValue = files.getSelectedValue();
+                        if (selectedValue != null)
+                        {
+                            model.setSelectedFile(selectedValue);
+                            setVisible(false);
+                        }
+                    }
+                    super.mouseClicked(e);
+                }
+            });
+            files.setCellRenderer(new DefaultListCellRenderer()
+            {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+                {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    QueryFileModel file = (QueryFileModel) value;
+                    setText((file.isDirty() ? "*"
+                            : "") + file.getFile()
+                                    .getName());
+                    return this;
+                }
+            });
+
+            filesModel = new DefaultListModel<>();
+            files.setModel(filesModel);
+
+            search = new JTextField();
+            search.addKeyListener(closeListener);
+            search.addKeyListener(new KeyAdapter()
+            {
+                @Override
+                public void keyPressed(KeyEvent e)
+                {
+                    if (e.getKeyCode() == KeyEvent.VK_UP
+                            || e.getKeyCode() == KeyEvent.VK_DOWN)
+                    {
+                        files.requestFocusInWindow();
+                        if (files.getSelectedValue() == null)
+                        {
+                            files.setSelectedIndex(0);
+                        }
+                        else
+                        {
+                            int index = files.getSelectedIndex();
+                            index += e.getKeyCode() == KeyEvent.VK_UP ? -1
+                                    : 1;
+                            files.setSelectedIndex(index);
+                        }
+                    }
+                }
+            });
+            search.getDocument()
+                    .addDocumentListener(new ADocumentListenerAdapter()
+                    {
+                        @Override
+                        protected void update()
+                        {
+                            String text = search.getText();
+                            if (isBlank(text))
+                            {
+                                files.setModel(filesModel);
+                                return;
+                            }
+
+                            DefaultListModel<QueryFileModel> filteredModel = new DefaultListModel<>();
+                            filteredModel.addAll(IntStream.range(0, filesModel.getSize())
+                                    .mapToObj(f -> filesModel.get(f))
+                                    .filter(f -> StringUtils.containsIgnoreCase(f.getFile()
+                                            .getName(), text))
+                                    .toList());
+                            files.setModel(filteredModel);
+                        }
+                    });
+
+            JButton cornerButton = new JButton("#");
+            MouseAdapter cornerButtonAdapter = new MouseAdapter()
+            {
+                private Point origPos;
+
+                @Override
+                public void mouseDragged(MouseEvent e)
+                {
+                    Point newPos = e.getPoint();
+                    SwingUtilities.convertPointToScreen(newPos, cornerButton);
+                    int xdelta = newPos.x - origPos.x;
+                    int ydelta = newPos.y - origPos.y;
+                    Window wind = QuickWindows.this;
+                    int w = wind.getWidth();
+                    if (newPos.x >= wind.getX())
+                    {
+                        w += xdelta;
+                    }
+                    int h = wind.getHeight();
+                    if (newPos.y >= wind.getY())
+                    {
+                        h += ydelta;
+                    }
+                    wind.setSize(w, h);
+                    origPos.setLocation(newPos);
+                }
+
+                @Override
+                public void mousePressed(MouseEvent e)
+                {
+                    origPos = e.getPoint();
+                    SwingUtilities.convertPointToScreen(origPos, cornerButton);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e)
+                {
+                    origPos = null;
+                }
+
+            };
+            cornerButton.addMouseListener(cornerButtonAdapter);
+            cornerButton.addMouseMotionListener(cornerButtonAdapter);
+            cornerButton.setCursor(Cursor.getPredefinedCursor(Cursor.NW_RESIZE_CURSOR));
+
+            JScrollPane sp = new JScrollPane(files, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+            sp.setCorner(JScrollPane.LOWER_RIGHT_CORNER, cornerButton);
+
+            JPanel contentPane = new JPanel(new BorderLayout());
+            contentPane.add(search, BorderLayout.NORTH);
+            contentPane.add(sp, BorderLayout.CENTER);
+            setContentPane(contentPane);
+
+            pack();
+
+            setPreferredSize(new Dimension(200, 350));
+
+            addComponentListener(new ComponentAdapter()
+            {
+                @Override
+                public void componentShown(ComponentEvent e)
+                {
+                    search.requestFocusInWindow();
+                    super.componentShown(e);
+                }
+            });
+        }
+
+        @Override
+        public void setVisible(boolean b)
+        {
+            if (b)
+            {
+                search.setText("");
+                filesModel.clear();
+                List<QueryFileModel> files = new ArrayList<>(model.getFiles());
+                files.sort((aa, bb) -> -Long.compare(aa.getLastActivity(), bb.getLastActivity()));
+                filesModel.addAll(files);
+                setSize(new Dimension(200, 350));
+
+                setLocationRelativeTo(getParent());
+            }
+            super.setVisible(b);
         }
     }
 }
