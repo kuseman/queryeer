@@ -2,6 +2,9 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Objects.requireNonNull;
 
+import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 
 /** Context when executing queries internally */
@@ -48,5 +51,11 @@ public class ExecuteQueryContext
     String getQuery()
     {
         return query;
+    }
+
+    @Override
+    public String toString()
+    {
+        return ReflectionToStringBuilder.toString(this, ToStringStyle.SHORT_PREFIX_STYLE);
     }
 }

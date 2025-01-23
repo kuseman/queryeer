@@ -1,16 +1,27 @@
 package com.queryeer;
 
+import static java.util.stream.Collectors.joining;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -18,7 +29,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
-import javax.swing.JTextPane;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -26,32 +36,27 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
-import javax.swing.text.AbstractDocument;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.Document;
-import javax.swing.text.Element;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
 
 import org.apache.log4j.AppenderSkeleton;
-import org.apache.log4j.EnhancedPatternLayout;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
 
 import com.queryeer.api.component.DialogUtils;
+import com.queryeer.dialog.ValueDialog;
+import com.queryeer.dialog.ValueDialog.Format;
 
 /** Logs dialog */
 class LogsDialog extends DialogUtils.AFrame
 {
-    static JTextPane textPane;
+    static DefaultTableModel logsModel;
     private DefaultTableModel loggersModel;
 
     LogsDialog(JFrame parent)
     {
         super("Logs");
-        if (textPane != null)
+        if (logsModel != null)
         {
             throw new IllegalArgumentException("Logs dialog instantiated multiple times");
         }
@@ -67,13 +72,81 @@ class LogsDialog extends DialogUtils.AFrame
         setTitle("Logs");
         getContentPane().setLayout(new BorderLayout());
 
-        textPane = new JTextPane();
-        textPane.setEditable(false);
+        JCheckBox scrollLock = new JCheckBox("Scroll Lock");
+        JTable logsTable = new JTable();
+        logsTable.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseClicked(MouseEvent e)
+            {
+                if (SwingUtilities.isLeftMouseButton(e)
+                        && e.getClickCount() == 2)
+                {
+                    int row = logsTable.rowAtPoint(e.getPoint());
+                    int col = logsTable.columnAtPoint(e.getPoint());
+                    logsTable.setRowSelectionInterval(row, row);
+                    String header = logsTable.getModel()
+                            .getColumnName(col);
+                    ValueDialog.showValueDialog(header, logsTable.getValueAt(row, col), Format.UNKOWN);
+                }
+            }
+        });
+        logsModel = new DefaultTableModel()
+        {
+            @Override
+            public boolean isCellEditable(int row, int column)
+            {
+                return false;
+            }
+
+            @Override
+            public void insertRow(int row, Object[] rowData)
+            {
+                super.insertRow(row, rowData);
+                if (!scrollLock.isSelected())
+                {
+                    logsTable.scrollRectToVisible(logsTable.getCellRect(0, 0, true));
+                }
+            }
+        };
+        logsModel.addColumn("Time");
+        logsModel.addColumn("Thread");
+        logsModel.addColumn("Level");
+        logsModel.addColumn("Logger");
+        logsModel.addColumn("Message");
+        logsModel.addColumn("Stacktrace");
+
+        logsTable.setModel(logsModel);
+        logsTable.getColumnModel()
+                .getColumn(2)
+                .setCellRenderer(new DefaultTableCellRenderer()
+                {
+                    @Override
+                    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column)
+                    {
+                        super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                        Level level = (Level) value;
+                        LevelStyle style = LEVEL_STYLES.getOrDefault(level, DEFAULT);
+                        Font font = getFont();
+                        setForeground(style.color);
+                        if (style.bold)
+                        {
+                            font = font.deriveFont(Font.BOLD);
+                        }
+                        if (style.italic)
+                        {
+                            font = font.deriveFont(Font.ITALIC);
+                        }
+                        setFont(font);
+                        setText(level.toString());
+                        return this;
+                    }
+                });
 
         JPanel topPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton clear = new JButton("Clear");
         clear.setHorizontalAlignment(SwingConstants.LEFT);
-        clear.addActionListener(l -> textPane.setText(""));
+        clear.addActionListener(l -> logsModel.setRowCount(0));
         topPanel.add(clear);
 
         JComboBox<Level> logLevel = new JComboBox<>();
@@ -99,9 +172,10 @@ class LogsDialog extends DialogUtils.AFrame
         });
         topPanel.add(new JLabel("Root Log Level:"));
         topPanel.add(logLevel);
+        topPanel.add(scrollLock);
 
         JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.add("Logs", new JScrollPane(textPane));
+        tabbedPane.add("Logs", new JScrollPane(logsTable));
 
         JPanel loggersPanel = new JPanel(new BorderLayout());
         loggersPanel.add(new JScrollPane(createLoggersTable()), BorderLayout.CENTER);
@@ -248,56 +322,23 @@ class LogsDialog extends DialogUtils.AFrame
         }
     }
 
+    //@formatter:off
+    private static final LevelStyle DEFAULT = new LevelStyle(false, true, new Color(0, 0, 0));
+    private static final Map<Level, LevelStyle> LEVEL_STYLES = Map.of(
+            Level.ERROR, new LevelStyle(true, false, new Color(153, 0, 0)),
+            Level.WARN, new LevelStyle(false, false, new Color(153, 76, 0)),
+            Level.INFO, new LevelStyle(false, false, new Color(0, 0, 153)),
+            Level.DEBUG, new LevelStyle(false, true, new Color(64, 64, 64)),
+            Level.TRACE, new LevelStyle(false, true, new Color(153, 0, 76))
+            );
+    //@formatter:on
+
+    record LevelStyle(boolean bold, boolean italic, Color color)
+    {
+    }
+
     static class LogsAppender extends AppenderSkeleton
     {
-        // CSOFF
-        private static SimpleAttributeSet ERROR_ATT, WARN_ATT, INFO_ATT, DEBUG_ATT, TRACE_ATT, RESTO_ATT;
-        // CSON
-
-        static
-        {
-            // ERROR
-            ERROR_ATT = new SimpleAttributeSet();
-            ERROR_ATT.addAttribute(StyleConstants.CharacterConstants.Bold, Boolean.TRUE);
-            ERROR_ATT.addAttribute(StyleConstants.CharacterConstants.Italic, Boolean.FALSE);
-            ERROR_ATT.addAttribute(StyleConstants.CharacterConstants.Foreground, new Color(153, 0, 0));
-
-            // WARN
-            WARN_ATT = new SimpleAttributeSet();
-            WARN_ATT.addAttribute(StyleConstants.CharacterConstants.Bold, Boolean.FALSE);
-            WARN_ATT.addAttribute(StyleConstants.CharacterConstants.Italic, Boolean.FALSE);
-            WARN_ATT.addAttribute(StyleConstants.CharacterConstants.Foreground, new Color(153, 76, 0));
-
-            // INFO
-            INFO_ATT = new SimpleAttributeSet();
-            INFO_ATT.addAttribute(StyleConstants.CharacterConstants.Bold, Boolean.FALSE);
-            INFO_ATT.addAttribute(StyleConstants.CharacterConstants.Italic, Boolean.FALSE);
-            INFO_ATT.addAttribute(StyleConstants.CharacterConstants.Foreground, new Color(0, 0, 153));
-
-            // DEBUG
-            DEBUG_ATT = new SimpleAttributeSet();
-            DEBUG_ATT.addAttribute(StyleConstants.CharacterConstants.Bold, Boolean.FALSE);
-            DEBUG_ATT.addAttribute(StyleConstants.CharacterConstants.Italic, Boolean.TRUE);
-            DEBUG_ATT.addAttribute(StyleConstants.CharacterConstants.Foreground, new Color(64, 64, 64));
-
-            // TRACE
-            TRACE_ATT = new SimpleAttributeSet();
-            TRACE_ATT.addAttribute(StyleConstants.CharacterConstants.Bold, Boolean.FALSE);
-            TRACE_ATT.addAttribute(StyleConstants.CharacterConstants.Italic, Boolean.TRUE);
-            TRACE_ATT.addAttribute(StyleConstants.CharacterConstants.Foreground, new Color(153, 0, 76));
-
-            // RESTO
-            RESTO_ATT = new SimpleAttributeSet();
-            RESTO_ATT.addAttribute(StyleConstants.CharacterConstants.Bold, Boolean.FALSE);
-            RESTO_ATT.addAttribute(StyleConstants.CharacterConstants.Italic, Boolean.TRUE);
-            RESTO_ATT.addAttribute(StyleConstants.CharacterConstants.Foreground, new Color(0, 0, 0));
-        }
-
-        LogsAppender()
-        {
-            setLayout(new EnhancedPatternLayout("%d{ISO8601} [%t] %p %c %x - %m%n%throwable"));
-        }
-
         @Override
         public void close()
         {
@@ -312,114 +353,24 @@ class LogsDialog extends DialogUtils.AFrame
         @Override
         protected void append(LoggingEvent event)
         {
-            String formattedMsg = layout.format(event);
-
             SwingUtilities.invokeLater(() ->
             {
-                JTextPane textPane = LogsDialog.textPane;
+                //@formatter:off
+                Object[] row = new Object[] {
+                        DateTimeFormatter.ISO_DATE_TIME.format(Instant.ofEpochMilli(event.getTimeStamp()).atZone(ZoneId.systemDefault())),
+                        event.getThreadName(),
+                        event.getLevel(),
+                        event.getLoggerName(),
+                        event.getMessage(),
+                        event.getThrowableStrRep() != null
+                            ? Arrays.stream(event.getThrowableStrRep()).collect(joining(System.lineSeparator()))
+                            : null
+                        };
+                //@formatter:on
 
-                try
-                {
-                    int limite = 1000;
-                    int apaga = 200;
-                    if (textPane.getDocument()
-                            .getDefaultRootElement()
-                            .getElementCount() > limite)
-                    {
-                        int end = getLineEndOffset(textPane, apaga);
-                        replaceRange(textPane, null, 0, end);
-                    }
-
-                    if (event.getLevel() == Level.ERROR)
-                        textPane.getDocument()
-                                .insertString(textPane.getDocument()
-                                        .getLength(), formattedMsg, ERROR_ATT);
-                    else if (event.getLevel() == Level.WARN)
-                        textPane.getDocument()
-                                .insertString(textPane.getDocument()
-                                        .getLength(), formattedMsg, WARN_ATT);
-                    else if (event.getLevel() == Level.INFO)
-                        textPane.getDocument()
-                                .insertString(textPane.getDocument()
-                                        .getLength(), formattedMsg, INFO_ATT);
-                    else if (event.getLevel() == Level.DEBUG)
-                        textPane.getDocument()
-                                .insertString(textPane.getDocument()
-                                        .getLength(), formattedMsg, DEBUG_ATT);
-                    else if (event.getLevel() == Level.TRACE)
-                        textPane.getDocument()
-                                .insertString(textPane.getDocument()
-                                        .getLength(), formattedMsg, TRACE_ATT);
-                    else
-                        textPane.getDocument()
-                                .insertString(textPane.getDocument()
-                                        .getLength(), formattedMsg, RESTO_ATT);
-                }
-                catch (BadLocationException e)
-                {
-                }
-
-                textPane.setCaretPosition(textPane.getDocument()
-                        .getLength());
+                // We want a log that has the recent logs on top
+                LogsDialog.logsModel.insertRow(0, row);
             });
-        }
-
-        private int getLineCount(JTextPane textPane)
-        {
-            return textPane.getDocument()
-                    .getDefaultRootElement()
-                    .getElementCount();
-        }
-
-        private int getLineEndOffset(JTextPane textPane, int line) throws BadLocationException
-        {
-            int lineCount = getLineCount(textPane);
-            if (line < 0)
-            {
-                throw new BadLocationException("Negative line", -1);
-            }
-            else if (line >= lineCount)
-            {
-                throw new BadLocationException("No such line", textPane.getDocument()
-                        .getLength() + 1);
-            }
-            else
-            {
-                Element map = textPane.getDocument()
-                        .getDefaultRootElement();
-                Element lineElem = map.getElement(line);
-                int endOffset = lineElem.getEndOffset();
-                return ((line == lineCount - 1) ? (endOffset - 1)
-                        : endOffset);
-            }
-        }
-
-        private void replaceRange(JTextPane textPane, String str, int start, int end) throws IllegalArgumentException
-        {
-            if (end < start)
-            {
-                throw new IllegalArgumentException("end before start");
-            }
-            Document doc = textPane.getDocument();
-            if (doc != null)
-            {
-                try
-                {
-                    if (doc instanceof AbstractDocument)
-                    {
-                        ((AbstractDocument) doc).replace(start, end - start, str, null);
-                    }
-                    else
-                    {
-                        doc.remove(start, end - start);
-                        doc.insertString(start, str, null);
-                    }
-                }
-                catch (BadLocationException e)
-                {
-                    throw new IllegalArgumentException(e.getMessage());
-                }
-            }
         }
     }
 }
