@@ -1,6 +1,7 @@
 package com.queryeer;
 
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,9 +36,43 @@ class QueryService
                 : State.EXECUTING);
         EXECUTOR.execute(() ->
         {
+            LOGGER.debug("Execute. File: {}, ByEvent: {}, Query: {}", file.getFile(), byEvent, query);
+
+            OutputWriter theWriter = writer;
+            if (LOGGER.isDebugEnabled())
+            {
+                theWriter = new ProxyOutputWriter(List.of(theWriter))
+                {
+                    int resultCount = 0;
+                    int rowCount = 0;
+
+                    @Override
+                    public void initResult(String[] columns)
+                    {
+                        rowCount = 0;
+                        LOGGER.debug("Init result: {}, columns: {}", ++resultCount, columns);
+                        super.initResult(columns);
+                    }
+
+                    @Override
+                    public void endRow()
+                    {
+                        rowCount++;
+                        super.endRow();
+                    }
+
+                    @Override
+                    public void endResult()
+                    {
+                        LOGGER.debug("End result: {}, rowCount: {}", resultCount, rowCount);
+                        super.endResult();
+                    }
+                };
+            }
+
             try
             {
-                queryEngine.execute(file, writer, query);
+                queryEngine.execute(file, theWriter, query);
             }
             catch (Exception e)
             {
