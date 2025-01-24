@@ -146,10 +146,11 @@ public final class DialogUtils
      */
     public abstract static class QuickSearchWindow<T> extends JWindow
     {
-        private final DefaultListModel<T> filesModel;
+        private final JList<T> items;
+        private final DefaultListModel<T> itemsModel;
         private final JTextField search;
 
-        /** Handle selection. Implemented handles hiding of the popup. */
+        /** Handle selection. Implementer handles hiding of the popup. */
         protected abstract void handleSelection(T item);
 
         /** Returns the model that is loaded into list. Called when dialog is shown. */
@@ -159,6 +160,12 @@ public final class DialogUtils
         protected void render(JLabel label, T item)
         {
             label.setText(item.toString());
+        }
+
+        /** Return the index to select when dialog is shown. -1 if no selections should be done */
+        protected int getSelectedIndex()
+        {
+            return -1;
         }
 
         /** Method called when filtering of list items. */
@@ -193,16 +200,16 @@ public final class DialogUtils
                 handleSelection(listItem);
             };
 
-            JList<T> files = new JList<>();
-            files.addKeyListener(closeListener);
-            files.addKeyListener(new KeyAdapter()
+            items = new JList<>();
+            items.addKeyListener(closeListener);
+            items.addKeyListener(new KeyAdapter()
             {
                 @Override
                 public void keyPressed(KeyEvent e)
                 {
                     if (e.getKeyChar() == KeyEvent.VK_ENTER)
                     {
-                        selectionHandler.accept(files.getSelectedValue());
+                        selectionHandler.accept(items.getSelectedValue());
                     }
                     else if (search.getFont()
                             .canDisplay(e.getKeyChar()))
@@ -213,7 +220,7 @@ public final class DialogUtils
                     super.keyPressed(e);
                 }
             });
-            files.addMouseListener(new MouseAdapter()
+            items.addMouseListener(new MouseAdapter()
             {
                 @Override
                 public void mouseClicked(MouseEvent e)
@@ -221,12 +228,12 @@ public final class DialogUtils
                     if (SwingUtilities.isLeftMouseButton(e)
                             && e.getClickCount() == 2)
                     {
-                        selectionHandler.accept(files.getSelectedValue());
+                        selectionHandler.accept(items.getSelectedValue());
                     }
                     super.mouseClicked(e);
                 }
             });
-            files.setCellRenderer(new DefaultListCellRenderer()
+            items.setCellRenderer(new DefaultListCellRenderer()
             {
                 @Override
                 public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
@@ -239,8 +246,8 @@ public final class DialogUtils
                 }
             });
 
-            filesModel = new DefaultListModel<>();
-            files.setModel(filesModel);
+            itemsModel = new DefaultListModel<>();
+            items.setModel(itemsModel);
 
             search = new JTextField();
             search.addKeyListener(closeListener);
@@ -251,20 +258,24 @@ public final class DialogUtils
                 @Override
                 public void keyPressed(KeyEvent e)
                 {
-                    if (e.getKeyCode() == KeyEvent.VK_UP
+                    if (e.getKeyChar() == KeyEvent.VK_ENTER)
+                    {
+                        handleSelection(items.getSelectedValue());
+                    }
+                    else if (e.getKeyCode() == KeyEvent.VK_UP
                             || e.getKeyCode() == KeyEvent.VK_DOWN)
                     {
-                        files.requestFocusInWindow();
-                        if (files.getSelectedValue() == null)
+                        items.requestFocusInWindow();
+                        if (items.getSelectedValue() == null)
                         {
-                            files.setSelectedIndex(0);
+                            items.setSelectedIndex(0);
                         }
                         else
                         {
-                            int index = files.getSelectedIndex();
+                            int index = items.getSelectedIndex();
                             index += e.getKeyCode() == KeyEvent.VK_UP ? -1
                                     : 1;
-                            files.setSelectedIndex(index);
+                            items.setSelectedIndex(index);
                         }
                     }
                 }
@@ -278,21 +289,21 @@ public final class DialogUtils
                             String text = search.getText();
                             if (StringUtils.isBlank(text))
                             {
-                                files.setModel(filesModel);
+                                items.setModel(itemsModel);
                                 return;
                             }
 
                             DefaultListModel<T> filteredModel = new DefaultListModel<>();
-                            int count = filesModel.getSize();
+                            int count = itemsModel.getSize();
                             for (int i = 0; i < count; i++)
                             {
-                                T item = filesModel.get(i);
+                                T item = itemsModel.get(i);
                                 if (matches(text, item))
                                 {
                                     filteredModel.addElement(item);
                                 }
                             }
-                            files.setModel(filteredModel);
+                            items.setModel(filteredModel);
                         }
                     });
 
@@ -341,7 +352,7 @@ public final class DialogUtils
             cornerButton.addMouseMotionListener(cornerButtonAdapter);
             cornerButton.setCursor(Cursor.getPredefinedCursor(Cursor.NW_RESIZE_CURSOR));
 
-            JScrollPane sp = new JScrollPane(files, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+            JScrollPane sp = new JScrollPane(items, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
             sp.setCorner(JScrollPane.LOWER_RIGHT_CORNER, cornerButton);
 
             JPanel contentPane = new JPanel(new BorderLayout());
@@ -369,8 +380,13 @@ public final class DialogUtils
             if (b)
             {
                 search.setText("");
-                filesModel.clear();
-                filesModel.addAll(getModel());
+                itemsModel.clear();
+                itemsModel.addAll(getModel());
+                int selectedIndex = getSelectedIndex();
+                if (selectedIndex >= 0)
+                {
+                    items.setSelectedIndex(selectedIndex);
+                }
                 setSize(new Dimension(350, 350));
                 Window activeWindow = javax.swing.FocusManager.getCurrentManager()
                         .getActiveWindow();

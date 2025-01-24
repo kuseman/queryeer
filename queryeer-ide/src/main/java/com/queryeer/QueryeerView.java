@@ -80,6 +80,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryeerController.ViewAction;
+import com.queryeer.api.action.IActionRegistry;
+import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.Subscribe;
@@ -98,11 +100,12 @@ class QueryeerView extends JFrame
     private static final Logger LOGGER = LoggerFactory.getLogger(QueryeerView.class);
 
     private static final String FILE_MODEL = "fileModel";
-    private static final String TOGGLE_RESULT = "toggleResult";
+    private static final String TOGGLE_RESULT = "Queryeer.ToggleResultPanel";
     private static final String TOGGLE_QUICK_PROPERTIES = "toggleQuickProperties";
-    private static final String NEW_QUERY = "NewQuery";
-    private static final String EXECUTE = "Execute";
-    private static final String STOP = "Stop";
+    private static final String NEW_QUERY = "Queryeer.NewQuery";
+    private static final String EXECUTE = "Queryeer.Execute";
+    private static final String OPEN_QUICK_WINDOWS = "Queryeer.OpenQuickWindows";
+    private static final String STOP = "Queryeer.Stop";
     private static final Icon TASKS_ICON = FontIcon.of(FontAwesome.TASKS);
     private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
@@ -153,7 +156,7 @@ class QueryeerView extends JFrame
 
     // CSOFF
     QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, ProjectsView projectsView, IEventBus eventBus, List<IOutputExtension> outputExtensions,
-            List<IOutputFormatExtension> outputFormatExtensions, List<IQueryEngine> queryEngines)
+            List<IOutputFormatExtension> outputFormatExtensions, List<IQueryEngine> queryEngines, ActionRegistry actionRegistry)
     // CSON
     {
         setLocationRelativeTo(null);
@@ -211,18 +214,7 @@ class QueryeerView extends JFrame
             @Override
             public void mouseClicked(MouseEvent e)
             {
-                if (logsDialog.getExtendedState() == JFrame.ICONIFIED)
-                {
-                    logsDialog.setExtendedState(JFrame.NORMAL);
-                }
-                else if (logsDialog.isShowing())
-                {
-                    logsDialog.toFront();
-                }
-                else
-                {
-                    logsDialog.setVisible(true);
-                }
+                toggleLogsDialog();
             }
         });
 
@@ -235,18 +227,7 @@ class QueryeerView extends JFrame
             @Override
             public void mouseClicked(MouseEvent e)
             {
-                if (tasksDialog.getExtendedState() == JFrame.ICONIFIED)
-                {
-                    tasksDialog.setExtendedState(JFrame.NORMAL);
-                }
-                else if (tasksDialog.isShowing())
-                {
-                    tasksDialog.toFront();
-                }
-                else
-                {
-                    tasksDialog.setVisible(true);
-                }
+                toggleTasksDialog();
             }
         });
         panelTasks.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
@@ -314,7 +295,24 @@ class QueryeerView extends JFrame
                 .setText("About Queryeer IDE");
 
         windowMenu = new JMenu("Window");
-        JMenu windowsSort = new JMenu("Sort");
+        windowMenu.add(new JMenuItem(new AbstractAction("Show Logs ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                toggleLogsDialog();
+            }
+        }));
+        windowMenu.add(new JMenuItem(new AbstractAction("Show Tasks ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                toggleTasksDialog();
+            }
+        }));
+
+        JMenu windowsSort = new JMenu("Sort Windows");
 
         //@formatter:off
         List<Pair<String, Comparator<QueryFileModel>>> comparators = List.of(
@@ -344,7 +342,7 @@ class QueryeerView extends JFrame
         }
 
         windowMenu.add(windowsSort);
-        windowMenu.add(new JMenuItem(new AbstractAction("Windows...")
+        windowMenu.add(new JMenuItem(new AbstractAction("Windows ...")
         {
             @Override
             public void actionPerformed(ActionEvent e)
@@ -374,8 +372,6 @@ class QueryeerView extends JFrame
         topPanel.add(toolBar, BorderLayout.SOUTH);
 
         // CSOFF
-        KeyStroke showQuickWindowsKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
-
         KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
         KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
@@ -383,13 +379,19 @@ class QueryeerView extends JFrame
                 .getMenuShortcutKeyMaskEx());
         KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
+        KeyStroke showQuickWindowsKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
         // CSON
 
-        String openQuickWindows = "openQuickWindows";
+        // Register actions
+        actionRegistry.register(EXECUTE, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(executeKeyStroke)));
+        actionRegistry.register(STOP, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(stopKeyStroke)));
+        actionRegistry.register(NEW_QUERY, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(newQueryKeyStroke)));
+        actionRegistry.register(TOGGLE_RESULT, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(toggleResultKeyStroke)));
+        actionRegistry.register(OPEN_QUICK_WINDOWS, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(showQuickWindowsKeyStroke)));
+
         inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
 
-        inputMap.put(showQuickWindowsKeyStroke, openQuickWindows);
-
+        inputMap.put(showQuickWindowsKeyStroke, OPEN_QUICK_WINDOWS);
         inputMap.put(executeKeyStroke, EXECUTE);
         inputMap.put(stopKeyStroke, STOP);
         inputMap.put(newQueryKeyStroke, NEW_QUERY);
@@ -402,9 +404,8 @@ class QueryeerView extends JFrame
                 .put(NEW_QUERY, newQueryAction);
         topPanel.getActionMap()
                 .put(TOGGLE_RESULT, toggleResultAction);
-
         topPanel.getActionMap()
-                .put(openQuickWindows, new AbstractAction()
+                .put(OPEN_QUICK_WINDOWS, new AbstractAction()
                 {
                     @Override
                     public void actionPerformed(ActionEvent e)
@@ -764,6 +765,38 @@ class QueryeerView extends JFrame
             acceleratorText += KeyEvent.getKeyText(accelerator.getKeyCode());
         }
         return acceleratorText;
+    }
+
+    private void toggleLogsDialog()
+    {
+        if (logsDialog.getExtendedState() == JFrame.ICONIFIED)
+        {
+            logsDialog.setExtendedState(JFrame.NORMAL);
+        }
+        else if (logsDialog.isShowing())
+        {
+            logsDialog.toFront();
+        }
+        else
+        {
+            logsDialog.setVisible(true);
+        }
+    }
+
+    private void toggleTasksDialog()
+    {
+        if (tasksDialog.getExtendedState() == JFrame.ICONIFIED)
+        {
+            tasksDialog.setExtendedState(JFrame.NORMAL);
+        }
+        else if (tasksDialog.isShowing())
+        {
+            tasksDialog.toFront();
+        }
+        else
+        {
+            tasksDialog.setVisible(true);
+        }
     }
 
     private final Action optionsAction = new AbstractAction("OPTIONS", Constants.COG)
@@ -1373,6 +1406,13 @@ class QueryeerView extends JFrame
                 setVisible(false);
                 openRecentFileConsumer.accept(item.recentFile);
             }
+        }
+
+        @Override
+        protected int getSelectedIndex()
+        {
+            // Pre select the second item in list since the first one is the current file
+            return 1;
         }
 
         @Override
