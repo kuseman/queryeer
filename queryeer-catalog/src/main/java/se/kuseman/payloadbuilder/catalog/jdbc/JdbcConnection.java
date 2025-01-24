@@ -32,6 +32,9 @@ public class JdbcConnection implements IPropertyAware
     @JsonProperty
     private String password;
 
+    @JsonProperty
+    private boolean enabled = true;
+
     /** Hex rgb color of this connection */
     @JsonProperty
     private String color;
@@ -61,6 +64,7 @@ public class JdbcConnection implements IPropertyAware
                 : null;
         this.databases = source.databases != null ? new ArrayList<>(source.databases)
                 : null;
+        this.enabled = source.enabled;
     }
 
     JdbcConnection(String name, SqlType type)
@@ -171,6 +175,19 @@ public class JdbcConnection implements IPropertyAware
     public void setColor(String color)
     {
         this.color = color;
+    }
+
+    @Property(
+            order = 7,
+            title = "Enabled")
+    public boolean isEnabled()
+    {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled)
+    {
+        this.enabled = enabled;
     }
 
     List<String> getDatabases()

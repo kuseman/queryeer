@@ -173,8 +173,8 @@ public class PropertiesComponent extends JPanel
                     label.setToolTipText(pf.getDescription());
                 }
 
-                add(label, new GridBagConstraints(0, y, 1, 1, 0.0, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 3, 3, 3), 0, 0));
-                add(component, new GridBagConstraints(1, y, 1, 1, 1.0, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 3, 3), 0, 0));
+                add(label, new GridBagConstraints(0, y, 1, 1, 0.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, new Insets(0, 3, 3, 3), 0, 0));
+                add(component, new GridBagConstraints(1, y, 1, 1, 1.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 3, 3), 0, 0));
             }
 
             y++;

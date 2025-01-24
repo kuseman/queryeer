@@ -19,6 +19,7 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IQueryFileProvider;
+import com.queryeer.api.utils.ArrayUtils;
 import com.queryeer.api.utils.CredentialUtils;
 import com.queryeer.api.utils.CredentialUtils.Credentials;
 import com.queryeer.api.utils.CredentialUtils.ValidationHandler;
@@ -211,8 +212,13 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
         }
     }
 
+    List<String> getDatabases(JdbcConnection connection, boolean forceReload, boolean reThrowError)
+    {
+        return getDatabases(connection, forceReload, reThrowError, true);
+    }
+
     /** Gets and/or loads databases for provided connection */
-    List<String> getDatabases(JdbcConnection connection, String catalogAlias, boolean forceReload, boolean reThrowError)
+    List<String> getDatabases(JdbcConnection connection, boolean forceReload, boolean reThrowError, boolean printError)
     {
         if (!connection.hasCredentials())
         {
@@ -230,9 +236,15 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
                 return databases;
             }
 
+            char[] runtimePassword = connection.getRuntimePassword();
+            if (ArrayUtils.isEmpty(runtimePassword))
+            {
+                return emptyList();
+            }
+
             JdbcDatabase database = databaseProvider.getDatabase(connection.getJdbcURL());
             setEnableRealod(false);
-            try (java.sql.Connection sqlConnection = database.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(connection.getRuntimePassword())))
+            try (java.sql.Connection sqlConnection = database.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(runtimePassword)))
             {
                 List<String> loadedDatabases = new ArrayList<>();
                 if (database.usesSchemaAsDatabase())
@@ -268,15 +280,18 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
                 // Clear runtime password to be able to let user input again upon error
                 connection.setRuntimePassword(null);
 
-                IQueryFile queryFile = queryFileProvider.getCurrentFile();
-                if (queryFile != null)
+                if (printError)
                 {
-                    e.printStackTrace(queryFile.getMessagesWriter());
-                    queryFile.focusMessages();
-                }
-                else
-                {
-                    e.printStackTrace();
+                    IQueryFile queryFile = queryFileProvider.getCurrentFile();
+                    if (queryFile != null)
+                    {
+                        e.printStackTrace(queryFile.getMessagesWriter());
+                        queryFile.focusMessages();
+                    }
+                    else
+                    {
+                        e.printStackTrace();
+                    }
                 }
 
                 if (reThrowError)

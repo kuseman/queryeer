@@ -30,6 +30,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -396,6 +397,20 @@ class ProjectsView extends JPanel
             addProject(project);
         }
         add(new JScrollPane(projectsTree), gbc);
+    }
+
+    /** Enumerates all project files. */
+    void enumerateProjectFiles(Consumer<File> consumer)
+    {
+        Enumeration<TreeNode> e = root.breadthFirstEnumeration();
+        while (e.hasMoreElements())
+        {
+            if (e.nextElement() instanceof AProjectTreeNode node
+                    && node.file.isFile())
+            {
+                consumer.accept(node.file);
+            }
+        }
     }
 
     private TreeWillExpandListener willExpandListener = new TreeWillExpandListener()

@@ -9,6 +9,7 @@ import java.util.List;
 import javax.swing.Icon;
 
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
@@ -92,6 +93,16 @@ public interface IQueryEngine extends IExtension
      * Create a {@link ExecuteQueryEvent} for a query and output type that should be executed in the current query file context.
      */
     default ExecuteQueryEvent getExecuteQueryEvent(String query, String newQueryName, OutputType outputType)
+    {
+        return null;
+    }
+
+    /**
+     * Return a search model used for switching data sources on current query file via quick search.
+     *
+     * @return Model for handling switching of datasource or null if not supported
+     */
+    default <T extends IQuickSearchModel.Item> IQuickSearchModel<T> getDatasourceSearchModel()
     {
         return null;
     }

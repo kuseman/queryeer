@@ -8,7 +8,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -32,6 +31,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
@@ -62,6 +62,7 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
+import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -84,6 +85,8 @@ import com.queryeer.api.action.IActionRegistry;
 import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
+import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
+import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
@@ -104,7 +107,8 @@ class QueryeerView extends JFrame
     private static final String TOGGLE_QUICK_PROPERTIES = "toggleQuickProperties";
     private static final String NEW_QUERY = "Queryeer.NewQuery";
     private static final String EXECUTE = "Queryeer.Execute";
-    private static final String OPEN_QUICK_WINDOWS = "Queryeer.OpenQuickWindows";
+    private static final String OPEN_QUICK_FILES = "Queryeer.OpenQuickFiles";
+    private static final String OPEN_QUICK_DATASOURCES = "Queryeer.OpenQuickDatasources";
     private static final String STOP = "Queryeer.Stop";
     private static final Icon TASKS_ICON = FontIcon.of(FontAwesome.TASKS);
     private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
@@ -135,9 +139,12 @@ class QueryeerView extends JFrame
     private final JComboBox<IOutputFormatExtension> comboFormat;
     private final QueryeerModel model;
     private final QueryFileTabbedPane tabbedPane;
+    private final ProjectsView projectsView;
     private final IEventBus eventBus;
     private final TasksDialog tasksDialog;
     private final LogsDialog logsDialog;
+    private final DialogUtils.QuickSearchWindow<FilesQuickSearchModel.ListItem> filesQuickSearchWindow;
+    private final DialogUtils.QuickSearchWindow<IQuickSearchModel.Item> datasourcesQuickSearchWindow;
 
     private boolean suppressChangeEvents = false;
 
@@ -148,8 +155,6 @@ class QueryeerView extends JFrame
     private boolean quickPropertiesCollapsed;
     private int prevPropertiesDividerLocation;
     private WindowsDialog windowsDialog;
-
-    private final QuickWindows quickWindowsWindow;
 
     private List<AbstractButton> editorToolbarActions = new ArrayList<>();
     private List<JMenuItem> editorMenuActions = new ArrayList<>();
@@ -164,10 +169,11 @@ class QueryeerView extends JFrame
 
         this.model = requireNonNull(model, "model");
         this.tabbedPane = requireNonNull(tabbedPane, "tabbedPane");
+        this.projectsView = requireNonNull(projectsView, "projectsView");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.model.addPropertyChangeListener(queryeerModelListener);
-
-        this.quickWindowsWindow = new QuickWindows();
+        this.filesQuickSearchWindow = new DialogUtils.QuickSearchWindow<>(this, new FilesQuickSearchModel());
+        this.datasourcesQuickSearchWindow = new DialogUtils.QuickSearchWindow<>(this, new DatasourceQuickSearchModel());
 
         List<IOutputExtension> actualOutputExtensions = new ArrayList<>(outputExtensions);
         List<IOutputFormatExtension> actualOutputFormatExtensions = new ArrayList<>(outputFormatExtensions);
@@ -379,7 +385,8 @@ class QueryeerView extends JFrame
                 .getMenuShortcutKeyMaskEx());
         KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
-        KeyStroke showQuickWindowsKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
+        KeyStroke showQuickFilesKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
+        KeyStroke showQuickDatasourcesKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0);
         // CSON
 
         // Register actions
@@ -387,11 +394,13 @@ class QueryeerView extends JFrame
         actionRegistry.register(STOP, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(stopKeyStroke)));
         actionRegistry.register(NEW_QUERY, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(newQueryKeyStroke)));
         actionRegistry.register(TOGGLE_RESULT, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(toggleResultKeyStroke)));
-        actionRegistry.register(OPEN_QUICK_WINDOWS, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(showQuickWindowsKeyStroke)));
+        actionRegistry.register(OPEN_QUICK_FILES, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(showQuickFilesKeyStroke)));
+        actionRegistry.register(OPEN_QUICK_DATASOURCES, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(showQuickDatasourcesKeyStroke)));
 
         inputMap = topPanel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
 
-        inputMap.put(showQuickWindowsKeyStroke, OPEN_QUICK_WINDOWS);
+        inputMap.put(showQuickFilesKeyStroke, OPEN_QUICK_FILES);
+        inputMap.put(showQuickDatasourcesKeyStroke, OPEN_QUICK_DATASOURCES);
         inputMap.put(executeKeyStroke, EXECUTE);
         inputMap.put(stopKeyStroke, STOP);
         inputMap.put(newQueryKeyStroke, NEW_QUERY);
@@ -405,16 +414,29 @@ class QueryeerView extends JFrame
         topPanel.getActionMap()
                 .put(TOGGLE_RESULT, toggleResultAction);
         topPanel.getActionMap()
-                .put(OPEN_QUICK_WINDOWS, new AbstractAction()
+                .put(OPEN_QUICK_FILES, new AbstractAction()
                 {
                     @Override
                     public void actionPerformed(ActionEvent e)
                     {
-                        if (quickWindowsWindow.isVisible())
+                        if (filesQuickSearchWindow.isVisible())
                         {
                             return;
                         }
-                        quickWindowsWindow.setVisible(true);
+                        filesQuickSearchWindow.setVisible(true);
+                    }
+                });
+        topPanel.getActionMap()
+                .put(OPEN_QUICK_DATASOURCES, new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        if (datasourcesQuickSearchWindow.isVisible())
+                        {
+                            return;
+                        }
+                        datasourcesQuickSearchWindow.setVisible(true);
                     }
                 });
 
@@ -596,16 +618,22 @@ class QueryeerView extends JFrame
                     {
                         if ("focusOwner".equalsIgnoreCase(evt.getPropertyName()))
                         {
-                            if (quickWindowsWindow.isVisible()
-                                    && evt.getNewValue() != null
-                                    && evt.getNewValue() != quickWindowsWindow)
-                            {
-                                Window owningWindow = SwingUtilities.getWindowAncestor((Component) evt.getNewValue());
-                                if (owningWindow != quickWindowsWindow)
-                                {
-                                    quickWindowsWindow.setVisible(false);
-                                }
-                            }
+                            List.of(filesQuickSearchWindow, datasourcesQuickSearchWindow)
+                                    .stream()
+                                    .forEach(w ->
+                                    {
+                                        if (w.isVisible()
+                                                && evt.getNewValue() != null
+                                                && evt.getNewValue() != w)
+                                        {
+                                            Window owningWindow = SwingUtilities.getWindowAncestor((Component) evt.getNewValue());
+                                            if (owningWindow != w)
+                                            {
+                                                w.setVisible(false);
+                                            }
+                                        }
+                                    });
+
                             // boolean processed = false;
                             if (evt.getNewValue() instanceof JComponent comp)
                             {
@@ -1347,124 +1375,221 @@ class QueryeerView extends JFrame
         }
     }
 
-    /** Quick windows window. */
-    class QuickWindows extends DialogUtils.QuickSearchWindow<QuickWindows.ListItem>
+    /**
+     * Proxy model for switch datasource. This class uses the current files query engines model if any.
+     */
+    class DatasourceQuickSearchModel implements IQuickSearchModel<IQuickSearchModel.Item>
     {
-        QuickWindows()
+        @Override
+        public void handleSelection(JWindow popup, IQuickSearchModel.Item item)
         {
-            super(QueryeerView.this);
+            IQuickSearchModel<IQuickSearchModel.Item> currentModel = getCurrentModel();
+            if (currentModel != null)
+            {
+                currentModel.handleSelection(popup, item);
+            }
         }
 
         @Override
-        protected List<ListItem> getModel()
+        public int getSelectedIndex()
+        {
+            IQuickSearchModel<IQuickSearchModel.Item> currentModel = getCurrentModel();
+            if (currentModel != null)
+            {
+                currentModel.getSelectedIndex();
+            }
+            return -1;
+        }
+
+        @Override
+        public void reload(Consumer<Item> itemConsumer)
+        {
+            IQuickSearchModel<IQuickSearchModel.Item> currentModel = getCurrentModel();
+            if (currentModel != null)
+            {
+                currentModel.reload(itemConsumer);
+            }
+        }
+
+        @Override
+        public boolean isEnabled()
+        {
+            return getCurrentModel() != null;
+        }
+
+        private IQuickSearchModel<IQuickSearchModel.Item> getCurrentModel()
+        {
+            QueryFileModel selectedFile = model.getSelectedFile();
+            return selectedFile != null ? selectedFile.getQueryEngine()
+                    .getDatasourceSearchModel()
+                    : null;
+        }
+    }
+
+    /** Model for quick search of windows (opened / recent). */
+    class FilesQuickSearchModel implements IQuickSearchModel<FilesQuickSearchModel.ListItem>
+    {
+        @Override
+        public void reload(Consumer<FilesQuickSearchModel.ListItem> itemConsumer)
         {
             List<QueryFileModel> files = new ArrayList<>(model.getFiles());
             files.sort((aa, bb) -> -Long.compare(aa.getLastActivity(), bb.getLastActivity()));
 
-            List<ListItem> filesModel = new ArrayList<>();
-
-            Set<String> openedFiles = new HashSet<>();
+            // Keep track of what files we have opened to avoid duplicates in the different groups
+            Set<String> processedFiles = new HashSet<>();
             for (QueryFileModel file : files)
             {
                 if (!file.isNew())
                 {
-                    openedFiles.add(file.getFile()
+                    processedFiles.add(file.getFile()
                             .getAbsolutePath());
                 }
-                filesModel.add(new ListItem(file, null));
+                itemConsumer.accept(new ListItem(file));
             }
+
+            AtomicBoolean markerAdded = new AtomicBoolean(false);
+            projectsView.enumerateProjectFiles(file ->
+            {
+                if (processedFiles.add(file.getAbsolutePath()))
+                {
+                    if (!markerAdded.get())
+                    {
+                        itemConsumer.accept(new ListItem(ListItem.Type.ProjectFile, null));
+                        markerAdded.set(true);
+                    }
+
+                    itemConsumer.accept(new ListItem(ListItem.Type.ProjectFile, file));
+                }
+            });
 
             if (!recentFiles.isEmpty())
             {
-                filesModel.add(new ListItem(null, null));
+                markerAdded.set(false);
                 for (String recentFile : recentFiles)
                 {
-                    // Don't show opened files in recent files view
-                    if (openedFiles.contains(recentFile))
+                    if (processedFiles.add(recentFile))
                     {
-                        continue;
+                        if (!markerAdded.get())
+                        {
+                            itemConsumer.accept(new ListItem(ListItem.Type.RecentFile, null));
+                            markerAdded.set(true);
+                        }
+                        itemConsumer.accept(new ListItem(ListItem.Type.RecentFile, new File(recentFile)));
                     }
-                    filesModel.add(new ListItem(null, recentFile));
                 }
             }
-
-            return filesModel;
         }
 
         @Override
-        protected void handleSelection(ListItem item)
+        public void handleSelection(JWindow popupWindow, ListItem item)
         {
             if (item.queryFile != null)
             {
                 model.setSelectedFile(item.queryFile);
-                setVisible(false);
+                popupWindow.setVisible(false);
             }
-            else if (item.recentFile != null)
+            else if (item.type == ListItem.Type.RecentFile
+                    && item.file != null)
             {
                 // Hide this before we call consumer in case the recent file don't exists
                 // and a dialog pops up on top
-                setVisible(false);
-                openRecentFileConsumer.accept(item.recentFile);
+                popupWindow.setVisible(false);
+                openRecentFileConsumer.accept(item.file.getAbsolutePath());
+            }
+            else if (item.type == ListItem.Type.ProjectFile
+                    && item.file != null)
+            {
+                popupWindow.setVisible(false);
+                eventBus.publish(new NewQueryFileEvent(item.file));
             }
         }
 
         @Override
-        protected int getSelectedIndex()
+        public int getSelectedIndex()
         {
             // Pre select the second item in list since the first one is the current file
             return 1;
         }
 
-        @Override
-        protected void render(JLabel label, ListItem item)
+        static class ListItem implements IQuickSearchModel.Item
         {
-            if (item.queryFile != null)
-            {
-                label.setText((item.queryFile.isDirty() ? "*"
-                        : "") + item.queryFile.getFile()
-                                .getName());
-            }
-            else if (item.recentFile != null)
-            {
-                File file = new File(item.recentFile);
-                label.setText(file.getName() + " (" + file.getParent() + ")");
-            }
-            else if (item.isRecentMarker())
-            {
-                label.setFont(label.getFont()
-                        .deriveFont(Font.BOLD));
-                label.setText("--- Recent Files ---");
-            }
-        }
+            private static final Icon FILES_O = FontIcon.of(FontAwesome.FILES_O);
+            private static final Icon FILE_O = FontIcon.of(FontAwesome.FILE_O);
+            private final Type type;
+            private final QueryFileModel queryFile;
+            private final File file;
 
-        @Override
-        protected boolean matches(String searchText, ListItem item)
-        {
-            // Always include the recent marker
-            if (item.isRecentMarker())
+            ListItem(QueryFileModel queryFile)
             {
-                return true;
+                this.type = Type.QueryFile;
+                this.queryFile = queryFile;
+                this.file = null;
             }
-            else if (item.queryFile != null
-                    && StringUtils.containsIgnoreCase(item.queryFile.getFile()
-                            .getName(), searchText))
-            {
-                return true;
-            }
-            else if (item.recentFile != null
-                    && StringUtils.containsIgnoreCase(item.recentFile, searchText))
-            {
-                return true;
-            }
-            return false;
-        }
 
-        record ListItem(QueryFileModel queryFile, String recentFile)
-        {
-            boolean isRecentMarker()
+            private ListItem(Type type, File file)
             {
-                return queryFile == null
-                        && recentFile == null;
+                this.type = type;
+                this.file = file;
+                this.queryFile = null;
+            }
+
+            @Override
+            public String getTitle()
+            {
+                if (type == Type.ProjectFile)
+                {
+                    return file == null ? "<html><b>--- Project Files ---</b></html>"
+                            : (file.getName() + " (" + file.getParent() + ")");
+                }
+                else if (type == Type.RecentFile)
+                {
+                    return file == null ? "<html><b>--- Recent Files ---</b></html>"
+                            : (file.getName() + " (" + file.getParent() + ")");
+                }
+
+                return (queryFile.isDirty() ? "*"
+                        : "") + queryFile.getFile()
+                                .getName();
+            }
+
+            @Override
+            public boolean matches(String searchText)
+            {
+                // Markers are always matching
+                if (queryFile == null
+                        && file == null)
+                {
+                    return true;
+                }
+                return switch (type)
+                {
+                    case ProjectFile -> StringUtils.containsIgnoreCase(file.getAbsolutePath(), searchText);
+                    case QueryFile -> StringUtils.containsIgnoreCase(queryFile.getFile()
+                            .getAbsolutePath(), searchText);
+                    case RecentFile -> StringUtils.containsIgnoreCase(file.getAbsolutePath(), searchText);
+                };
+            }
+
+            @Override
+            public Icon getIcon()
+            {
+                if (queryFile != null)
+                {
+                    return queryFile.getQueryEngine()
+                            .getIcon();
+                }
+                else if (type == Type.ProjectFile)
+                {
+                    return FILES_O;
+                }
+                return FILE_O;
+            }
+
+            enum Type
+            {
+                QueryFile,
+                ProjectFile,
+                RecentFile
             }
         }
     }

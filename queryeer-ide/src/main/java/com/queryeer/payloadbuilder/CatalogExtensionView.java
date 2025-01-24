@@ -55,7 +55,7 @@ class CatalogExtensionView extends JPanel
                 IQueryFile file = queryFileProvider.getCurrentFile();
                 if (file != null)
                 {
-                    PayloadbuilderState state = (PayloadbuilderState) file.getEngineState();
+                    PayloadbuilderState state = file.getEngineState();
                     if (state != null)
                     {
                         state.getQuerySession()
@@ -117,7 +117,7 @@ class CatalogExtensionView extends JPanel
     {
         if (queryFileProvider.getCurrentFile() == queryFile)
         {
-            PayloadbuilderState state = (PayloadbuilderState) queryFile.getEngineState();
+            PayloadbuilderState state = queryFile.getEngineState();
             if (state != null)
             {
                 if (Objects.equals(state.getQuerySession()

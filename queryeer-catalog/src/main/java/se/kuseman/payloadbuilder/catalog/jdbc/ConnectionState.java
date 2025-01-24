@@ -2,6 +2,7 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Objects.requireNonNull;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -12,7 +13,7 @@ import com.queryeer.api.IQueryFile;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 
 /** Connection state of a {@link IQueryFile}. Contains an open connection a selected database etc. */
-class ConnectionState
+class ConnectionState implements Closeable
 {
     private final JdbcConnection jdbcConnection;
     private final JdbcDatabase jdbcDatabase;
@@ -174,7 +175,8 @@ class ConnectionState
         return database;
     }
 
-    void close() throws IOException
+    @Override
+    public void close() throws IOException
     {
         Connection con = connection;
         JdbcUtils.rollbackQuiet(con);

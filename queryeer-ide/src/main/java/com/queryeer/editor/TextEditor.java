@@ -156,6 +156,10 @@ class TextEditor implements ITextEditor, SearchListener
         textEditor.setTabSize(2);
         textEditor.setTabsEmulated(true);
 
+        // Unbind F2 since we use that to show quick datasources
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), "none");
+
         scrollPane = new RTextScrollPane(textEditor, true);
         errorStrip = new ErrorStrip(textEditor);
 
@@ -537,6 +541,12 @@ class TextEditor implements ITextEditor, SearchListener
     {
         textEditor.setText(String.valueOf(value));
         textEditor.setCaretPosition(0);
+    }
+
+    @Override
+    public boolean isValueEmpty()
+    {
+        return StringUtils.isBlank((String) getValue(false));
     }
 
     // SearchListener

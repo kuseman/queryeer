@@ -1,6 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
@@ -77,6 +78,10 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public String getTitle()
         {
+            if (!connection.isEnabled())
+            {
+                return "<html><i>" + connection.getName() + "</i></html>";
+            }
             return connection.getName();
         }
 
@@ -89,29 +94,45 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public Icon getStatusIcon()
         {
-            if (connection.hasCredentials())
+            if (!connection.isEnabled())
+            {
+                return icons.banIcon;
+            }
+            else if (connection.hasCredentials())
             {
                 return null;
             }
-
             return icons.lock;
         }
 
         @Override
         public boolean isLeaf()
         {
+            if (!connection.isEnabled())
+            {
+                return true;
+            }
             return false;
         }
 
         @Override
         public boolean shouldLoadChildren()
         {
+            if (!connection.isEnabled())
+            {
+                return false;
+            }
             return model.prepare(connection, false);
         }
 
         @Override
         public List<RegularNode> loadChildren()
         {
+            if (!connection.isEnabled())
+            {
+                return emptyList();
+            }
+
             List<RegularNode> children = new ArrayList<>();
             children.add(new DatabasesNode(connection, jdbcDatabase));
             children.addAll(jdbcDatabase.getTreeNodeSupplier()
@@ -129,12 +150,20 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<Action> getContextMenuActions()
         {
+            if (!connection.isEnabled())
+            {
+                return emptyList();
+            }
             return asList(newQuery);
         }
 
         @Override
         public List<Action> getLinkActions()
         {
+            if (!connection.isEnabled())
+            {
+                return emptyList();
+            }
             return asList(newQuery);
         }
 
@@ -182,7 +211,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<RegularNode> loadChildren()
         {
-            List<String> databases = model.getDatabases(connection, JdbcQueryEngine.CATALOG_ALIAS, true, true);
+            List<String> databases = model.getDatabases(connection, true, true);
             return databases.stream()
                     .map(d -> new DatabaseNode(connection, jdbcDatabase, d))
                     .collect(toList());

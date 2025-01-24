@@ -36,7 +36,7 @@ class QueryService
                 : State.EXECUTING);
         EXECUTOR.execute(() ->
         {
-            LOGGER.debug("Execute. File: {}, ByEvent: {}, Query: {}", file.getFile(), byEvent, query);
+            LOGGER.debug("Execute. File: {}, ByEvent: {}, Query: {}{}", file.getFile(), byEvent, System.lineSeparator(), query);
 
             OutputWriter theWriter = writer;
             if (LOGGER.isDebugEnabled())

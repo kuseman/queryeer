@@ -14,9 +14,11 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ListDataListener;
@@ -58,7 +60,7 @@ class JdbcCatalogExtension implements ICatalogExtension
         this.completionProvider = new JdbcCompletionProvider(connectionsModel, requireNonNull(crawlService, "crawlService"), requireNonNull(databaseProvider, "databaseProvider"));
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.catalogAlias = catalogAlias;
-        this.propertiesComponent = new PropertiesComponent(catalogAlias, icons, connectionsModel, (con) -> setupConnection(con), (con, database) -> setupDatabase(con, database), queryFile ->
+        this.propertiesComponent = new PropertiesComponent(icons, connectionsModel, (con) -> setupConnection(con), (con, database) -> setupDatabase(con, database), queryFile ->
         {
             // Update properties if was the current file that completed execution
             if (queryFileProvider.getCurrentFile() == queryFile)
@@ -302,7 +304,6 @@ class JdbcCatalogExtension implements ICatalogExtension
     /** Properties component. */
     static class PropertiesComponent extends JPanel implements ICatalogExtensionView
     {
-        private final String catalogAlias;
         private final JdbcConnectionsModel connectionsModel;
         private final Consumer<IQueryFile> afterExecuteConsumer;
         private final Consumer<IQueryFile> focusConsumer;
@@ -316,10 +317,9 @@ class JdbcCatalogExtension implements ICatalogExtension
         private final Icons icons;
         private boolean suppressEvents = false;
 
-        PropertiesComponent(String catalogAlias, Icons icons, JdbcConnectionsModel connectionsModel, Consumer<JdbcConnection> connectionConsumer, BiConsumer<JdbcConnection, String> databaseConsumer,
+        PropertiesComponent(Icons icons, JdbcConnectionsModel connectionsModel, Consumer<JdbcConnection> connectionConsumer, BiConsumer<JdbcConnection, String> databaseConsumer,
                 Consumer<IQueryFile> afterExecuteConsumer, Consumer<IQueryFile> focusConsumer)
         {
-            this.catalogAlias = catalogAlias;
             this.afterExecuteConsumer = afterExecuteConsumer;
             this.focusConsumer = focusConsumer;
             this.icons = requireNonNull(icons, "icons");
@@ -331,13 +331,35 @@ class JdbcCatalogExtension implements ICatalogExtension
 
             authStatus = new JLabel();
             connections = new JComboBox<>(new ConnectionsSelectionModel());
+            connections.setRenderer(new DefaultListCellRenderer()
+            {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+                {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (value instanceof JdbcConnection connection)
+                    {
+                        if (!connection.isEnabled())
+                        {
+                            setText("<html><i>" + connection.toString() + "</i></html>");
+                        }
+                        else
+                        {
+                            setText(connection.toString());
+                        }
+                    }
+
+                    return this;
+                }
+            });
             databases = new JComboBox<>(databasesModel);
             reload = new JButton("Reload");
             connectionsModel.registerReloadButton(reload);
             reload.addActionListener(l ->
             {
                 JdbcConnection connection = (JdbcConnection) connections.getSelectedItem();
-                if (connection == null)
+                if (connection == null
+                        || !connection.isEnabled())
                 {
                     return;
                 }
@@ -446,7 +468,7 @@ class JdbcCatalogExtension implements ICatalogExtension
 
             Runnable load = () ->
             {
-                connectionsModel.getDatabases(connection, catalogAlias, forceReload, false);
+                connectionsModel.getDatabases(connection, forceReload, false);
                 SwingUtilities.invokeLater(() ->
                 {
                     populateDatabases(connection);
