@@ -55,7 +55,12 @@ public class Main
 
         try
         {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            String lafProp = System.getProperty("laf");
+            if (isBlank(lafProp))
+            {
+                lafProp = UIManager.getSystemLookAndFeelClassName();
+            }
+            UIManager.setLookAndFeel(lafProp);
         }
         catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ex)
         // CSOFF
