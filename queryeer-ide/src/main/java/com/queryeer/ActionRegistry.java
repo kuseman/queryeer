@@ -47,12 +47,15 @@ class ActionRegistry implements IActionRegistry, IConfigurable
                 }
             };
 
-            for (QueryeerAction action : actions.values())
+            List<QueryeerAction> actions = new ArrayList<>(this.actions.values());
+            actions.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.name, b.name));
+            for (QueryeerAction action : actions)
             {
                 model.addRow(new Object[] { action.name, action.getShortcutString(), action.scope });
             }
 
             JTable table = new JTable();
+            table.setAutoCreateRowSorter(true);
             table.setModel(model);
             component.add(new JScrollPane(table), BorderLayout.CENTER);
         }
