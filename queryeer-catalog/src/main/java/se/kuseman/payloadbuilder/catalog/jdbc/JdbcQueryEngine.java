@@ -6,6 +6,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -32,11 +33,13 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import javax.swing.tree.TreeSelectionModel;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.mutable.MutableBoolean;
@@ -48,6 +51,7 @@ import org.slf4j.LoggerFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
 import com.queryeer.api.component.AutoCompletionComboBox;
+import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
 import com.queryeer.api.component.QueryeerTree;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
 import com.queryeer.api.editor.IEditor;
@@ -73,11 +77,10 @@ import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 class JdbcQueryEngine implements IQueryEngine
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(JdbcQueryEngine.class);
-    private static final String QUERY_NOT_CONNECTED_MESSAGE = "Query file is not connected to any data source. Right Click Or CTRL + Left click on a connection in tree.";
+    private static final String QUERY_NOT_CONNECTED_MESSAGE = "Query file is not connected to any data source. Right click or CTRL/META-hoover + left click on a connection or database in tree.";
     static final String TEXT_SQL = "text/sql";
-    static final String CATALOG_ALIAS = "JdbcQueryEngine";
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
-            .namingPattern("JdbcEngine#-%d")
+    static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+            .namingPattern("JdbcQueryEngine#-%d")
             .build());
 
     private final CatalogCrawlService crawlService;
@@ -88,14 +91,16 @@ class JdbcQueryEngine implements IQueryEngine
     private final IQueryFileProvider queryFileProvider;
     private final DatabaseProvider databaseProvider;
     private final IEditorFactory editorFactory;
+    private final DatasourcesQuickSearchModel datasourcesQuickSearchModel;
 
     private JPanel quickProperties;
+    private JTextField currentConnection;
     private JComboBox<String> databases;
     private DefaultComboBoxModel<String> databasesModel;
     private boolean suppressEvents = false;
 
     JdbcQueryEngine(CatalogCrawlService crawlService, IQueryFileProvider queryFileProvider, Icons icons, JdbcConnectionsModel connectionsModel, DatabaseProvider databaseProvider, IEventBus eventBus,
-            IEditorFactory editorFactory)
+            IEditorFactory editorFactory, DatasourcesQuickSearchModel datasourcesQuickSearchModel)
     {
         this.crawlService = requireNonNull(crawlService, "crawlService");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
@@ -105,6 +110,7 @@ class JdbcQueryEngine implements IQueryEngine
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
         this.connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, databaseProvider, node -> newQuery(node));
+        this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
     }
 
     @Override
@@ -112,12 +118,10 @@ class JdbcQueryEngine implements IQueryEngine
     {
         if (quickProperties == null)
         {
-            quickProperties = new JPanel(new GridBagLayout());
+            quickProperties = new JPanel();
+            quickProperties.setLayout(new GridBagLayout());
 
             databases = new JComboBox<>();
-            databases.setPreferredSize(new Dimension(Integer.MAX_VALUE, 18));
-            databases.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
-            databases.setMinimumSize(new Dimension(Integer.MAX_VALUE, 18));
             databases.setRenderer(new DefaultListCellRenderer()
             {
                 @Override
@@ -139,7 +143,7 @@ class JdbcQueryEngine implements IQueryEngine
                 if (l.getItem() instanceof String
                         && currentFile != null)
                 {
-                    JdbcEngineState engineState = (JdbcEngineState) currentFile.getEngineState();
+                    JdbcEngineState engineState = currentFile.getEngineState();
                     ConnectionState state = engineState.connectionState;
 
                     if (state != null)
@@ -164,7 +168,48 @@ class JdbcQueryEngine implements IQueryEngine
             databases.setModel(databasesModel);
             AutoCompletionComboBox.enable(databases);
 
-            quickProperties.add(databases, new GridBagConstraints(0, 0, 1, 1, 1.0d, 0.0d, GridBagConstraints.CENTER, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 2));
+            currentConnection = new JTextField("");
+            currentConnection.setEditable(false);
+
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.insets = new Insets(0, 0, 2, 2);
+            JPanel currentConnectionPanel = new JPanel(new GridBagLayout());
+            currentConnectionPanel.add(new JLabel("Server:")
+            {
+                {
+                    setFont(getFont().deriveFont(Font.BOLD));
+                }
+            }, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 1;
+            gbc.gridy = 0;
+            gbc.weightx = 1.0d;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.anchor = GridBagConstraints.WEST;
+            currentConnectionPanel.add(currentConnection, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.gridwidth = 2;
+            gbc.weightx = 1.0d;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.anchor = GridBagConstraints.WEST;
+            quickProperties.add(currentConnectionPanel, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.weightx = 1.0d;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.anchor = GridBagConstraints.WEST;
+
+            JPanel databasesPanel = new JPanel(new GridBagLayout());
+            databasesPanel.add(databases, gbc);
 
             JButton changeConnection = new JButton();
             changeConnection.setMaximumSize(new Dimension(18, 18));
@@ -172,7 +217,22 @@ class JdbcQueryEngine implements IQueryEngine
             changeConnection.setPreferredSize(new Dimension(18, 18));
             changeConnection.setIcon(icons.plug);
             changeConnection.setToolTipText("Change Connection");
-            quickProperties.add(changeConnection, new GridBagConstraints(1, 0, 1, 1, 0.0d, 0.0d, GridBagConstraints.CENTER, GridBagConstraints.NONE, new Insets(0, 0, 0, 0), 0, 2));
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 1;
+            gbc.gridy = 0;
+            gbc.fill = GridBagConstraints.NONE;
+            gbc.anchor = GridBagConstraints.WEST;
+            databasesPanel.add(changeConnection, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 1;
+            gbc.gridwidth = 2;
+            gbc.weightx = 1.0d;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.anchor = GridBagConstraints.WEST;
+            quickProperties.add(databasesPanel, gbc);
 
             changeConnection.addActionListener(l ->
             {
@@ -200,23 +260,13 @@ class JdbcQueryEngine implements IQueryEngine
                 {
 
                     JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(result.getJdbcURL());
-                    JdbcEngineState engineState = (JdbcEngineState) currentFile.getEngineState();
+                    JdbcEngineState engineState = currentFile.getEngineState();
                     ConnectionState state = engineState.connectionState;
 
                     // Close old state if any
                     if (state != null)
                     {
-                        EXECUTOR.execute(() ->
-                        {
-                            try
-                            {
-                                state.close();
-                            }
-                            catch (Exception e)
-                            {
-                                // SWALLOW
-                            }
-                        });
+                        EXECUTOR.execute(() -> IOUtils.closeQuietly(state));
                     }
 
                     // Create new state
@@ -253,7 +303,16 @@ class JdbcQueryEngine implements IQueryEngine
             tree.getSelectionModel()
                     .setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
             tree.setHyperLinksEnabled(true);
-            quickProperties.add(new JScrollPane(tree), new GridBagConstraints(0, 1, 2, 1, 1.0d, 1.0d, GridBagConstraints.SOUTHWEST, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 2;
+            gbc.gridwidth = 2;
+            gbc.weightx = 1.0d;
+            gbc.weighty = 1.0d;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.BOTH;
+            quickProperties.add(new JScrollPane(tree), gbc);
             quickProperties.setPreferredSize(new Dimension(240, 75));
         }
 
@@ -277,7 +336,7 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public IState cloneState(IQueryFile queryFile)
     {
-        JdbcEngineState state = (JdbcEngineState) queryFile.getEngineState();
+        JdbcEngineState state = queryFile.getEngineState();
         if (state != null)
         {
             return state.cloneState();
@@ -295,7 +354,7 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void execute(IQueryFile queryFile, OutputWriter writer, Object query) throws Exception
     {
-        JdbcEngineState engineState = (JdbcEngineState) queryFile.getEngineState();
+        JdbcEngineState engineState = queryFile.getEngineState();
         synchronized (engineState)
         {
             ConnectionState state = engineState.connectionState;
@@ -463,7 +522,7 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void abortQuery(IQueryFile queryFile)
     {
-        JdbcEngineState state = (JdbcEngineState) queryFile.getEngineState();
+        JdbcEngineState state = queryFile.getEngineState();
         if (state != null
                 && state.connectionState != null)
         {
@@ -510,8 +569,14 @@ class JdbcQueryEngine implements IQueryEngine
         {
             databasesModel.removeAllElements();
             databases.setEnabled(false);
-            JdbcEngineState engineState = (JdbcEngineState) queryFile.getEngineState();
+            JdbcEngineState engineState = queryFile.getEngineState();
             ConnectionState state = engineState.connectionState;
+            if (currentConnection != null)
+            {
+                currentConnection.setText(state != null ? state.getJdbcConnection()
+                        .getName()
+                        : "");
+            }
             if (state != null)
             {
                 // Force a reparse when we focus a new file
@@ -552,6 +617,13 @@ class JdbcQueryEngine implements IQueryEngine
         return new ExecuteQueryEvent(outputType, newQueryFileName, new ExecuteQueryContext(query));
     }
 
+    @SuppressWarnings("unchecked")
+    @Override
+    public IQuickSearchModel<DatasourcesQuickSearchModel.DatasourceItem> getDatasourceSearchModel()
+    {
+        return datasourcesQuickSearchModel;
+    }
+
     private int writeResultSet(IQueryFile queryFile, ResultSet rs, OutputWriter writer, JdbcEngineState state) throws SQLException, IOException
     {
         int rowCount = 0;
@@ -568,6 +640,7 @@ class JdbcQueryEngine implements IQueryEngine
             if (state.connectionState != null
                     && state.connectionState.isAbort())
             {
+                LOGGER.debug("Aborting query due to abort in state");
                 break;
             }
 
@@ -577,6 +650,7 @@ class JdbcQueryEngine implements IQueryEngine
                         && !state.getJdbcDatabase()
                                 .processResultSet(queryFile, state, rs))
                 {
+                    LOGGER.debug("Aborting query due to JdbcDatabase#processResultSet returned false");
                     return 0;
                 }
                 first = false;
@@ -631,12 +705,12 @@ class JdbcQueryEngine implements IQueryEngine
         {
             EXECUTOR.execute(() ->
             {
-                connectionsModel.getDatabases(state.getJdbcConnection(), CATALOG_ALIAS, true, false);
+                connectionsModel.getDatabases(state.getJdbcConnection(), true, false);
 
                 IQueryFile currentFile = queryFileProvider.getCurrentFile();
                 if (currentFile != null)
                 {
-                    JdbcEngineState currentEngineState = (JdbcEngineState) currentFile.getEngineState();
+                    JdbcEngineState currentEngineState = currentFile.getEngineState();
                     ConnectionState currentState = currentEngineState.connectionState;
                     // If the current file is the same as the one we loaded databases on then re-focus it
                     if (currentState != null

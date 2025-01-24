@@ -734,6 +734,13 @@ class QueryeerController implements PropertyChangeListener
             return;
         }
 
+        // Don't run empty queries
+        if (queryFile.getEditor()
+                .isValueEmpty())
+        {
+            return;
+        }
+
         OutputWriter writer = queryFile.getOutputExtension()
                 .createOutputWriter(queryFile);
 

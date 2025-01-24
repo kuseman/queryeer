@@ -118,7 +118,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     @Override
     public void execute(IQueryFile queryFile, OutputWriter writer, Object query)
     {
-        PayloadbuilderState state = (PayloadbuilderState) queryFile.getEngineState();
+        PayloadbuilderState state = queryFile.getEngineState();
         synchronized (state)
         {
             state.abort = false;
@@ -261,7 +261,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     @Override
     public void abortQuery(IQueryFile queryFile)
     {
-        PayloadbuilderState state = (PayloadbuilderState) queryFile.getEngineState();
+        PayloadbuilderState state = queryFile.getEngineState();
         if (state != null)
         {
             state.abort();

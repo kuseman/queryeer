@@ -1,5 +1,7 @@
 package com.queryeer.api.component;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -24,11 +26,11 @@ import java.util.function.Consumer;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.FocusManager;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
@@ -37,6 +39,7 @@ import javax.swing.JTextField;
 import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 
 import com.queryeer.api.utils.StringUtils;
 
@@ -141,43 +144,72 @@ public final class DialogUtils
         }
     }
 
-    /**
-     * Base class for a popup window that has a search field with a list of items that can be used to quickly show a list of items along with free text search.
-     */
-    public abstract static class QuickSearchWindow<T> extends JWindow
+    /** Model used in {@link QuickSearchWindow}. */
+    public interface IQuickSearchModel<T extends IQuickSearchModel.Item>
     {
-        private final JList<T> items;
-        private final DefaultListModel<T> itemsModel;
-        private final JTextField search;
-
         /** Handle selection. Implementer handles hiding of the popup. */
-        protected abstract void handleSelection(T item);
+        void handleSelection(JWindow dialog, T item);
 
-        /** Returns the model that is loaded into list. Called when dialog is shown. */
-        protected abstract List<T> getModel();
+        /**
+         * Reload model. Consumer should be called with produced items.
+         *
+         * <pre>
+         * NOTE! This method is called in a threaded fashion outside of EDT.
+         * </pre>
+         */
+        void reload(Consumer<T> itemConsumer);
 
-        /** Modify render label for provided item. */
-        protected void render(JLabel label, T item)
+        /**
+         * <pre>
+         * Returns true if this model is enabled otherwise false. If false then dialog is never shown if triggered.
+         * This to enable to have dynamic models that might don't have items in current context etc.
+         * </pre>
+         */
+        default boolean isEnabled()
         {
-            label.setText(item.toString());
+            return true;
         }
 
         /** Return the index to select when dialog is shown. -1 if no selections should be done */
-        protected int getSelectedIndex()
+        default int getSelectedIndex()
         {
             return -1;
         }
 
-        /** Method called when filtering of list items. */
-        protected boolean matches(String searchText, T item)
+        /** Item in quick search model. */
+        public interface Item
         {
-            return item.toString()
-                    .contains(searchText);
-        }
+            /** Get title of item. */
+            String getTitle();
 
-        public QuickSearchWindow(Window parent)
+            /** Get itcon of item. */
+            Icon getIcon();
+
+            /** Returns true if this item matches search text. */
+            default boolean matches(String searchText)
+            {
+                return getTitle().toLowerCase()
+                        .contains(searchText);
+            }
+        }
+    }
+
+    /**
+     * Dialog for a popup window that has a search field with a list of items that can be used to quickly search for an item.
+     */
+    public static class QuickSearchWindow<T extends IQuickSearchModel.Item> extends JWindow
+    {
+        private final JList<T> items;
+        private final DefaultListModel<T> itemsModel;
+        private final JTextField search;
+        private final IQuickSearchModel<T> model;
+        private SwingWorker<Void, T> currentModelWorker;
+        private SwingWorker<Void, T> currentFilterWorker;
+
+        public QuickSearchWindow(Window parent, IQuickSearchModel<T> model)
         {
             super(parent);
+            this.model = requireNonNull(model, "model");
 
             KeyListener closeListener = new KeyAdapter()
             {
@@ -197,7 +229,7 @@ public final class DialogUtils
                 {
                     return;
                 }
-                handleSelection(listItem);
+                model.handleSelection(this, listItem);
             };
 
             items = new JList<>();
@@ -241,7 +273,8 @@ public final class DialogUtils
                     super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                     @SuppressWarnings("unchecked")
                     T listItem = (T) value;
-                    render(this, listItem);
+                    setText(listItem.getTitle());
+                    setIcon(listItem.getIcon());
                     return this;
                 }
             });
@@ -260,7 +293,7 @@ public final class DialogUtils
                 {
                     if (e.getKeyChar() == KeyEvent.VK_ENTER)
                     {
-                        handleSelection(items.getSelectedValue());
+                        selectionHandler.accept(items.getSelectedValue());
                     }
                     else if (e.getKeyCode() == KeyEvent.VK_UP
                             || e.getKeyCode() == KeyEvent.VK_DOWN)
@@ -286,24 +319,56 @@ public final class DialogUtils
                         @Override
                         protected void update()
                         {
-                            String text = search.getText();
+                            String text = search.getText()
+                                    .toLowerCase();
                             if (StringUtils.isBlank(text))
                             {
                                 items.setModel(itemsModel);
                                 return;
                             }
 
-                            DefaultListModel<T> filteredModel = new DefaultListModel<>();
-                            int count = itemsModel.getSize();
-                            for (int i = 0; i < count; i++)
+                            // Cancel any prev. filtering
+                            if (currentFilterWorker != null
+                                    && !currentFilterWorker.isDone())
                             {
-                                T item = itemsModel.get(i);
-                                if (matches(text, item))
-                                {
-                                    filteredModel.addElement(item);
-                                }
+                                currentFilterWorker.cancel(true);
                             }
-                            items.setModel(filteredModel);
+
+                            DefaultListModel<T> filteredItemsModel = new DefaultListModel<>();
+                            currentFilterWorker = new SwingWorker<Void, T>()
+                            {
+                                @Override
+                                protected Void doInBackground() throws Exception
+                                {
+                                    int count = itemsModel.getSize();
+                                    for (int i = 0; i < count; i++)
+                                    {
+                                        if (this.isCancelled())
+                                        {
+                                            break;
+                                        }
+                                        T item = itemsModel.get(i);
+                                        if (item.matches(text))
+                                        {
+                                            filteredItemsModel.addElement(item);
+                                        }
+                                    }
+                                    return null;
+                                }
+
+                                @Override
+                                protected void done()
+                                {
+                                    if (this.isCancelled())
+                                    {
+                                        return;
+                                    }
+                                    // Switch to the filtered model upon completion
+                                    items.setModel(filteredItemsModel);
+                                }
+                            };
+
+                            currentFilterWorker.execute();
                         }
                     });
 
@@ -379,18 +444,62 @@ public final class DialogUtils
         {
             if (b)
             {
+                if (!model.isEnabled())
+                {
+                    return;
+                }
+                // Initial load is not done yet, drop out
+                else if (currentModelWorker != null
+                        && !currentModelWorker.isDone())
+                {
+                    return;
+                }
+
                 search.setText("");
                 itemsModel.clear();
-                itemsModel.addAll(getModel());
-                int selectedIndex = getSelectedIndex();
-                if (selectedIndex >= 0)
+
+                currentModelWorker = new SwingWorker<Void, T>()
                 {
-                    items.setSelectedIndex(selectedIndex);
-                }
+                    @Override
+                    protected Void doInBackground() throws Exception
+                    {
+                        model.reload(t -> publish(t));
+                        return null;
+                    }
+
+                    @Override
+                    protected void process(List<T> chunks)
+                    {
+                        int index = model.getSelectedIndex();
+                        for (T t : chunks)
+                        {
+                            itemsModel.addElement(t);
+                            if (index >= 0
+                                    && index != items.getSelectedIndex()
+                                    && index < itemsModel.getSize())
+                            {
+                                items.setSelectedIndex(index);
+                            }
+
+                            // Show the dialog as soon as we have the first item
+                            // This to avoid having an empty dialog if the model didn't
+                            // produce any items
+                            if (!isVisible())
+                            {
+                                QuickSearchWindow.super.setVisible(true);
+                            }
+                        }
+                    }
+                };
+
+                currentModelWorker.execute();
+
                 setSize(new Dimension(350, 350));
                 Window activeWindow = javax.swing.FocusManager.getCurrentManager()
                         .getActiveWindow();
                 setLocationRelativeTo(activeWindow);
+
+                return;
             }
             super.setVisible(b);
         }

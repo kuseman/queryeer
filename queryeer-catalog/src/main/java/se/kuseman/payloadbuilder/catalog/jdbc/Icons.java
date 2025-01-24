@@ -31,6 +31,7 @@ public class Icons
     public final Icon reorderIcon;
     public final Icon atIcon;
     public final Icon boltIcon;
+    public final Icon banIcon;
 
     // CSON
 
@@ -54,6 +55,7 @@ public class Icons
         reorderIcon = iconFactory.getIcon(Provider.FONTAWESOME, "REORDER");
         atIcon = iconFactory.getIcon(Provider.FONTAWESOME, "AT");
         boltIcon = iconFactory.getIcon(Provider.FONTAWESOME, "BOLT");
+        banIcon = iconFactory.getIcon(Provider.FONTAWESOME, "BAN");
     }
 
     public IIconFactory getIconFactory()

@@ -90,6 +90,7 @@ class ESCatalogConfigurable implements IConfigurable
         if (save)
         {
             config.saveExtensionConfig(NAME, singletonMap(CONNECTIONS, connectionsModel.getConnections()));
+            getComponent().init(connectionsModel.copyConnections());
         }
     }
 

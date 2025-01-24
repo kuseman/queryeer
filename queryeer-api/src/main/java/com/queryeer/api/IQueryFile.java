@@ -48,5 +48,5 @@ public interface IQueryFile
     /**
      * Get engine state from this file
      */
-    IQueryEngine.IState getEngineState();
+    <T extends IQueryEngine.IState> T getEngineState();
 }

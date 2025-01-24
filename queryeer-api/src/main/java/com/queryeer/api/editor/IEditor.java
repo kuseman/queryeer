@@ -31,6 +31,9 @@ public interface IEditor
      */
     Object getValue(boolean raw);
 
+    /** Returns true if this editor's value is empty {@see #getValue(boolean)} */
+    boolean isValueEmpty();
+
     /** Set editor dirty state */
     void setDirty(boolean dirty);
 

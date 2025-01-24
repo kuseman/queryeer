@@ -26,6 +26,7 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.extensions.engine.IQueryEngine;
+import com.queryeer.api.extensions.engine.IQueryEngine.IState;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
@@ -460,10 +461,11 @@ class QueryFileModel implements IQueryFile
         return totalRowCount;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public IQueryEngine.IState getEngineState()
+    public <T extends IState> T getEngineState()
     {
-        return engineState;
+        return (T) engineState;
     }
 
     /**
