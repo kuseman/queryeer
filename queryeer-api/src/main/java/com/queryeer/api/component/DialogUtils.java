@@ -1,20 +1,44 @@
 package com.queryeer.api.component;
 
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
+import java.util.function.Consumer;
 
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.DefaultListModel;
 import javax.swing.FocusManager;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.JRootPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextField;
+import javax.swing.JWindow;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
+
+import com.queryeer.api.utils.StringUtils;
 
 /** Utils when working with dialogs. */
 public final class DialogUtils
@@ -114,6 +138,245 @@ public final class DialogUtils
         protected boolean shouldClose()
         {
             return true;
+        }
+    }
+
+    /**
+     * Base class for a popup window that has a search field with a list of items that can be used to quickly show a list of items along with free text search.
+     */
+    public abstract static class QuickSearchWindow<T> extends JWindow
+    {
+        private final DefaultListModel<T> filesModel;
+        private final JTextField search;
+
+        /** Handle selection. Implemented handles hiding of the popup. */
+        protected abstract void handleSelection(T item);
+
+        /** Returns the model that is loaded into list. Called when dialog is shown. */
+        protected abstract List<T> getModel();
+
+        /** Modify render label for provided item. */
+        protected void render(JLabel label, T item)
+        {
+            label.setText(item.toString());
+        }
+
+        /** Method called when filtering of list items. */
+        protected boolean matches(String searchText, T item)
+        {
+            return item.toString()
+                    .contains(searchText);
+        }
+
+        public QuickSearchWindow(Window parent)
+        {
+            super(parent);
+
+            KeyListener closeListener = new KeyAdapter()
+            {
+                @Override
+                public void keyTyped(KeyEvent e)
+                {
+                    if (e.getKeyChar() == KeyEvent.VK_ESCAPE)
+                    {
+                        setVisible(false);
+                    }
+                }
+            };
+
+            Consumer<T> selectionHandler = listItem ->
+            {
+                if (listItem == null)
+                {
+                    return;
+                }
+                handleSelection(listItem);
+            };
+
+            JList<T> files = new JList<>();
+            files.addKeyListener(closeListener);
+            files.addKeyListener(new KeyAdapter()
+            {
+                @Override
+                public void keyPressed(KeyEvent e)
+                {
+                    if (e.getKeyChar() == KeyEvent.VK_ENTER)
+                    {
+                        selectionHandler.accept(files.getSelectedValue());
+                    }
+                    else if (search.getFont()
+                            .canDisplay(e.getKeyChar()))
+                    {
+                        search.setText(search.getText() + e.getKeyChar());
+                        search.requestFocusInWindow();
+                    }
+                    super.keyPressed(e);
+                }
+            });
+            files.addMouseListener(new MouseAdapter()
+            {
+                @Override
+                public void mouseClicked(MouseEvent e)
+                {
+                    if (SwingUtilities.isLeftMouseButton(e)
+                            && e.getClickCount() == 2)
+                    {
+                        selectionHandler.accept(files.getSelectedValue());
+                    }
+                    super.mouseClicked(e);
+                }
+            });
+            files.setCellRenderer(new DefaultListCellRenderer()
+            {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+                {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    @SuppressWarnings("unchecked")
+                    T listItem = (T) value;
+                    render(this, listItem);
+                    return this;
+                }
+            });
+
+            filesModel = new DefaultListModel<>();
+            files.setModel(filesModel);
+
+            search = new JTextField();
+            search.addKeyListener(closeListener);
+
+            // Move focus to list if we press arrows
+            search.addKeyListener(new KeyAdapter()
+            {
+                @Override
+                public void keyPressed(KeyEvent e)
+                {
+                    if (e.getKeyCode() == KeyEvent.VK_UP
+                            || e.getKeyCode() == KeyEvent.VK_DOWN)
+                    {
+                        files.requestFocusInWindow();
+                        if (files.getSelectedValue() == null)
+                        {
+                            files.setSelectedIndex(0);
+                        }
+                        else
+                        {
+                            int index = files.getSelectedIndex();
+                            index += e.getKeyCode() == KeyEvent.VK_UP ? -1
+                                    : 1;
+                            files.setSelectedIndex(index);
+                        }
+                    }
+                }
+            });
+            search.getDocument()
+                    .addDocumentListener(new ADocumentListenerAdapter()
+                    {
+                        @Override
+                        protected void update()
+                        {
+                            String text = search.getText();
+                            if (StringUtils.isBlank(text))
+                            {
+                                files.setModel(filesModel);
+                                return;
+                            }
+
+                            DefaultListModel<T> filteredModel = new DefaultListModel<>();
+                            int count = filesModel.getSize();
+                            for (int i = 0; i < count; i++)
+                            {
+                                T item = filesModel.get(i);
+                                if (matches(text, item))
+                                {
+                                    filteredModel.addElement(item);
+                                }
+                            }
+                            files.setModel(filteredModel);
+                        }
+                    });
+
+            JButton cornerButton = new JButton("#");
+            MouseAdapter cornerButtonAdapter = new MouseAdapter()
+            {
+                private Point origPos;
+
+                @Override
+                public void mouseDragged(MouseEvent e)
+                {
+                    Point newPos = e.getPoint();
+                    SwingUtilities.convertPointToScreen(newPos, cornerButton);
+                    int xdelta = newPos.x - origPos.x;
+                    int ydelta = newPos.y - origPos.y;
+                    Window wind = QuickSearchWindow.this;
+                    int w = wind.getWidth();
+                    if (newPos.x >= wind.getX())
+                    {
+                        w += xdelta;
+                    }
+                    int h = wind.getHeight();
+                    if (newPos.y >= wind.getY())
+                    {
+                        h += ydelta;
+                    }
+                    wind.setSize(w, h);
+                    origPos.setLocation(newPos);
+                }
+
+                @Override
+                public void mousePressed(MouseEvent e)
+                {
+                    origPos = e.getPoint();
+                    SwingUtilities.convertPointToScreen(origPos, cornerButton);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e)
+                {
+                    origPos = null;
+                }
+
+            };
+            cornerButton.addMouseListener(cornerButtonAdapter);
+            cornerButton.addMouseMotionListener(cornerButtonAdapter);
+            cornerButton.setCursor(Cursor.getPredefinedCursor(Cursor.NW_RESIZE_CURSOR));
+
+            JScrollPane sp = new JScrollPane(files, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+            sp.setCorner(JScrollPane.LOWER_RIGHT_CORNER, cornerButton);
+
+            JPanel contentPane = new JPanel(new BorderLayout());
+            contentPane.add(search, BorderLayout.NORTH);
+            contentPane.add(sp, BorderLayout.CENTER);
+            setContentPane(contentPane);
+
+            pack();
+
+            // Focus search field when shown
+            addComponentListener(new ComponentAdapter()
+            {
+                @Override
+                public void componentShown(ComponentEvent e)
+                {
+                    search.requestFocusInWindow();
+                    super.componentShown(e);
+                }
+            });
+        }
+
+        @Override
+        public void setVisible(boolean b)
+        {
+            if (b)
+            {
+                search.setText("");
+                filesModel.clear();
+                filesModel.addAll(getModel());
+                setSize(new Dimension(350, 350));
+                Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                        .getActiveWindow();
+                setLocationRelativeTo(activeWindow);
+            }
+            super.setVisible(b);
         }
     }
 

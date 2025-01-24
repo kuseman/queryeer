@@ -8,6 +8,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.Objects;
 
 import javax.swing.JOptionPane;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -33,17 +35,19 @@ class Config implements IConfig
     private static final Logger LOGGER = LoggerFactory.getLogger(Config.class);
     private static final String CONFIG = "queryeer.cfg";
     private static final String SESSION = "queryeer.session.cfg";
+    private static final String RECENT_FILES = "queryeer.recent-files.cfg";
 
-    private static final int MAX_RECENT_FILES = 10;
+    private static final int MAX_RECENT_FILES = 100;
     private final File etcFolder;
     private final File sharedFolder;
     private final File sessionFile;
+    private final File recentFilesFile;
 
     @JsonProperty
     private String sharedFolderPath;
     @JsonProperty
     private String lastOpenPath;
-    @JsonProperty
+    @JsonIgnore
     private final List<String> recentFiles = new ArrayList<>();
     @JsonProperty
     private boolean openNewFilesLast = true;
@@ -114,6 +118,8 @@ class Config implements IConfig
         }
 
         sharedFolder = getSharedFolderInternal();
+        recentFilesFile = new File(etcFolder, RECENT_FILES);
+        loadRecentFiles(file);
     }
 
     private File getSharedFolderInternal()
@@ -132,6 +138,46 @@ class Config implements IConfig
 
         // Else we don't have a shared folder conf
         return null;
+    }
+
+    private void loadRecentFiles(File configFile)
+    {
+        // Move old recent files setting to new file
+        if (!recentFilesFile.exists())
+        {
+            // First we need to read the old setting manually since it's not read from standard config
+            // anymore
+            try
+            {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> value = MAPPER.readValue(configFile, Map.class);
+                @SuppressWarnings("unchecked")
+                List<String> list = (List<String>) value.get("recentFiles");
+                if (!CollectionUtils.isEmpty(list))
+                {
+                    this.recentFiles.addAll(list);
+                }
+                recentFilesFile.createNewFile();
+                saveRecentFiles();
+                // Save the config to remove old recent files entry
+                save();
+            }
+            catch (Exception e)
+            {
+                LOGGER.error("Error transfering recent files to new storage", e);
+            }
+        }
+        else
+        {
+            try
+            {
+                this.recentFiles.addAll(FileUtils.readLines(recentFilesFile, StandardCharsets.UTF_8));
+            }
+            catch (Exception e)
+            {
+                LOGGER.error("Error reading recent files", e);
+            }
+        }
     }
 
     List<IQueryEngine> getEngines()
@@ -246,11 +292,13 @@ class Config implements IConfig
         {
             recentFiles.remove(recentFiles.size() - 1);
         }
+        saveRecentFiles();
     }
 
     void removeRecentFile(String file)
     {
         recentFiles.remove(file);
+        saveRecentFiles();
     }
 
     IQueryEngine getDefaultQueryEngine()
@@ -319,6 +367,18 @@ class Config implements IConfig
         catch (IOException e)
         {
             throw new RuntimeException("Error saving config to " + file.getAbsolutePath(), e);
+        }
+    }
+
+    void saveRecentFiles()
+    {
+        try
+        {
+            FileUtils.writeLines(recentFilesFile, StandardCharsets.UTF_8.name(), this.recentFiles);
+        }
+        catch (Exception e)
+        {
+            LOGGER.error("Error saving recent files", e);
         }
     }
 

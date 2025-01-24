@@ -330,12 +330,6 @@ class QueryeerController implements PropertyChangeListener
         return String.format("%s / %s", byteCountToDisplaySize(runtime.totalMemory()), byteCountToDisplaySize(runtime.totalMemory() - runtime.freeMemory()));
     }
 
-    private void saveConfig()
-    {
-        config.save();
-        view.setRecentFiles(config.getRecentFiles());
-    }
-
     /** Util method for saving a queryfile. Opens dialog and asks for overwrite etc. */
     private boolean save(QueryFileModel file, boolean saveAs)
     {
@@ -397,7 +391,7 @@ class QueryeerController implements PropertyChangeListener
         model.fileSaved(file);
         config.appendRecentFile(file.getFile()
                 .getAbsolutePath());
-        saveConfig();
+        view.setRecentFiles(config.getRecentFiles());
         return true;
     }
 
@@ -537,13 +531,13 @@ class QueryeerController implements PropertyChangeListener
         {
             JOptionPane.showMessageDialog(view, "'" + recentFile.getAbsolutePath() + "' does not exists!", "File Not Found", JOptionPane.INFORMATION_MESSAGE);
             config.removeRecentFile(file);
-            saveConfig();
+            view.setRecentFiles(config.getRecentFiles());
             return;
         }
 
         newQueryAction(recentFile);
         config.appendRecentFile(file);
-        saveConfig();
+        view.setRecentFiles(config.getRecentFiles());
     }
 
     /** Exit action */
@@ -956,7 +950,6 @@ class QueryeerController implements PropertyChangeListener
                 return;
             }
 
-            boolean saveConfig = false;
             for (File selectedFile : fileChooser.getSelectedFiles())
             {
                 if (!model.select(selectedFile.getAbsolutePath()))
@@ -964,8 +957,8 @@ class QueryeerController implements PropertyChangeListener
                     selectedFile = new File(StringUtils.trim(selectedFile.getAbsolutePath()));
                     newQueryAction(selectedFile);
                     config.appendRecentFile(selectedFile.getAbsolutePath());
-                    saveConfig = true;
                 }
+                view.setRecentFiles(config.getRecentFiles());
             }
 
             // Store last selected path if differs
@@ -974,11 +967,7 @@ class QueryeerController implements PropertyChangeListener
             {
                 config.setLastOpenPath(fileChooser.getCurrentDirectory()
                         .getAbsolutePath());
-                saveConfig = true;
-            }
-            if (saveConfig)
-            {
-                saveConfig();
+                config.save();
             }
         }
     }

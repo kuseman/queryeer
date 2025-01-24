@@ -1,41 +1,38 @@
 package com.queryeer;
 
+import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
-import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
-import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.IntStream;
 
 import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
@@ -43,7 +40,6 @@ import javax.swing.Action;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
-import javax.swing.DefaultListModel;
 import javax.swing.Icon;
 import javax.swing.InputMap;
 import javax.swing.JButton;
@@ -64,10 +60,8 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
-import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
-import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -86,7 +80,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.QueryeerController.ViewAction;
-import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.Subscribe;
@@ -131,7 +124,7 @@ class QueryeerView extends JFrame
     private final JMenuItem saveItem;
     private final JMenuItem saveAsItem;
     private final JMenuItem exitItem;
-    private final JMenu recentFiles;
+    private final JMenu recentFilesMenu;
     private final JMenu windowMenu;
 
     private final JToolBar toolBar;
@@ -145,6 +138,7 @@ class QueryeerView extends JFrame
 
     private boolean suppressChangeEvents = false;
 
+    private List<String> recentFiles = emptyList();
     private Consumer<String> openRecentFileConsumer;
     private Consumer<IQueryEngine> newQueryConsumer;
     private Consumer<ViewAction> actionHandler;
@@ -170,7 +164,7 @@ class QueryeerView extends JFrame
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.model.addPropertyChangeListener(queryeerModelListener);
 
-        this.quickWindowsWindow = new QuickWindows(this, model);
+        this.quickWindowsWindow = new QuickWindows();
 
         List<IOutputExtension> actualOutputExtensions = new ArrayList<>(outputExtensions);
         List<IOutputFormatExtension> actualOutputFormatExtensions = new ArrayList<>(outputFormatExtensions);
@@ -288,7 +282,7 @@ class QueryeerView extends JFrame
                 .getMenuShortcutKeyMaskEx()));
         saveAsItem = new JMenuItem(saveAsAction);
         saveAsItem.setText("Save As ...");
-        recentFiles = new JMenu("Recent Files");
+        recentFilesMenu = new JMenu("Recent Files");
 
         exitItem = new JMenuItem(exitAction);
         exitItem.setText("Exit");
@@ -298,7 +292,7 @@ class QueryeerView extends JFrame
         fileMenu.add(saveItem);
         fileMenu.add(saveAsItem);
         fileMenu.add(new JSeparator());
-        fileMenu.add(recentFiles);
+        fileMenu.add(recentFilesMenu);
         fileMenu.add(new JSeparator());
         fileMenu.add(exitItem);
 
@@ -419,10 +413,7 @@ class QueryeerView extends JFrame
                         {
                             return;
                         }
-
-                        quickWindowsWindow.setLocationRelativeTo(QueryeerView.this);
                         quickWindowsWindow.setVisible(true);
-                        quickWindowsWindow.requestFocusInWindow();
                     }
                 });
 
@@ -1070,12 +1061,17 @@ class QueryeerView extends JFrame
 
     void setRecentFiles(List<String> recentFiles)
     {
-        this.recentFiles.removeAll();
+        this.recentFiles = recentFiles;
+        this.recentFilesMenu.removeAll();
         for (String file : recentFiles)
         {
             JMenuItem item = new JMenuItem(recentFileAction);
             item.setText(file);
-            this.recentFiles.add(item);
+            this.recentFilesMenu.add(item);
+            if (this.recentFilesMenu.getItemCount() >= 10)
+            {
+                break;
+            }
         }
     }
 
@@ -1319,220 +1315,117 @@ class QueryeerView extends JFrame
     }
 
     /** Quick windows window. */
-    static class QuickWindows extends JWindow
+    class QuickWindows extends DialogUtils.QuickSearchWindow<QuickWindows.ListItem>
     {
-        private final QueryeerModel model;
-        private final DefaultListModel<QueryFileModel> filesModel;
-        private final JTextField search;
-
-        public QuickWindows(Window parent, QueryeerModel model)
+        QuickWindows()
         {
-            super(parent);
-            this.model = model;
-
-            KeyListener closeListener = new KeyAdapter()
-            {
-                @Override
-                public void keyTyped(KeyEvent e)
-                {
-                    if (e.getKeyChar() == KeyEvent.VK_ESCAPE)
-                    {
-                        setVisible(false);
-                    }
-                }
-            };
-
-            JList<QueryFileModel> files = new JList<>();
-            files.addKeyListener(closeListener);
-            files.addKeyListener(new KeyAdapter()
-            {
-                @Override
-                public void keyPressed(KeyEvent e)
-                {
-                    if (e.getKeyChar() == KeyEvent.VK_ENTER)
-                    {
-                        QueryFileModel selectedValue = files.getSelectedValue();
-                        if (selectedValue != null)
-                        {
-                            model.setSelectedFile(selectedValue);
-                            setVisible(false);
-                        }
-                    }
-                    else if (search.getFont()
-                            .canDisplay(e.getKeyChar()))
-                    {
-                        search.setText(search.getText() + e.getKeyChar());
-                        search.requestFocusInWindow();
-                    }
-                    super.keyPressed(e);
-                }
-            });
-            files.addMouseListener(new MouseAdapter()
-            {
-                @Override
-                public void mouseClicked(MouseEvent e)
-                {
-                    if (SwingUtilities.isLeftMouseButton(e)
-                            && e.getClickCount() == 2)
-                    {
-                        QueryFileModel selectedValue = files.getSelectedValue();
-                        if (selectedValue != null)
-                        {
-                            model.setSelectedFile(selectedValue);
-                            setVisible(false);
-                        }
-                    }
-                    super.mouseClicked(e);
-                }
-            });
-            files.setCellRenderer(new DefaultListCellRenderer()
-            {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
-                {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    QueryFileModel file = (QueryFileModel) value;
-                    setText((file.isDirty() ? "*"
-                            : "") + file.getFile()
-                                    .getName());
-                    return this;
-                }
-            });
-
-            filesModel = new DefaultListModel<>();
-            files.setModel(filesModel);
-
-            search = new JTextField();
-            search.addKeyListener(closeListener);
-            search.addKeyListener(new KeyAdapter()
-            {
-                @Override
-                public void keyPressed(KeyEvent e)
-                {
-                    if (e.getKeyCode() == KeyEvent.VK_UP
-                            || e.getKeyCode() == KeyEvent.VK_DOWN)
-                    {
-                        files.requestFocusInWindow();
-                        if (files.getSelectedValue() == null)
-                        {
-                            files.setSelectedIndex(0);
-                        }
-                        else
-                        {
-                            int index = files.getSelectedIndex();
-                            index += e.getKeyCode() == KeyEvent.VK_UP ? -1
-                                    : 1;
-                            files.setSelectedIndex(index);
-                        }
-                    }
-                }
-            });
-            search.getDocument()
-                    .addDocumentListener(new ADocumentListenerAdapter()
-                    {
-                        @Override
-                        protected void update()
-                        {
-                            String text = search.getText();
-                            if (isBlank(text))
-                            {
-                                files.setModel(filesModel);
-                                return;
-                            }
-
-                            DefaultListModel<QueryFileModel> filteredModel = new DefaultListModel<>();
-                            filteredModel.addAll(IntStream.range(0, filesModel.getSize())
-                                    .mapToObj(f -> filesModel.get(f))
-                                    .filter(f -> StringUtils.containsIgnoreCase(f.getFile()
-                                            .getName(), text))
-                                    .toList());
-                            files.setModel(filteredModel);
-                        }
-                    });
-
-            JButton cornerButton = new JButton("#");
-            MouseAdapter cornerButtonAdapter = new MouseAdapter()
-            {
-                private Point origPos;
-
-                @Override
-                public void mouseDragged(MouseEvent e)
-                {
-                    Point newPos = e.getPoint();
-                    SwingUtilities.convertPointToScreen(newPos, cornerButton);
-                    int xdelta = newPos.x - origPos.x;
-                    int ydelta = newPos.y - origPos.y;
-                    Window wind = QuickWindows.this;
-                    int w = wind.getWidth();
-                    if (newPos.x >= wind.getX())
-                    {
-                        w += xdelta;
-                    }
-                    int h = wind.getHeight();
-                    if (newPos.y >= wind.getY())
-                    {
-                        h += ydelta;
-                    }
-                    wind.setSize(w, h);
-                    origPos.setLocation(newPos);
-                }
-
-                @Override
-                public void mousePressed(MouseEvent e)
-                {
-                    origPos = e.getPoint();
-                    SwingUtilities.convertPointToScreen(origPos, cornerButton);
-                }
-
-                @Override
-                public void mouseReleased(MouseEvent e)
-                {
-                    origPos = null;
-                }
-
-            };
-            cornerButton.addMouseListener(cornerButtonAdapter);
-            cornerButton.addMouseMotionListener(cornerButtonAdapter);
-            cornerButton.setCursor(Cursor.getPredefinedCursor(Cursor.NW_RESIZE_CURSOR));
-
-            JScrollPane sp = new JScrollPane(files, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
-            sp.setCorner(JScrollPane.LOWER_RIGHT_CORNER, cornerButton);
-
-            JPanel contentPane = new JPanel(new BorderLayout());
-            contentPane.add(search, BorderLayout.NORTH);
-            contentPane.add(sp, BorderLayout.CENTER);
-            setContentPane(contentPane);
-
-            pack();
-
-            setPreferredSize(new Dimension(200, 350));
-
-            addComponentListener(new ComponentAdapter()
-            {
-                @Override
-                public void componentShown(ComponentEvent e)
-                {
-                    search.requestFocusInWindow();
-                    super.componentShown(e);
-                }
-            });
+            super(QueryeerView.this);
         }
 
         @Override
-        public void setVisible(boolean b)
+        protected List<ListItem> getModel()
         {
-            if (b)
-            {
-                search.setText("");
-                filesModel.clear();
-                List<QueryFileModel> files = new ArrayList<>(model.getFiles());
-                files.sort((aa, bb) -> -Long.compare(aa.getLastActivity(), bb.getLastActivity()));
-                filesModel.addAll(files);
-                setSize(new Dimension(200, 350));
+            List<QueryFileModel> files = new ArrayList<>(model.getFiles());
+            files.sort((aa, bb) -> -Long.compare(aa.getLastActivity(), bb.getLastActivity()));
 
-                setLocationRelativeTo(getParent());
+            List<ListItem> filesModel = new ArrayList<>();
+
+            Set<String> openedFiles = new HashSet<>();
+            for (QueryFileModel file : files)
+            {
+                if (!file.isNew())
+                {
+                    openedFiles.add(file.getFile()
+                            .getAbsolutePath());
+                }
+                filesModel.add(new ListItem(file, null));
             }
-            super.setVisible(b);
+
+            if (!recentFiles.isEmpty())
+            {
+                filesModel.add(new ListItem(null, null));
+                for (String recentFile : recentFiles)
+                {
+                    // Don't show opened files in recent files view
+                    if (openedFiles.contains(recentFile))
+                    {
+                        continue;
+                    }
+                    filesModel.add(new ListItem(null, recentFile));
+                }
+            }
+
+            return filesModel;
+        }
+
+        @Override
+        protected void handleSelection(ListItem item)
+        {
+            if (item.queryFile != null)
+            {
+                model.setSelectedFile(item.queryFile);
+                setVisible(false);
+            }
+            else if (item.recentFile != null)
+            {
+                // Hide this before we call consumer in case the recent file don't exists
+                // and a dialog pops up on top
+                setVisible(false);
+                openRecentFileConsumer.accept(item.recentFile);
+            }
+        }
+
+        @Override
+        protected void render(JLabel label, ListItem item)
+        {
+            if (item.queryFile != null)
+            {
+                label.setText((item.queryFile.isDirty() ? "*"
+                        : "") + item.queryFile.getFile()
+                                .getName());
+            }
+            else if (item.recentFile != null)
+            {
+                File file = new File(item.recentFile);
+                label.setText(file.getName() + " (" + file.getParent() + ")");
+            }
+            else if (item.isRecentMarker())
+            {
+                label.setFont(label.getFont()
+                        .deriveFont(Font.BOLD));
+                label.setText("--- Recent Files ---");
+            }
+        }
+
+        @Override
+        protected boolean matches(String searchText, ListItem item)
+        {
+            // Always include the recent marker
+            if (item.isRecentMarker())
+            {
+                return true;
+            }
+            else if (item.queryFile != null
+                    && StringUtils.containsIgnoreCase(item.queryFile.getFile()
+                            .getName(), searchText))
+            {
+                return true;
+            }
+            else if (item.recentFile != null
+                    && StringUtils.containsIgnoreCase(item.recentFile, searchText))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        record ListItem(QueryFileModel queryFile, String recentFile)
+        {
+            boolean isRecentMarker()
+            {
+                return queryFile == null
+                        && recentFile == null;
+            }
         }
     }
 }
