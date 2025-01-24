@@ -2,6 +2,12 @@ CHANGELOG
 
 Queryeer
 
+v2.5.0
+fix: Register Queryeer base actions to registry.
+fix: Add show logs/tasks in window menu
+feat: Include recent files in quick windows popup
+fix: Add support for setting LAF from startup script
+
 v2.4.0
 feat: Add a quick windows window that appears when pressing F1 to quickly change between open tabs
 fix: Change logs dialog to show a table instead of text editor to easier dig around
