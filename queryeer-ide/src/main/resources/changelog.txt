@@ -2,6 +2,12 @@ CHANGELOG
 
 Queryeer
 
+v2.6.0
+feat: Add support for quick change of datasources similar to quick change of files. Triggered by F2 and is query engine implementation specific. JDBC implemented so far
+feat: Add project files into quick files dialog
+feat: Add support for disable JDBC connections to avoid trying to load databases on broken connections
+fix: Small UI fixes in JDBC quick properties
+
 v2.5.0
 fix: Register Queryeer base actions to registry.
 fix: Add show logs/tasks in window menu
