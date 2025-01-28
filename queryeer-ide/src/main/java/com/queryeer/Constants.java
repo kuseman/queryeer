@@ -1,13 +1,9 @@
 package com.queryeer;
 
-import static java.util.Arrays.asList;
-import static java.util.stream.Collectors.toList;
-
 import java.awt.Dimension;
 import java.awt.Image;
 import java.io.IOException;
 import java.util.List;
-import java.util.Objects;
 
 import javax.imageio.ImageIO;
 import javax.swing.Icon;
@@ -17,8 +13,12 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 /** Constants in Queryeer */
-public interface Constants
+public class Constants
 {
+    private Constants()
+    {
+    }
+
     public static final Dimension DEFAULT_DIALOG_SIZE = new Dimension(1000, 800);
     public static final Icon CHECK_CIRCLE_ICON = FontIcon.of(FontAwesome.CHECK_CIRCLE);
     public static final Icon PLAY_ICON = FontIcon.of(FontAwesome.PLAY);
@@ -36,23 +36,29 @@ public interface Constants
     static final Icon ARROWS_H = FontIcon.of(FontAwesome.ARROWS_H);
     static final Icon PARAGRAPH = FontIcon.of(FontAwesome.PARAGRAPH);
     static final Icon EDIT = FontIcon.of(FontAwesome.EDIT);
-    static final Icon COG = FontIcon.of(FontAwesome.COG);
+    public static final Icon COG = FontIcon.of(FontAwesome.COG);
     public static final int SCROLLBAR_WIDTH = ((Integer) UIManager.get("ScrollBar.width")).intValue();
-    public static final List<? extends Image> APPLICATION_ICONS = asList("icons8-database-administrator-48.png", "icons8-database-administrator-96.png").stream()
-            .map(name -> QueryeerView.class.getResource("/icons/" + name))
-            .map(stream ->
-            {
-                try
-                {
-                    return ImageIO.read(stream);
-                }
-                catch (IOException e)
-                {
-                    e.printStackTrace();
-                    return null;
-                }
-            })
-            .filter(Objects::nonNull)
-            .collect(toList());
 
+    public static final Image APPLICATION_ICON_48;
+    public static final Image APPLICATION_ICON_96;
+    public static final List<? extends Image> APPLICATION_ICONS;
+
+    static
+    {
+        Image icon48 = null;
+        Image icon96 = null;
+
+        try
+        {
+            icon48 = ImageIO.read(QueryeerView.class.getResource("/icons/icons8-database-administrator-48.png"));
+            icon96 = ImageIO.read(QueryeerView.class.getResource("/icons/icons8-database-administrator-96.png"));
+        }
+        catch (IOException e)
+        {
+            Main.LOGGER.error("Error reading application icons", e);
+        }
+        APPLICATION_ICON_48 = icon48;
+        APPLICATION_ICON_96 = icon96;
+        APPLICATION_ICONS = List.of(icon48, icon96);
+    }
 }

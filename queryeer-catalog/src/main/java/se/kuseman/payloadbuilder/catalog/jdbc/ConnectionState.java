@@ -164,7 +164,7 @@ class ConnectionState implements Closeable
         return abort;
     }
 
-    void afterQuery()
+    void reset()
     {
         abort = false;
         currentStatement = null;

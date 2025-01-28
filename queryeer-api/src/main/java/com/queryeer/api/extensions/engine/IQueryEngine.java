@@ -57,7 +57,7 @@ public interface IQueryEngine extends IExtension
      * Execute query NOTE! Is executed in a threaded fashion
      *
      * @param queryFile The query file "owning" the execution
-     * @param writer Writer that should be used for the result
+     * @param writer Writer that should be used for the result. {@see QueryeerOutputWriter}
      * @param query Query to execute. This is the current {@link IQueryFile}'s {@link IEditor}'s value. NOTE! This value is not necessarily a String but can also be a custom query object sent by
      * {@link ExecuteQueryEvent}..
      */

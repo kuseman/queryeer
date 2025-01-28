@@ -19,11 +19,10 @@ import javax.swing.SwingUtilities;
 import org.apache.commons.io.IOUtils;
 
 import com.queryeer.api.IQueryFile;
-
-import se.kuseman.payloadbuilder.api.OutputWriter;
+import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 
 /** Writer that writes object structure from a projection. */
-class TableOutputWriter implements OutputWriter
+class TableOutputWriter implements QueryeerOutputWriter
 {
     /** Current model */
     private Model model;
@@ -38,7 +37,7 @@ class TableOutputWriter implements OutputWriter
     private final Deque<String> currentField = new ArrayDeque<>();
 
     @Override
-    public void initResult(String[] columns)
+    public void initResult(String[] columns, Map<String, Object> resultMetaData)
     {
         // Print previous model row count
         if (model != null)
@@ -53,7 +52,7 @@ class TableOutputWriter implements OutputWriter
         // Need a sync call here else we will have races on fast queries where we append wrong models
         try
         {
-            SwingUtilities.invokeAndWait(() -> getTablesOutputComponent().addResult(model));
+            SwingUtilities.invokeAndWait(() -> getTablesOutputComponent().addResult(model, resultMetaData));
         }
         catch (InvocationTargetException | InterruptedException e)
         {
