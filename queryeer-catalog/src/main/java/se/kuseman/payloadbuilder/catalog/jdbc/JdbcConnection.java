@@ -267,6 +267,15 @@ public class JdbcConnection implements IPropertyAware
         }
     }
 
+    /** Test connection. */
+    @Property(
+            order = 11,
+            title = "Test Connection")
+    public void testConnection()
+    {
+        JdbcConnectionsModel.instance.validate(this);
+    }
+
     boolean hasCredentials()
     {
         return !isBlank(username)

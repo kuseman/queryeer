@@ -6,6 +6,7 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.Window;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.AbstractListModel;
 import javax.swing.JButton;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
 import com.queryeer.api.IQueryFile;
@@ -35,6 +37,11 @@ import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 @Inject
 class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 {
+    /**
+     * An ugly fix to be able to have a test button in JdbcConnection properties dialog. That dialog is built using a meta framework that introspects a POJO and we cannot inject services into that.
+     */
+    static JdbcConnectionsModel instance;
+
     private final List<JdbcConnection> connections = new ArrayList<>();
     /** {@link JdbcCatalogExtension} register it's reload button here so they all can be disabled upon load to avoid multiple reloads simultaneously */
     private final List<JButton> reloadButtons = new ArrayList<>();
@@ -47,6 +54,11 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
         this.cryptoService = requireNonNull(cryptoService, "cryptoService");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        if (instance != null)
+        {
+            throw new IllegalArgumentException("JdbcConnectionsModel should only be instantiated once");
+        }
+        instance = this;
     }
 
     void registerReloadButton(JButton button)
@@ -115,6 +127,86 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
         return CredentialUtils.getCredentials(connectionDescription, prefilledUsername, readOnlyUsername, validationHandler);
     }
 
+    protected void validate(JdbcConnection connection)
+    {
+        String url = connection.getJdbcURL();
+        String username = connection.getUsername();
+
+        Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                .getActiveWindow();
+
+        if (isBlank(url)
+                || isBlank(username))
+        {
+            JOptionPane.showMessageDialog(activeWindow, "URL and Username must be set to test connection", "Enter URL/Username", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String password = connection.getPassword();
+        // Password less connection, ask for password
+        boolean readOnlyPassword = true;
+        if (isBlank(password))
+        {
+            readOnlyPassword = false;
+        }
+        // .. else decrypt it
+        else
+        {
+            password = cryptoService.decryptString(password);
+            if (isBlank(password))
+            {
+                return;
+            }
+        }
+
+        if (CredentialUtils.getCredentials(connection.toString(), username, password, true, readOnlyPassword, getValidationHandler(connection)) != null)
+        {
+            JOptionPane.showMessageDialog(activeWindow, "Connection to " + connection.getName() + " established!", "Test Success", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+
+    private ValidationHandler getValidationHandler(JdbcConnection connection)
+    {
+        return new ValidationHandler()
+        {
+            private String message;
+            private AtomicReference<char[]> prevRuntimePassword = new AtomicReference<>();
+
+            @Override
+            public boolean validate(String username, char[] password)
+            {
+                prevRuntimePassword.set(connection.getRuntimePassword());
+                connection.setRuntimePassword(password);
+                try (java.sql.Connection con = createConnection(connection))
+                {
+                    return true;
+                }
+                catch (Exception e)
+                {
+                    message = e.getMessage();
+                    return false;
+                }
+                finally
+                {
+                    // Restore previous password even if success to set it the correct way after dialog is closed
+                    connection.setRuntimePassword(prevRuntimePassword.get());
+                }
+            }
+
+            @Override
+            public void validationCanceled()
+            {
+                connection.setRuntimePassword(prevRuntimePassword.get());
+            }
+
+            @Override
+            public String getFailureMessage()
+            {
+                return message;
+            }
+        };
+    }
+
     /**
      * Prepares connection before usage. Decrypts encrypted passwords or ask for credentials if missing etc. NOTE! Pops UI dialogs if needed
      *
@@ -141,44 +233,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
                 return false;
             }
 
-            Credentials credentials = getCredentials(connection.toString(), connection.getUsername(), true, new ValidationHandler()
-            {
-                private String message;
-                private AtomicReference<char[]> prevRuntimePassword = new AtomicReference<>();
-
-                @Override
-                public boolean validate(String username, char[] password)
-                {
-                    prevRuntimePassword.set(connection.getRuntimePassword());
-                    connection.setRuntimePassword(password);
-                    try (java.sql.Connection con = createConnection(connection))
-                    {
-                        return true;
-                    }
-                    catch (Exception e)
-                    {
-                        message = e.getMessage();
-                        return false;
-                    }
-                    finally
-                    {
-                        // Restore previous password even if success to set it the correct way after dialog is closed
-                        connection.setRuntimePassword(prevRuntimePassword.get());
-                    }
-                }
-
-                @Override
-                public void validationCanceled()
-                {
-                    connection.setRuntimePassword(prevRuntimePassword.get());
-                }
-
-                @Override
-                public String getFailureMessage()
-                {
-                    return message;
-                }
-            });
+            Credentials credentials = getCredentials(connection.toString(), connection.getUsername(), true, getValidationHandler(connection));
             if (credentials == null)
             {
                 return false;
@@ -207,10 +262,10 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 
     java.sql.Connection createConnection(JdbcConnection connection) throws SQLException
     {
-        JdbcDatabase queryeerDatabase = databaseProvider.getDatabase(connection.getJdbcURL());
+        JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(connection.getJdbcURL());
         try
         {
-            return queryeerDatabase.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(connection.getRuntimePassword()));
+            return jdbcDatabase.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(connection.getRuntimePassword()));
         }
         catch (Exception e)
         {
