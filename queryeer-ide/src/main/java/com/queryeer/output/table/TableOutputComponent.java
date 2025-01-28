@@ -1,11 +1,15 @@
 package com.queryeer.output.table;
 
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
@@ -18,6 +22,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import javax.swing.AbstractAction;
@@ -26,6 +31,7 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultRowSorter;
 import javax.swing.Icon;
 import javax.swing.InputMap;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JMenu;
@@ -37,7 +43,7 @@ import javax.swing.JPopupMenu.Separator;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
@@ -45,6 +51,7 @@ import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TableModelEvent;
 
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.fife.rsta.ui.search.FindDialog;
 import org.fife.rsta.ui.search.SearchEvent;
@@ -61,6 +68,7 @@ import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.dialog.ValueDialog;
+import com.queryeer.dialog.ValueDialog.Format;
 
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
@@ -70,7 +78,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private final IQueryFile queryFile;
     private final TableActionsConfigurable tableActionsConfigurable;
     private final List<ITableContextMenuActionFactory> contextMenuActionFactories;
-    private final List<Table> tables = new ArrayList<>();
+    private final List<TableComponent> tables = new ArrayList<>();
     private final TableFindDialog findDialog;
     private final IOutputExtension extension;
 
@@ -78,6 +86,56 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private Table lastClickedTable;
     private int lastClickedTableRow;
     private int lastClickedTableColumn;
+
+    class TableComponent extends JPanel
+    {
+        private final Table table;
+
+        TableComponent(Table table, Map<String, Object> resultMetaData)
+        {
+            this.table = table;
+            setLayout(new BorderLayout());
+
+            // Add meta data panel on top of table if present
+            if (!MapUtils.isEmpty(resultMetaData))
+            {
+                JPanel metaPanel = new JPanel(new GridBagLayout());
+                // Restrict the height
+                metaPanel.setMaximumSize(new Dimension(100, 18));
+
+                JTextField value = new JTextField();
+                value.setBackground(Color.WHITE);
+                value.setEditable(false);
+                value.setText(resultMetaData.entrySet()
+                        .stream()
+                        .map(e -> e.getKey() + ": " + e.getValue())
+                        .collect(joining(", ")));
+
+                GridBagConstraints gbc = new GridBagConstraints();
+                gbc.gridx = 0;
+                gbc.gridy = 0;
+                gbc.weightx = 1.0d;
+                gbc.anchor = GridBagConstraints.WEST;
+                gbc.fill = GridBagConstraints.HORIZONTAL;
+
+                metaPanel.add(value, gbc);
+
+                JButton showValue = new JButton("...");
+                showValue.addActionListener(l -> ValueDialog.showValueDialog("Result Set Meta Data", resultMetaData, Format.JSON));
+
+                gbc = new GridBagConstraints();
+                gbc.gridx = 1;
+                gbc.gridy = 0;
+                gbc.anchor = GridBagConstraints.WEST;
+                gbc.fill = GridBagConstraints.NONE;
+
+                metaPanel.add(showValue, gbc);
+
+                add(metaPanel, BorderLayout.NORTH);
+            }
+            add(new JScrollPane(table), BorderLayout.CENTER);
+        }
+    }
 
     TableOutputComponent(IQueryFile queryFile, IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable)
     {
@@ -166,7 +224,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 int tableIndex = 0;
                 for (int i = 0; i < tables.size(); i++)
                 {
-                    Table table = tables.get(i);
+                    TableComponent table = tables.get(i);
                     if (table == findDialog.currentTable)
                     {
                         tableIndex = i;
@@ -181,9 +239,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     int startCol = findDialog.currentCol;
                     for (int i = tableIndex; i < tables.size(); i++)
                     {
-                        Table table = tables.get(i);
-                        int rowCount = table.getRowCount();
-                        int colCount = table.getColumnCount();
+                        TableComponent tc = tables.get(i);
+                        int rowCount = tc.table.getRowCount();
+                        int colCount = tc.table.getColumnCount();
 
                         for (int row = startRow; row < rowCount; row++)
                         {
@@ -195,22 +253,22 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                                     continue;
                                 }
 
-                                Object value = table.getValueAt(row, col);
+                                Object value = tc.table.getValueAt(row, col);
                                 if (!match(value, context, pattern))
                                 {
                                     continue;
                                 }
 
                                 // Mark for next find
-                                findDialog.currentTable = table;
+                                findDialog.currentTable = tc;
                                 findDialog.currentRow = row;
                                 findDialog.currentCol = col;
 
-                                Rectangle bounds = new Rectangle(table.getBounds());
-                                table.scrollRectToVisible(bounds);
+                                Rectangle bounds = new Rectangle(tc.table.getBounds());
+                                tc.table.scrollRectToVisible(bounds);
 
-                                table.changeSelection(row, col, false, false);
-                                table.scrollRectToVisible(new Rectangle(table.getCellRect(row, col, true)));
+                                tc.table.changeSelection(row, col, false, false);
+                                tc.table.scrollRectToVisible(new Rectangle(tc.table.getCellRect(row, col, true)));
                                 return;
                             }
                             startCol = 0;
@@ -260,11 +318,11 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         findDialog.currentTable = null;
 
         // Remove listeners
-        for (JTable table : tables)
+        for (TableComponent tc : tables)
         {
-            table.setTableHeader(null);
-            Model model = (Model) table.getModel();
-            model.removeTableModelListener(table);
+            tc.table.setTableHeader(null);
+            Model model = (Model) tc.table.getModel();
+            model.removeTableModelListener(tc.table);
         }
 
         tables.clear();
@@ -281,7 +339,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     @Override
     public void selectRow(int tableIndex, int row)
     {
-        Table table = tables.get(tableIndex);
+        Table table = tables.get(tableIndex).table;
 
         Rectangle bounds = new Rectangle(table.getBounds());
         table.scrollRectToVisible(bounds);
@@ -598,7 +656,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     }
 
     /** Add new result set to this instance */
-    synchronized void addResult(final Model model)
+    synchronized void addResult(final Model model, Map<String, Object> resultMetaData)
     {
         final Table resultTable = createTable();
         model.addTableModelListener(e ->
@@ -621,29 +679,30 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         {
             resizeLastTablesColumns();
         }
-        tables.add(resultTable);
+        tables.add(new TableComponent(resultTable, resultMetaData));
         int size = tables.size();
         removeAll();
 
         // 8 rows plus header plus spacing
-        int tablHeight = resultTable.getRowHeight() * 9 + 10;
+        int tablHeight = resultTable.getRowHeight() * 9 + 10 + (!MapUtils.isEmpty(resultMetaData) ? 18
+                : 0);
 
         Component parent = null;
 
         for (int i = 0; i < size; i++)
         {
-            JTable table = tables.get(i);
-            JTable prevTable = i > 0 ? tables.get(i - 1)
+            TableComponent table = tables.get(i);
+            TableComponent prevTable = i > 0 ? tables.get(i - 1)
                     : null;
             int prevTableHeight = -1;
             if (i > 0)
             {
-                JScrollBar horizontalScrollBar = ((JScrollPane) prevTable.getParent()
+                JScrollBar horizontalScrollBar = ((JScrollPane) prevTable.table.getParent()
                         .getParent()).getHorizontalScrollBar();
 
                 // The least of 8 rows or actual rows in prev table
                 // CSOFF
-                prevTableHeight = Math.min((prevTable.getRowCount() + 1) * prevTable.getRowHeight() + 15, tablHeight);
+                prevTableHeight = Math.min((prevTable.table.getRowCount() + 1) * prevTable.table.getRowHeight() + 15 + prevTable.getHeight(), tablHeight);
                 // CSON
                 if (horizontalScrollBar.isVisible())
                 {
@@ -661,11 +720,11 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 JSplitPane sp = new JSplitPane();
                 sp.setBorder(BorderFactory.createEmptyBorder());
                 sp.setOrientation(JSplitPane.VERTICAL_SPLIT);
-                sp.setLeftComponent(new JScrollPane(parent));
+                sp.setLeftComponent(parent);
                 // Adjust prev tables height
                 sp.getLeftComponent()
                         .setPreferredSize(new Dimension(0, prevTableHeight));
-                sp.setRightComponent(new JScrollPane(table));
+                sp.setRightComponent(table);
                 sp.getRightComponent()
                         .setPreferredSize(new Dimension(0, tablHeight));
 
@@ -682,11 +741,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 sp.setOrientation(JSplitPane.VERTICAL_SPLIT);
 
                 // Adjust prev tables height
-                if (rc instanceof JScrollPane)
+                if (rc instanceof TableComponent)
                 {
-                    JScrollPane scrollPane = new JScrollPane(prevTable);
-                    scrollPane.setBorder(BorderFactory.createEmptyBorder());
-                    sp.setLeftComponent(scrollPane);
+                    sp.setLeftComponent(prevTable);
                     sp.getLeftComponent()
                             .setPreferredSize(new Dimension(0, prevTableHeight));
                 }
@@ -696,9 +753,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                             .setPreferredSize(new Dimension(0, prevTableHeight));
                     sp.setLeftComponent(rc);
                 }
-                JScrollPane scrollPane = new JScrollPane(table);
-                scrollPane.setBorder(BorderFactory.createEmptyBorder());
-                sp.setRightComponent(scrollPane);
+                sp.setRightComponent(table);
                 sp.getRightComponent()
                         .setPreferredSize(new Dimension(0, tablHeight));
 
@@ -709,25 +764,19 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 prevSp.setRightComponent(sp);
             }
         }
-        add(new JScrollPane(parent), BorderLayout.CENTER);
+        add(parent instanceof JSplitPane ? new JScrollPane(parent)
+                : parent, BorderLayout.CENTER);
     }
 
     void resizeLastTablesColumns()
     {
         // Resize last columns if not already done
         if (tables.size() > 0
-                && !tables.get(tables.size() - 1).columnsAdjusted.get())
+                && !tables.get(tables.size() - 1).table.columnsAdjusted.get())
         {
-            Table lastTable = tables.get(tables.size() - 1);
+            Table lastTable = tables.get(tables.size() - 1).table;
             lastTable.adjustColumns();
         }
-    }
-
-    int getTotalRowCount()
-    {
-        return tables.stream()
-                .mapToInt(JTable::getRowCount)
-                .sum();
     }
 
     private static class TableSelectedRow implements SelectedRow
@@ -811,7 +860,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 
     private class TableFindDialog extends FindDialog
     {
-        private Table currentTable;
+        private TableComponent currentTable;
         private int currentCol;
         private int currentRow;
         private boolean initialSearch = true;
@@ -846,11 +895,11 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 return;
             }
             currentCol++;
-            if (currentCol >= currentTable.getColumnCount())
+            if (currentCol >= currentTable.table.getColumnCount())
             {
                 currentCol = 0;
                 currentRow++;
-                if (currentRow >= currentTable.getRowCount())
+                if (currentRow >= currentTable.table.getRowCount())
                 {
                     currentRow = 0;
 
@@ -873,13 +922,13 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 currentCol = 0;
                 initialSearch = true;
                 // Start search from current selection
-                for (Table table : tables)
+                for (TableComponent tc : tables)
                 {
-                    if (table.hasFocus())
+                    if (tc.table.hasFocus())
                     {
-                        currentTable = table;
-                        currentRow = table.getSelectedRow();
-                        currentCol = table.getSelectedColumn();
+                        currentTable = tc;
+                        currentRow = tc.table.getSelectedRow();
+                        currentCol = tc.table.getSelectedColumn();
                         break;
                     }
                 }

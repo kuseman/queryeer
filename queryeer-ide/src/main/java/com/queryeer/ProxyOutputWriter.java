@@ -2,7 +2,13 @@ package com.queryeer;
 
 import static java.util.Objects.requireNonNull;
 
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+
+import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.api.execution.Decimal;
@@ -10,7 +16,7 @@ import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
 import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
 
-class ProxyOutputWriter implements OutputWriter
+class ProxyOutputWriter implements QueryeerOutputWriter
 {
     private List<OutputWriter> writers;
 
@@ -29,6 +35,29 @@ class ProxyOutputWriter implements OutputWriter
     public void close()
     {
         writers.forEach(w -> w.close());
+    }
+
+    @Override
+    public void initResult(String[] columns, Map<String, Object> resultMetaData)
+    {
+        if (!resultMetaData.containsKey(METADATA_TIMESTAMP))
+        {
+            resultMetaData = new LinkedHashMap<>(resultMetaData);
+            resultMetaData.put(METADATA_TIMESTAMP, DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(ZonedDateTime.now()));
+        }
+
+        final Map<String, Object> metaMap = resultMetaData;
+        writers.forEach(w ->
+        {
+            if (w instanceof QueryeerOutputWriter qw)
+            {
+                qw.initResult(columns, metaMap);
+            }
+            else
+            {
+                w.initResult(columns);
+            }
+        });
     }
 
     @Override

@@ -2,6 +2,8 @@ package com.queryeer;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.Taskbar;
+import java.awt.Taskbar.Feature;
 import java.io.File;
 import java.io.IOException;
 
@@ -27,13 +29,14 @@ import com.queryeer.api.service.ITemplateService;
 /** Main of Queryeer */
 public class Main
 {
-    private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
+    static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
 
     /** Main */
     public static void main(String[] args) throws Exception
     {
         /* Trap CMD-q on OSX to properly run shutdown hooks etc. */
         System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
+        System.setProperty("apple.awt.application.name", "Queryeer");
 
         /* Set mnemontics for option pane */
         UIManager.put("OptionPane.yesButtonMnemonic", "89");
@@ -82,6 +85,7 @@ public class Main
         // Start all Swing applications on the EDT.
         SwingUtilities.invokeLater(() ->
         {
+            setTaskBarInfo();
             if (System.getProperty("devEnv") != null)
             {
                 RepaintManager.setCurrentManager(new CheckThreadViolationRepaintManager());
@@ -89,6 +93,21 @@ public class Main
             controller.getView()
                     .setVisible(true);
         });
+    }
+
+    private static void setTaskBarInfo()
+    {
+        if (!Taskbar.isTaskbarSupported())
+        {
+            return;
+        }
+
+        if (Taskbar.getTaskbar()
+                .isSupported(Feature.ICON_IMAGE))
+        {
+            Taskbar.getTaskbar()
+                    .setIconImage(Constants.APPLICATION_ICON_48);
+        }
     }
 
     private static void wire(File etcFolder, File backupFolder, ServiceLoader serviceLoader) throws IOException, InstantiationException, IllegalAccessException

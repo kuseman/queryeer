@@ -5,12 +5,6 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
-import java.awt.Window;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -18,26 +12,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JScrollPane;
-import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
-import javax.swing.event.ListDataEvent;
-import javax.swing.event.ListDataListener;
-import javax.swing.tree.TreeSelectionModel;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -49,27 +30,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.api.IQueryFile;
-import com.queryeer.api.QueryFileMetaData;
-import com.queryeer.api.component.AutoCompletionComboBox;
 import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
-import com.queryeer.api.component.QueryeerTree;
-import com.queryeer.api.component.QueryeerTree.RegularNode;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.IEditorFactory;
-import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
-import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.extensions.engine.IQueryEngine;
+import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
-import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.ConnectionNode;
-import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabaseNode;
+import se.kuseman.payloadbuilder.api.utils.MapUtils;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 
@@ -83,239 +58,45 @@ class JdbcQueryEngine implements IQueryEngine
             .namingPattern("JdbcQueryEngine#-%d")
             .build());
 
-    private final CatalogCrawlService crawlService;
     private final JdbcConnectionsModel connectionsModel;
-    private final JdbcConnectionsTreeModel connectionsTreeModel;
     private final Icons icons;
     private final IEventBus eventBus;
-    private final IQueryFileProvider queryFileProvider;
-    private final DatabaseProvider databaseProvider;
     private final IEditorFactory editorFactory;
     private final DatasourcesQuickSearchModel datasourcesQuickSearchModel;
+    private final JdbcEngineQuickPropertiesComponent quickProperties;
 
-    private JPanel quickProperties;
-    private JTextField currentConnection;
-    private JComboBox<String> databases;
-    private DefaultComboBoxModel<String> databasesModel;
-    private boolean suppressEvents = false;
-
-    JdbcQueryEngine(CatalogCrawlService crawlService, IQueryFileProvider queryFileProvider, Icons icons, JdbcConnectionsModel connectionsModel, DatabaseProvider databaseProvider, IEventBus eventBus,
-            IEditorFactory editorFactory, DatasourcesQuickSearchModel datasourcesQuickSearchModel)
+    //@formatter:off
+    JdbcQueryEngine(
+            CatalogCrawlService crawlService,
+            IQueryFileProvider queryFileProvider,
+            Icons icons,
+            JdbcConnectionsModel connectionsModel,
+            DatabaseProvider databaseProvider,
+            IEventBus eventBus,
+            IEditorFactory editorFactory,
+            DatasourcesQuickSearchModel datasourcesQuickSearchModel)
     {
-        this.crawlService = requireNonNull(crawlService, "crawlService");
-        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
+        //@formatter:on
         this.icons = requireNonNull(icons, "icons");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
-        this.connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, databaseProvider, node -> newQuery(node));
         this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
+        //@formatter:off
+        this.quickProperties = new JdbcEngineQuickPropertiesComponent(
+                this,
+                icons,
+                requireNonNull(queryFileProvider, "queryFileProvider"),
+                connectionsModel,
+                eventBus,
+                requireNonNull(databaseProvider, "databaseProvider"),
+                requireNonNull(crawlService, "crawlService"));
+        //@formatter:on
     }
 
     @Override
     public Component getQuickPropertiesComponent()
     {
-        if (quickProperties == null)
-        {
-            quickProperties = new JPanel();
-            quickProperties.setLayout(new GridBagLayout());
-
-            databases = new JComboBox<>();
-            databases.setRenderer(new DefaultListCellRenderer()
-            {
-                @Override
-                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
-                {
-                    JLabel label = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                    label.setIcon(icons.database);
-                    return label;
-                }
-            });
-            databases.setMaximumRowCount(40);
-            databases.addItemListener(l ->
-            {
-                if (suppressEvents)
-                {
-                    return;
-                }
-                IQueryFile currentFile = queryFileProvider.getCurrentFile();
-                if (l.getItem() instanceof String
-                        && currentFile != null)
-                {
-                    JdbcEngineState engineState = currentFile.getEngineState();
-                    ConnectionState state = engineState.connectionState;
-
-                    if (state != null)
-                    {
-                        // TODO: Do not run this on EDT
-                        state.setDatabaseOnConnection((String) l.getItem(), currentFile);
-                        setStatus(currentFile, state);
-                    }
-
-                    engineState.resetParser();
-
-                    // Re-parse content when we switch database
-                    if (currentFile.getEditor() instanceof ITextEditor textEditor)
-                    {
-                        textEditor.parse();
-                    }
-                }
-            });
-
-            databases.setEditable(false);
-            databasesModel = new DefaultComboBoxModel<>();
-            databases.setModel(databasesModel);
-            AutoCompletionComboBox.enable(databases);
-
-            currentConnection = new JTextField("");
-            currentConnection.setEditable(false);
-
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.gridx = 0;
-            gbc.gridy = 0;
-            gbc.anchor = GridBagConstraints.WEST;
-            gbc.insets = new Insets(0, 0, 2, 2);
-            JPanel currentConnectionPanel = new JPanel(new GridBagLayout());
-            currentConnectionPanel.add(new JLabel("Server:")
-            {
-                {
-                    setFont(getFont().deriveFont(Font.BOLD));
-                }
-            }, gbc);
-
-            gbc = new GridBagConstraints();
-            gbc.gridx = 1;
-            gbc.gridy = 0;
-            gbc.weightx = 1.0d;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.anchor = GridBagConstraints.WEST;
-            currentConnectionPanel.add(currentConnection, gbc);
-
-            gbc = new GridBagConstraints();
-            gbc.gridx = 0;
-            gbc.gridy = 0;
-            gbc.gridwidth = 2;
-            gbc.weightx = 1.0d;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.anchor = GridBagConstraints.WEST;
-            quickProperties.add(currentConnectionPanel, gbc);
-
-            gbc = new GridBagConstraints();
-            gbc.gridx = 0;
-            gbc.gridy = 0;
-            gbc.weightx = 1.0d;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.anchor = GridBagConstraints.WEST;
-
-            JPanel databasesPanel = new JPanel(new GridBagLayout());
-            databasesPanel.add(databases, gbc);
-
-            JButton changeConnection = new JButton();
-            changeConnection.setMaximumSize(new Dimension(18, 18));
-            changeConnection.setMinimumSize(new Dimension(18, 18));
-            changeConnection.setPreferredSize(new Dimension(18, 18));
-            changeConnection.setIcon(icons.plug);
-            changeConnection.setToolTipText("Change Connection");
-
-            gbc = new GridBagConstraints();
-            gbc.gridx = 1;
-            gbc.gridy = 0;
-            gbc.fill = GridBagConstraints.NONE;
-            gbc.anchor = GridBagConstraints.WEST;
-            databasesPanel.add(changeConnection, gbc);
-
-            gbc = new GridBagConstraints();
-            gbc.gridx = 0;
-            gbc.gridy = 1;
-            gbc.gridwidth = 2;
-            gbc.weightx = 1.0d;
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.anchor = GridBagConstraints.WEST;
-            quickProperties.add(databasesPanel, gbc);
-
-            changeConnection.addActionListener(l ->
-            {
-                IQueryFile currentFile = queryFileProvider.getCurrentFile();
-                if (currentFile == null)
-                {
-                    return;
-                }
-
-                if (connectionsModel.getSize() == 0)
-                {
-                    eventBus.publish(new ShowOptionsEvent(JdbcConnectionsConfigurable.class));
-                    return;
-                }
-
-                Object[] values = connectionsModel.getConnections()
-                        .toArray();
-
-                Window activeWindow = javax.swing.FocusManager.getCurrentManager()
-                        .getActiveWindow();
-                JdbcConnection result = (JdbcConnection) JOptionPane.showInputDialog(activeWindow, "Connection", "Change Connection", JOptionPane.QUESTION_MESSAGE, null, values, values[0]);
-
-                if (result != null
-                        && connectionsModel.prepare(result, false))
-                {
-
-                    JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(result.getJdbcURL());
-                    JdbcEngineState engineState = currentFile.getEngineState();
-                    ConnectionState state = engineState.connectionState;
-
-                    // Close old state if any
-                    if (state != null)
-                    {
-                        EXECUTOR.execute(() -> IOUtils.closeQuietly(state));
-                    }
-
-                    // Create new state
-                    ConnectionState newState = new ConnectionState(result, jdbcDatabase);
-                    engineState.setConnectionState(newState);
-                    focus(currentFile);
-                    // Lazy load databases
-                    loadConnectionMetaData(engineState);
-                }
-            });
-
-            final QueryeerTree.QueryeerTreeModel treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
-            connectionsModel.addListDataListener(new ListDataListener()
-            {
-                @Override
-                public void intervalRemoved(ListDataEvent e)
-                {
-                }
-
-                @Override
-                public void intervalAdded(ListDataEvent e)
-                {
-                }
-
-                @Override
-                public void contentsChanged(ListDataEvent e)
-                {
-                    // Reload root when connections model changes
-                    treeModel.resetRoot();
-                }
-            });
-
-            QueryeerTree tree = new QueryeerTree(treeModel);
-            tree.getSelectionModel()
-                    .setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
-            tree.setHyperLinksEnabled(true);
-
-            gbc = new GridBagConstraints();
-            gbc.gridx = 0;
-            gbc.gridy = 2;
-            gbc.gridwidth = 2;
-            gbc.weightx = 1.0d;
-            gbc.weighty = 1.0d;
-            gbc.anchor = GridBagConstraints.WEST;
-            gbc.fill = GridBagConstraints.BOTH;
-            quickProperties.add(new JScrollPane(tree), gbc);
-            quickProperties.setPreferredSize(new Dimension(240, 75));
-        }
-
         return quickProperties;
     }
 
@@ -360,7 +141,7 @@ class JdbcQueryEngine implements IQueryEngine
             ConnectionState state = engineState.connectionState;
             JdbcDatabase jdbcDatabase;
             String queryText;
-            boolean closeState = false;
+            boolean temporaryState = false;
             ITextOutputComponent textOutput = queryFile.getOutputComponent(ITextOutputComponent.class);
 
             // Internal query
@@ -378,7 +159,7 @@ class JdbcQueryEngine implements IQueryEngine
                 {
                     jdbcDatabase = ctx.getJdbcDatabase();
                     state = new ConnectionState(ctx.getJdbcConnection(), ctx.getJdbcDatabase(), ctx.getDatabase());
-                    closeState = true;
+                    temporaryState = true;
                 }
                 // .. else use the current files connection etc.
                 else
@@ -392,7 +173,7 @@ class JdbcQueryEngine implements IQueryEngine
                 {
                     textOutput.appendWarning(QUERY_NOT_CONNECTED_MESSAGE, TextSelection.EMPTY);
 
-                    // If no connetions available, popup options dialog
+                    // If no connections available, popup options dialog
                     if (connectionsModel.getConnections()
                             .isEmpty())
                     {
@@ -405,117 +186,7 @@ class JdbcQueryEngine implements IQueryEngine
                 jdbcDatabase = state.getJdbcDatabase();
             }
 
-            MutableBoolean sqlError = new MutableBoolean(false);
-            List<String> batches = getBatches(jdbcDatabase, queryText);
-            try
-            {
-                Connection connection = state.getConnection();
-                jdbcDatabase.beforeExecuteQuery(connection, engineState);
-
-                // Only set status on regular queries
-                if (!closeState)
-                {
-                    setStatus(queryFile, state);
-                }
-                try (Statement statement = connection.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY))
-                {
-                    state.setCurrentStatement(statement);
-                    for (String batch : batches)
-                    {
-                        boolean first = true;
-                        while (true)
-                        {
-                            int rowCount = 0;
-                            long time = System.nanoTime();
-                            try (ResultSet rs = JdbcUtils.getNextResultSet(e ->
-                            {
-                                sqlError.setTrue();
-                                if (!jdbcDatabase.handleSQLException(queryFile, textOutput, e))
-                                {
-                                    textOutput.appendWarning(e.getMessage(), TextSelection.EMPTY);
-                                }
-                            }, textOutput.getTextWriter(), statement, batch, first))
-                            {
-                                first = false;
-                                // We're done!
-                                if (rs == null)
-                                {
-                                    break;
-                                }
-
-                                rowCount += writeResultSet(queryFile, rs, writer, engineState);
-                            }
-
-                            if (!state.isAbort())
-                            {
-                                long total = TimeUnit.MILLISECONDS.convert(System.nanoTime() - time, TimeUnit.NANOSECONDS);
-                                String output = String.format("%s%d row(s) affected, execution time: %s, server: %s", System.lineSeparator(), rowCount, DurationFormatUtils.formatDurationHMS(total),
-                                        "%s / %s".formatted(state.getJdbcConnection()
-                                                .getName(), state.getDatabase()));
-                                textOutput.getTextWriter()
-                                        .println(output);
-                            }
-                        }
-                    }
-                }
-
-                // Update properties component to reflect the catalog in connection
-                if (!closeState)
-                {
-                    state.setDatabaseFromConnection(queryFile);
-                }
-            }
-            catch (Exception e)
-            {
-                if (state.isAbort())
-                {
-                    return;
-                }
-
-                if (e instanceof SQLException sqle)
-                {
-                    sqlError.setTrue();
-                    if (jdbcDatabase.handleSQLException(queryFile, textOutput, sqle))
-                    {
-                        return;
-                    }
-                }
-
-                throw e;
-            }
-            finally
-            {
-                // Switch state of estimate, that is a one time action
-                if (engineState.estimateQueryPlan)
-                {
-                    engineState.estimateQueryPlan = false;
-                }
-
-                if (!closeState)
-                {
-                    state.afterQuery();
-                    final ConnectionState cs = state;
-                    SwingUtilities.invokeLater(() -> databasesModel.setSelectedItem(cs.getDatabase()));
-                }
-                else
-                {
-                    try
-                    {
-                        // Close the temporary state
-                        state.close();
-                    }
-                    catch (IOException e)
-                    {
-                        LOGGER.error("Error closing temporary state", e);
-                    }
-                }
-
-                // Focus messages
-                if (sqlError.isTrue())
-                {
-                    queryFile.focusMessages();
-                }
-            }
+            executeInternal(queryFile, engineState, textOutput, writer, jdbcDatabase, queryText, state, temporaryState);
         }
     }
 
@@ -557,58 +228,7 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void focus(IQueryFile queryFile)
     {
-        if (quickProperties == null
-                || databasesModel == null)
-        {
-            return;
-        }
-
-        suppressEvents = true;
-
-        try
-        {
-            databasesModel.removeAllElements();
-            databases.setEnabled(false);
-            JdbcEngineState engineState = queryFile.getEngineState();
-            ConnectionState state = engineState.connectionState;
-            if (currentConnection != null)
-            {
-                currentConnection.setText(state != null ? state.getJdbcConnection()
-                        .getName()
-                        : "");
-            }
-            if (state != null)
-            {
-                // Force a reparse when we focus a new file
-                if (queryFile.getEditor() instanceof ITextEditor textEditor)
-                {
-                    if (textEditor.getEditorKit() instanceof JdbcTextEditorKit kit)
-                    {
-                        kit.updateActionStatuses();
-                    }
-                    textEditor.parse();
-                }
-
-                if (state.getJdbcConnection()
-                        .getDatabases() != null)
-                {
-                    databasesModel.addAll(state.getJdbcConnection()
-                            .getDatabases());
-                    databasesModel.setSelectedItem(state.getDatabase());
-                    databases.setEnabled(true);
-                }
-
-                setStatus(queryFile, state);
-            }
-            else
-            {
-                queryFile.setMetaData(new QueryFileMetaData("<html><font color=\"#000000\"><b>Not connected</b></font></html>", ""));
-            }
-        }
-        finally
-        {
-            suppressEvents = false;
-        }
+        quickProperties.focus(queryFile);
     }
 
     @Override
@@ -624,14 +244,148 @@ class JdbcQueryEngine implements IQueryEngine
         return datasourcesQuickSearchModel;
     }
 
-    private int writeResultSet(IQueryFile queryFile, ResultSet rs, OutputWriter writer, JdbcEngineState state) throws SQLException, IOException
+    //@formatter:off
+    private void executeInternal(
+            IQueryFile queryFile,
+            JdbcEngineState engineState,
+            ITextOutputComponent textOutput,
+            OutputWriter writer,
+            JdbcDatabase jdbcDatabase,
+            String queryText,
+            ConnectionState state,
+            boolean temporaryState) throws Exception
+    {
+        //@formatter:on
+
+        MutableBoolean sqlError = new MutableBoolean(false);
+        List<String> batches = getBatches(jdbcDatabase, queryText);
+        try
+        {
+            // Reset the query before execution to reset abort flag etc.
+            state.reset();
+            Connection connection = state.getConnection();
+            jdbcDatabase.beforeExecuteQuery(connection, engineState);
+
+            // Only set status on regular queries
+            if (!temporaryState)
+            {
+                quickProperties.setStatus(queryFile, state);
+            }
+            try (Statement statement = connection.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY))
+            {
+                state.setCurrentStatement(statement);
+                for (String batch : batches)
+                {
+                    boolean first = true;
+                    while (true)
+                    {
+                        int rowCount = 0;
+                        long time = System.nanoTime();
+                        try (ResultSet rs = JdbcUtils.getNextResultSet(e ->
+                        {
+                            sqlError.setTrue();
+                            if (!jdbcDatabase.handleSQLException(queryFile, textOutput, e))
+                            {
+                                textOutput.appendWarning(e.getMessage(), TextSelection.EMPTY);
+                            }
+                        }, textOutput.getTextWriter(), statement, batch, first))
+                        {
+                            first = false;
+                            // We're done!
+                            if (rs == null)
+                            {
+                                break;
+                            }
+
+                            rowCount += writeResultSet(queryFile, connection, rs, writer, engineState);
+                        }
+
+                        if (!state.isAbort())
+                        {
+                            long total = TimeUnit.MILLISECONDS.convert(System.nanoTime() - time, TimeUnit.NANOSECONDS);
+                            String output = String.format("%s%d row(s) affected, execution time: %s, server: %s", System.lineSeparator(), rowCount, DurationFormatUtils.formatDurationHMS(total),
+                                    "%s / %s".formatted(state.getJdbcConnection()
+                                            .getName(), state.getDatabase()));
+                            textOutput.getTextWriter()
+                                    .println(output);
+                        }
+                    }
+                }
+            }
+
+            // Update properties component to reflect the database in connection
+            if (!temporaryState)
+            {
+                state.setDatabaseFromConnection(queryFile);
+            }
+        }
+        catch (Exception e)
+        {
+            // Don't show errors if the query was aborted
+            if (state.isAbort())
+            {
+                return;
+            }
+
+            if (e instanceof SQLException sqle)
+            {
+                sqlError.setTrue();
+                if (jdbcDatabase.handleSQLException(queryFile, textOutput, sqle))
+                {
+                    return;
+                }
+            }
+
+            throw e;
+        }
+        finally
+        {
+            // Switch state of estimate, that is a one time action
+            if (engineState.estimateQueryPlan)
+            {
+                engineState.estimateQueryPlan = false;
+            }
+
+            if (!temporaryState)
+            {
+                SwingUtilities.invokeLater(() -> quickProperties.setSelectedDatabase(state));
+            }
+            else
+            {
+                EXECUTOR.submit(() -> IOUtils.closeQuietly(state));
+            }
+
+            // Focus messages
+            if (sqlError.isTrue())
+            {
+                queryFile.focusMessages();
+            }
+        }
+    }
+
+    private int writeResultSet(IQueryFile queryFile, Connection connection, ResultSet rs, OutputWriter writer, JdbcEngineState state) throws SQLException, IOException
     {
         int rowCount = 0;
         Pair<int[], String[]> pair = getColumnsMeta(rs);
         int[] sqlTypes = pair.getKey();
         String[] columns = pair.getValue();
-        writer.initResult(columns);
 
+        if (writer instanceof QueryeerOutputWriter qwriter)
+        {
+            //@formatter:off
+            Map<String, Object> metaData = MapUtils.ofEntries(true,
+                    MapUtils.entry("Connection", state.connectionState.getJdbcConnection().getName()),
+                    MapUtils.entry("Database", state.getJdbcDatabase().usesSchemaAsDatabase() ? connection.getSchema()
+                            : connection.getCatalog())
+                    );
+            //@formatter:on
+
+            qwriter.initResult(columns, metaData);
+        }
+        else
+        {
+            writer.initResult(columns);
+        }
         int count = columns.length;
         boolean first = true;
 
@@ -674,57 +428,6 @@ class JdbcQueryEngine implements IQueryEngine
         writer.endResult();
 
         return rowCount;
-    }
-
-    private void newQuery(RegularNode node)
-    {
-        ConnectionState state = null;
-        if (node instanceof ConnectionNode cnode)
-        {
-            state = cnode.createState();
-        }
-        else if (node instanceof DatabaseNode dnode)
-        {
-            state = dnode.createState();
-        }
-
-        if (state != null
-                && connectionsModel.prepare(state.getJdbcConnection(), false))
-        {
-            JdbcEngineState engineState = new JdbcEngineState(this, state);
-            eventBus.publish(new NewQueryFileEvent(JdbcQueryEngine.this, engineState, null, false, null));
-            // Lazy load databases
-            loadConnectionMetaData(engineState);
-        }
-    }
-
-    private void loadConnectionMetaData(JdbcEngineState state)
-    {
-        if (state.getJdbcConnection()
-                .getDatabases() == null)
-        {
-            EXECUTOR.execute(() ->
-            {
-                connectionsModel.getDatabases(state.getJdbcConnection(), true, false);
-
-                IQueryFile currentFile = queryFileProvider.getCurrentFile();
-                if (currentFile != null)
-                {
-                    JdbcEngineState currentEngineState = currentFile.getEngineState();
-                    ConnectionState currentState = currentEngineState.connectionState;
-                    // If the current file is the same as the one we loaded databases on then re-focus it
-                    if (currentState != null
-                            && currentState.getJdbcConnection() == state.getJdbcConnection())
-                    {
-                        SwingUtilities.invokeLater(() -> focus(currentFile));
-                    }
-                }
-            });
-        }
-        if (state.getDatabase() != null)
-        {
-            crawlService.getCatalog(state, state.getDatabase());
-        }
     }
 
     private List<String> getBatches(JdbcDatabase database, String query)
@@ -782,22 +485,5 @@ class JdbcQueryEngine implements IQueryEngine
                     .getColumnType(i + 1);
         }
         return Pair.of(sqlTypes, columns);
-    }
-
-    private void setStatus(IQueryFile file, ConnectionState state)
-    {
-        String connectionInfo = "<html><font color=\"%s\"><b>%s: %s / %s%s / %s</b></font>".formatted(Objects.toString(state.getJdbcConnection()
-                .getColor(), "#000000"), state.getJdbcDatabase()
-                        .getSessionKeyword(),
-                isBlank(state.getSessionId()) ? "Not connected"
-                        : state.getSessionId(),
-                state.getJdbcConnection()
-                        .getName(),
-                (!isBlank(state.getDatabase()) ? " / " + state.getDatabase()
-                        : ""),
-                state.getJdbcConnection()
-                        .getUsername());
-
-        file.setMetaData(new QueryFileMetaData(connectionInfo, state.getSessionId()));
     }
 }
