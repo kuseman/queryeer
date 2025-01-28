@@ -1,7 +1,6 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.StringUtils.isBlank;
 import static se.kuseman.payloadbuilder.catalog.jdbc.JdbcQueryEngine.EXECUTOR;
 
 import java.time.Duration;
@@ -11,7 +10,6 @@ import java.util.WeakHashMap;
 import java.util.function.Consumer;
 
 import javax.swing.Icon;
-import javax.swing.JWindow;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.IOUtils;
@@ -46,13 +44,20 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
     }
 
     @Override
-    public void handleSelection(JWindow popup, DatasourceItem item)
+    public SelectionResult handleSelection(DatasourceItem item)
     {
+        // A non authorized connection, ask for credentials
+        if (item.database == null)
+        {
+            boolean prepared = connectionsModel.prepare(item.connection, false);
+            return prepared ? SelectionResult.RELOAD_MODEL
+                    : SelectionResult.DO_NOTHING;
+        }
+
         IQueryFile file = queryFileProvider.getCurrentFile();
         if (file == null)
         {
-            popup.setVisible(false);
-            return;
+            return SelectionResult.HIDE_WINDOW;
         }
 
         JdbcEngineState state = file.getEngineState();
@@ -65,13 +70,15 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         state.setConnectionState(newState);
         state.getQueryEngine()
                 .focus(file);
-        popup.setVisible(false);
+
+        return SelectionResult.HIDE_WINDOW;
     }
 
     @Override
     public void reload(Consumer<DatasourceItem> itemConsumer)
     {
         int size = connectionsModel.getSize();
+        // First add all non-authorized connections on top
         for (int i = 0; i < size; i++)
         {
             JdbcConnection connection = connectionsModel.getElementAt(i);
@@ -79,71 +86,80 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
             {
                 continue;
             }
-            // Only include connections that actual has credentials
-            // we cannot popup and ask for password for each that lacks
 
-            boolean silent = true;
-            // This is a connection with an encrypted password => prepare non silent to trigger decrypt
-            if (connection.getRuntimePassword() == null
-                    && !isBlank(connection.getPassword()))
+            JdbcConnectionLoadInfo loadInfo = infoMap.computeIfAbsent(connection, c -> new JdbcConnectionLoadInfo());
+            loadInfo.prepared = connectionsModel.prepare(connection, true);
+
+            // Non authorized connection, return without db
+            if (!loadInfo.prepared)
             {
-                silent = false;
+                itemConsumer.accept(new DatasourceItem(connection, null));
+            }
+        }
+
+        // Then we add all authorized connections along with all their db's
+        for (int i = 0; i < size; i++)
+        {
+            JdbcConnection connection = connectionsModel.getElementAt(i);
+            if (!connection.isEnabled())
+            {
+                continue;
             }
 
-            if (connectionsModel.prepare(connection, silent)
-                    && connection.hasCredentials())
+            JdbcConnectionLoadInfo loadInfo = infoMap.computeIfAbsent(connection, c -> new JdbcConnectionLoadInfo());
+            if (!loadInfo.prepared)
             {
-                List<String> databases = connection.getDatabases();
-                JdbcConnectionLoadInfo loadInfo = infoMap.computeIfAbsent(connection, c -> new JdbcConnectionLoadInfo());
+                continue;
+            }
 
-                // Connection is failing, stall it for a bit
-                if (!loadInfo.shouldTryAgain()
-                        || loadInfo.loading)
+            // Connection is failing, stall it for a bit
+            if (!loadInfo.shouldTryAgain()
+                    || loadInfo.loading)
+            {
+                continue;
+            }
+
+            List<String> databases = connection.getDatabases();
+            boolean reloadWithExistingDbs = loadInfo.forceReload()
+                    && !CollectionUtils.isEmpty(databases);
+
+            // We don't have any db's loaded or a force reload is needed
+            if (CollectionUtils.isEmpty(databases)
+                    || loadInfo.forceReload())
+            {
+                loadInfo.loading = true;
+                EXECUTOR.submit(() ->
                 {
-                    continue;
-                }
-
-                boolean reloadWithExistingDbs = loadInfo.forceReload()
-                        && !CollectionUtils.isEmpty(databases);
-
-                // We don't have any db's loaded or a force reload is needed
-                if (CollectionUtils.isEmpty(databases)
-                        || loadInfo.forceReload())
-                {
-                    loadInfo.loading = true;
-                    EXECUTOR.submit(() ->
+                    try
                     {
-                        try
+                        loadInfo.lastLoadTime = System.currentTimeMillis();
+                        List<String> databasesInner = connectionsModel.getDatabases(connection, true, true, false);
+                        for (String database : databasesInner)
                         {
-                            loadInfo.lastLoadTime = System.currentTimeMillis();
-                            List<String> databasesInner = connectionsModel.getDatabases(connection, true, true, false);
-                            for (String database : databasesInner)
-                            {
-                                itemConsumer.accept(new DatasourceItem(connection, database));
-                            }
-                            loadInfo.lastFailTime = -1;
+                            itemConsumer.accept(new DatasourceItem(connection, database));
                         }
-                        catch (Exception e)
-                        {
-                            loadInfo.lastFailTime = System.currentTimeMillis();
-                            LOGGER.error("Error loading databases for: {}", connection.getName(), e);
-                        }
-                        finally
-                        {
-                            loadInfo.loading = false;
-                        }
-                    });
-                    continue;
-                }
-
-                // Do not add old databases when there is a submited reload
-                // else we will end up with duplicated ones
-                if (!reloadWithExistingDbs)
-                {
-                    for (String database : databases)
-                    {
-                        itemConsumer.accept(new DatasourceItem(connection, database));
+                        loadInfo.lastFailTime = -1;
                     }
+                    catch (Exception e)
+                    {
+                        loadInfo.lastFailTime = System.currentTimeMillis();
+                        LOGGER.error("Error loading databases for: {}", connection.getName(), e);
+                    }
+                    finally
+                    {
+                        loadInfo.loading = false;
+                    }
+                });
+                continue;
+            }
+
+            // Do not add old databases when there is a submited reload
+            // else we will end up with duplicated ones
+            if (!reloadWithExistingDbs)
+            {
+                for (String database : databases)
+                {
+                    itemConsumer.accept(new DatasourceItem(connection, database));
                 }
             }
         }
@@ -159,7 +175,8 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         {
             this.connection = connection;
             this.database = database;
-            this.title = connection.getName() + " / " + database;
+            this.title = connection.getName() + (database != null ? (" / " + database)
+                    : "");
         }
 
         @Override
@@ -172,6 +189,16 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         public Icon getIcon()
         {
             return icons.database;
+        }
+
+        @Override
+        public Icon getStatusIcon()
+        {
+            if (!connection.hasCredentials())
+            {
+                return icons.lock;
+            }
+            return null;
         }
     }
 
@@ -186,6 +213,7 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         volatile long lastLoadTime = -1;
         volatile long lastFailTime = -1;
         volatile boolean loading;
+        boolean prepared = false;
 
         boolean shouldTryAgain()
         {

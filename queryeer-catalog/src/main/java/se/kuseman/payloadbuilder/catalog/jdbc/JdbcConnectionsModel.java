@@ -10,6 +10,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.swing.AbstractListModel;
 import javax.swing.JButton;
@@ -143,11 +144,12 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
             Credentials credentials = getCredentials(connection.toString(), connection.getUsername(), true, new ValidationHandler()
             {
                 private String message;
+                private AtomicReference<char[]> prevRuntimePassword = new AtomicReference<>();
 
                 @Override
                 public boolean validate(String username, char[] password)
                 {
-                    char[] runtimePassword = connection.getRuntimePassword();
+                    prevRuntimePassword.set(connection.getRuntimePassword());
                     connection.setRuntimePassword(password);
                     try (java.sql.Connection con = createConnection(connection))
                     {
@@ -161,8 +163,14 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
                     finally
                     {
                         // Restore previous password even if success to set it the correct way after dialog is closed
-                        connection.setRuntimePassword(runtimePassword);
+                        connection.setRuntimePassword(prevRuntimePassword.get());
                     }
+                }
+
+                @Override
+                public void validationCanceled()
+                {
+                    connection.setRuntimePassword(prevRuntimePassword.get());
                 }
 
                 @Override
