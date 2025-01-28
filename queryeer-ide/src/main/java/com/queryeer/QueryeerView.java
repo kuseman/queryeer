@@ -62,7 +62,6 @@ import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
-import javax.swing.JWindow;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
@@ -1381,13 +1380,14 @@ class QueryeerView extends JFrame
     class DatasourceQuickSearchModel implements IQuickSearchModel<IQuickSearchModel.Item>
     {
         @Override
-        public void handleSelection(JWindow popup, IQuickSearchModel.Item item)
+        public SelectionResult handleSelection(IQuickSearchModel.Item item)
         {
             IQuickSearchModel<IQuickSearchModel.Item> currentModel = getCurrentModel();
             if (currentModel != null)
             {
-                currentModel.handleSelection(popup, item);
+                return currentModel.handleSelection(item);
             }
+            return SelectionResult.HIDE_WINDOW;
         }
 
         @Override
@@ -1481,27 +1481,24 @@ class QueryeerView extends JFrame
         }
 
         @Override
-        public void handleSelection(JWindow popupWindow, ListItem item)
+        public SelectionResult handleSelection(ListItem item)
         {
             if (item.queryFile != null)
             {
                 model.setSelectedFile(item.queryFile);
-                popupWindow.setVisible(false);
             }
             else if (item.type == ListItem.Type.RecentFile
                     && item.file != null)
             {
-                // Hide this before we call consumer in case the recent file don't exists
-                // and a dialog pops up on top
-                popupWindow.setVisible(false);
                 openRecentFileConsumer.accept(item.file.getAbsolutePath());
             }
             else if (item.type == ListItem.Type.ProjectFile
                     && item.file != null)
             {
-                popupWindow.setVisible(false);
                 eventBus.publish(new NewQueryFileEvent(item.file));
             }
+
+            return SelectionResult.HIDE_WINDOW;
         }
 
         @Override

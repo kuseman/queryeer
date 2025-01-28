@@ -166,6 +166,7 @@ public final class CredentialUtils
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
 
+        AtomicBoolean canceled = new AtomicBoolean(false);
         AtomicReference<Future<?>> validationFuture = new AtomicReference<>();
         ActionListener okAction = l ->
         {
@@ -185,7 +186,6 @@ public final class CredentialUtils
 
                 validationFuture.set(EXECUTOR.submit(() ->
                 {
-
                     AtomicBoolean validationResult = new AtomicBoolean(true);
                     try
                     {
@@ -213,7 +213,8 @@ public final class CredentialUtils
                             dialog.dispose();
                             dialog.setVisible(false);
                         }
-                        else
+                        // Only show message if user did not cancel
+                        else if (!canceled.get())
                         {
                             String message = validationHandler.getFailureMessage();
                             JOptionPane.showMessageDialog(dialog, message, "Validation Error", JOptionPane.ERROR_MESSAGE);
@@ -234,6 +235,16 @@ public final class CredentialUtils
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(l ->
         {
+            canceled.set(true);
+            Future<?> future = validationFuture.get();
+            if (future != null)
+            {
+                future.cancel(true);
+            }
+            if (validationHandler != null)
+            {
+                validationHandler.validationCanceled();
+            }
             dialog.dispose();
             dialog.setVisible(false);
         });
@@ -338,11 +349,17 @@ public final class CredentialUtils
     public interface ValidationHandler
     {
         /**
-         * Method that will be executed in a different thread that can test connections etc. and whilst doing that UI will show a spinner.
+         * Method that will be executed in a different thread that can test connections etc. and whilst doing that UI will show a spinner. Thread will be interupted if user presses cancel during
+         * validation.
          *
          * @return True if no validation error occurred and dialog will close otherwise false and dialog will still be open.
          */
         boolean validate(String username, char[] password);
+
+        /** Called if user cancelled validation. Is called on EDT. */
+        default void validationCanceled()
+        {
+        }
 
         /** If {@link #validate()} returned false this method is called to show why. */
         String getFailureMessage();

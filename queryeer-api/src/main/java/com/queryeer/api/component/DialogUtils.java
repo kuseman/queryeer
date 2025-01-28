@@ -7,7 +7,10 @@ import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Frame;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Image;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.Window;
@@ -31,6 +34,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JRootPane;
@@ -41,6 +45,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 
+import com.queryeer.api.component.DialogUtils.IQuickSearchModel.SelectionResult;
 import com.queryeer.api.utils.StringUtils;
 
 /** Utils when working with dialogs. */
@@ -147,8 +152,8 @@ public final class DialogUtils
     /** Model used in {@link QuickSearchWindow}. */
     public interface IQuickSearchModel<T extends IQuickSearchModel.Item>
     {
-        /** Handle selection. Implementer handles hiding of the popup. */
-        void handleSelection(JWindow dialog, T item);
+        /** Handle selection. */
+        SelectionResult handleSelection(T item);
 
         /**
          * Reload model. Consumer should be called with produced items.
@@ -182,8 +187,16 @@ public final class DialogUtils
             /** Get title of item. */
             String getTitle();
 
-            /** Get itcon of item. */
+            /** Get icon of item. */
             Icon getIcon();
+
+            /**
+             * Get a status icon of item. This is an optional secondary icon that can show a status indication (ie. not unlocked etc.)
+             */
+            default Icon getStatusIcon()
+            {
+                return null;
+            }
 
             /** Returns true if this item matches search text. */
             default boolean matches(String searchText)
@@ -191,6 +204,14 @@ public final class DialogUtils
                 return getTitle().toLowerCase()
                         .contains(searchText);
             }
+        }
+
+        /** Result of selection callback */
+        public enum SelectionResult
+        {
+            HIDE_WINDOW,
+            DO_NOTHING,
+            RELOAD_MODEL
         }
     }
 
@@ -205,6 +226,7 @@ public final class DialogUtils
         private final IQuickSearchModel<T> model;
         private SwingWorker<Void, T> currentModelWorker;
         private SwingWorker<Void, T> currentFilterWorker;
+        private boolean callingSelection;
 
         public QuickSearchWindow(Window parent, IQuickSearchModel<T> model)
         {
@@ -223,13 +245,35 @@ public final class DialogUtils
                 }
             };
 
+            search = new JTextField();
             Consumer<T> selectionHandler = listItem ->
             {
                 if (listItem == null)
                 {
                     return;
                 }
-                model.handleSelection(this, listItem);
+                callingSelection = true;
+                try
+                {
+                    SelectionResult result = model.handleSelection(listItem);
+                    if (result == SelectionResult.DO_NOTHING)
+                    {
+                        return;
+                    }
+                    else if (result == SelectionResult.RELOAD_MODEL)
+                    {
+                        loadModel();
+                        search.requestFocusInWindow();
+                    }
+                    else if (result == SelectionResult.HIDE_WINDOW)
+                    {
+                        super.setVisible(false);
+                    }
+                }
+                finally
+                {
+                    callingSelection = false;
+                }
             };
 
             items = new JList<>();
@@ -267,22 +311,83 @@ public final class DialogUtils
             });
             items.setCellRenderer(new DefaultListCellRenderer()
             {
+                JPanel panel = new JPanel(new GridBagLayout());
+                JLabel icon = new JLabel();
+                JLabel statusIcon = new JLabel();
+                JLabel label = new JLabel();
+
+                {
+                    {
+                        GridBagConstraints gbc = new GridBagConstraints();
+                        gbc.gridx = 0;
+                        gbc.gridy = 0;
+                        gbc.anchor = GridBagConstraints.WEST;
+                        gbc.fill = GridBagConstraints.NONE;
+                        gbc.insets = new Insets(0, 2, 0, 2);
+                        panel.add(icon, gbc);
+
+                        gbc = new GridBagConstraints();
+                        gbc.gridx = 1;
+                        gbc.gridy = 0;
+                        gbc.anchor = GridBagConstraints.WEST;
+                        gbc.fill = GridBagConstraints.NONE;
+                        gbc.insets = new Insets(0, 0, 0, 2);
+
+                        panel.add(statusIcon, gbc);
+
+                        gbc = new GridBagConstraints();
+                        gbc.gridx = 2;
+                        gbc.gridy = 0;
+                        gbc.weightx = 1.0d;
+                        gbc.anchor = GridBagConstraints.WEST;
+                        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+                        panel.add(label, gbc);
+                    }
+                }
+
                 @Override
                 public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
                 {
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    if (isSelected)
+                    {
+                        panel.setBackground(list.getSelectionBackground());
+                        panel.setForeground(list.getSelectionForeground());
+                        label.setBackground(list.getSelectionBackground());
+                        label.setForeground(list.getSelectionForeground());
+                        icon.setBackground(list.getSelectionBackground());
+                        icon.setForeground(list.getSelectionForeground());
+                        statusIcon.setBackground(list.getSelectionBackground());
+                        statusIcon.setForeground(list.getSelectionForeground());
+                    }
+                    else
+                    {
+                        panel.setBackground(list.getBackground());
+                        panel.setForeground(list.getForeground());
+                        label.setBackground(list.getBackground());
+                        label.setForeground(list.getForeground());
+                        icon.setBackground(list.getBackground());
+                        icon.setForeground(list.getForeground());
+                        statusIcon.setBackground(list.getBackground());
+                        statusIcon.setForeground(list.getForeground());
+                    }
+
+                    panel.setEnabled(list.isEnabled());
+                    label.setFont(list.getFont());
+
                     @SuppressWarnings("unchecked")
                     T listItem = (T) value;
-                    setText(listItem.getTitle());
-                    setIcon(listItem.getIcon());
-                    return this;
+                    icon.setIcon(listItem.getIcon());
+                    statusIcon.setIcon(listItem.getStatusIcon());
+                    label.setText(listItem.getTitle());
+
+                    return panel;
                 }
             });
 
             itemsModel = new DefaultListModel<>();
             items.setModel(itemsModel);
 
-            search = new JTextField();
             search.addKeyListener(closeListener);
 
             // Move focus to list if we press arrows
@@ -439,9 +544,66 @@ public final class DialogUtils
             });
         }
 
+        private void loadModel()
+        {
+            if (currentModelWorker != null
+                    && !currentModelWorker.isDone())
+            {
+                return;
+            }
+
+            search.setText("");
+            itemsModel.clear();
+
+            currentModelWorker = new SwingWorker<Void, T>()
+            {
+                @Override
+                protected Void doInBackground() throws Exception
+                {
+                    model.reload(t -> publish(t));
+                    return null;
+                }
+
+                @Override
+                protected void process(List<T> chunks)
+                {
+                    int index = model.getSelectedIndex();
+                    for (T t : chunks)
+                    {
+                        itemsModel.addElement(t);
+                        if (index >= 0
+                                && index != items.getSelectedIndex()
+                                && index < itemsModel.getSize())
+                        {
+                            items.setSelectedIndex(index);
+                        }
+
+                        // Show the dialog as soon as we have the first item
+                        // This to avoid having an empty dialog if the model didn't
+                        // produce any items
+                        if (!isVisible())
+                        {
+                            QuickSearchWindow.super.setVisible(true);
+                        }
+                    }
+                }
+            };
+
+            currentModelWorker.execute();
+        }
+
         @Override
         public void setVisible(boolean b)
         {
+            // The dialog should NOT be closed during selection. Ie. the implementer
+            // shows popup while also hiding quick select window if other component
+            // gets focus so we avoid that scenario here
+            if (!b
+                    && callingSelection)
+            {
+                return;
+            }
+
             if (b)
             {
                 if (!model.isEnabled())
@@ -455,44 +617,7 @@ public final class DialogUtils
                     return;
                 }
 
-                search.setText("");
-                itemsModel.clear();
-
-                currentModelWorker = new SwingWorker<Void, T>()
-                {
-                    @Override
-                    protected Void doInBackground() throws Exception
-                    {
-                        model.reload(t -> publish(t));
-                        return null;
-                    }
-
-                    @Override
-                    protected void process(List<T> chunks)
-                    {
-                        int index = model.getSelectedIndex();
-                        for (T t : chunks)
-                        {
-                            itemsModel.addElement(t);
-                            if (index >= 0
-                                    && index != items.getSelectedIndex()
-                                    && index < itemsModel.getSize())
-                            {
-                                items.setSelectedIndex(index);
-                            }
-
-                            // Show the dialog as soon as we have the first item
-                            // This to avoid having an empty dialog if the model didn't
-                            // produce any items
-                            if (!isVisible())
-                            {
-                                QuickSearchWindow.super.setVisible(true);
-                            }
-                        }
-                    }
-                };
-
-                currentModelWorker.execute();
+                loadModel();
 
                 setSize(new Dimension(350, 350));
                 Window activeWindow = javax.swing.FocusManager.getCurrentManager()
