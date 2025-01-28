@@ -44,7 +44,7 @@ class JdbcConnectionsConfigurable implements IConfigurable
     {
         if (configComponent == null)
         {
-            configComponent = new ListPropertiesComponent<>(JdbcConnection.class, this::notifyDirty, this::connection);
+            configComponent = new ListPropertiesComponent<>(JdbcConnection.class, this::notifyDirty, this::connection, this::cloneConnection);
             configComponent.init(connectionsModel.copyConnections());
         }
         return configComponent;
@@ -140,6 +140,13 @@ class JdbcConnectionsConfigurable implements IConfigurable
     public void removeDirtyStateConsumer(Consumer<Boolean> consumer)
     {
         dirtyStateConsumers.remove(consumer);
+    }
+
+    private JdbcConnection cloneConnection(JdbcConnection connection)
+    {
+        JdbcConnection newConnection = new JdbcConnection(connection);
+        newConnection.setName(connection.getName() + " - Copy");
+        return newConnection;
     }
 
     private JdbcConnection connection()

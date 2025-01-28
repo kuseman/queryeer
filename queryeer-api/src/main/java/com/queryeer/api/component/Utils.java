@@ -89,8 +89,8 @@ class Utils
                 Property property = method.getMethod()
                         .getAnnotation(Property.class);
                 if (property == null
-                        || method.getMethod()
-                                .getReturnType() != Void.class)
+                        || !Void.TYPE.equals(method.getMethod()
+                                .getReturnType()))
                 {
                     continue;
                 }

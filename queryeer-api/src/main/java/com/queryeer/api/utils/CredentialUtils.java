@@ -65,6 +65,13 @@ public final class CredentialUtils
     /** Show dialog that ask for credentials */
     public static Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername, ValidationHandler validationHandler)
     {
+        return getCredentials(connectionDescription, prefilledUsername, null, readOnlyUsername, false, validationHandler);
+    }
+
+    /** Show dialog that ask for credentials */
+    public static Credentials getCredentials(String connectionDescription, String prefilledUsername, String prefilledPassword, boolean readOnlyUsername, boolean readOnlyPassword,
+            ValidationHandler validationHandler)
+    {
         DialogUtils.ADialog dialog = new DialogUtils.ADialog();
         dialog.setTitle("Enter Credentials");
         dialog.setModal(true);
@@ -262,6 +269,10 @@ public final class CredentialUtils
 
         usernameField.setText(prefilledUsername);
         usernameField.setEditable(!readOnlyUsername);
+
+        passwordField.setText(prefilledPassword);
+        passwordField.setEditable(!readOnlyPassword);
+
         JTextField focusCompoennt = !readOnlyUsername
                 && isBlank(usernameField.getText()) ? usernameField
                         : passwordField;
@@ -272,6 +283,15 @@ public final class CredentialUtils
             public void componentShown(ComponentEvent e)
             {
                 focusCompoennt.requestFocusInWindow();
+
+                // Auto press OK since we have a totally read only dialog, this is used
+                // to verify credentials and utilize validation handler etc.
+                if (readOnlyUsername
+                        && readOnlyPassword)
+                {
+                    okAction.actionPerformed(null);
+                }
+
                 super.componentShown(e);
             }
         });

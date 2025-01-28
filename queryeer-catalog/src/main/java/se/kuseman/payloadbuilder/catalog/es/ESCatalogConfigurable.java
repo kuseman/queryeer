@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import org.apache.commons.lang3.StringUtils;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.queryeer.api.component.ListPropertiesComponent;
 import com.queryeer.api.extensions.IConfigurable;
@@ -48,7 +50,7 @@ class ESCatalogConfigurable implements IConfigurable
     {
         if (configComponent == null)
         {
-            configComponent = new ListPropertiesComponent<>(Connection.class, this::notifyDirty, this::connection);
+            configComponent = new ListPropertiesComponent<>(Connection.class, this::notifyDirty, this::connection, this::cloneConnection);
             configComponent.init(connectionsModel.copyConnections());
         }
         return configComponent;
@@ -155,6 +157,13 @@ class ESCatalogConfigurable implements IConfigurable
         Connection connection = new Connection();
         connection.setEndpoint("http://localhost:9200");
         return connection;
+    }
+
+    private Connection cloneConnection(Connection connection)
+    {
+        Connection newConnection = new Connection(connection);
+        newConnection.setName(StringUtils.defaultIfBlank(connection.getName(), connection.getEndpoint()) + " - Copy");
+        return newConnection;
     }
 
     private void notifyDirty(boolean dirty)

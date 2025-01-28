@@ -9,6 +9,7 @@ import java.awt.Insets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import javax.swing.DefaultListModel;
@@ -34,6 +35,8 @@ public class ListPropertiesComponent<T> extends JPanel
     private final Consumer<Boolean> dirtyConsumer;
     private final DefaultListModel<T> listModel = new DefaultListModel<>();
     private final Supplier<T> itemCreator;
+    private final Function<T, T> itemCloner;
+
     private final JList<T> itemList = new JList<>();
 
     /**
@@ -43,10 +46,11 @@ public class ListPropertiesComponent<T> extends JPanel
      * @param dirtyConsumer Consumer for handling dirty notifications
      * @param itemCreator Creator of new items
      */
-    public ListPropertiesComponent(Class<?> clazz, Consumer<Boolean> dirtyConsumer, Supplier<T> itemCreator)
+    public ListPropertiesComponent(Class<?> clazz, Consumer<Boolean> dirtyConsumer, Supplier<T> itemCreator, Function<T, T> itemCloner)
     {
         this.dirtyConsumer = requireNonNull(dirtyConsumer, "dirtyConsumer");
         this.itemCreator = requireNonNull(itemCreator, "itemCreator");
+        this.itemCloner = requireNonNull(itemCloner, "itemCloner");
         this.propertiesComponent = new PropertiesComponent(requireNonNull(clazz, "clazz"), this::dirtyConsumer, false);
         initComponent();
     }
@@ -94,14 +98,19 @@ public class ListPropertiesComponent<T> extends JPanel
         itemList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         itemList.setModel(listModel);
 
-        JButton add = new JButton("Add");
-        JButton remove = new JButton("Remove");
-
         JPanel listPanel = new JPanel();
         listPanel.setLayout(new GridBagLayout());
-        listPanel.add(new JScrollPane(itemList), new GridBagConstraints(0, 0, 2, 1, 1.0, 1.0, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
-        listPanel.add(add, new GridBagConstraints(0, 1, 1, 1, 0.5, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
-        listPanel.add(remove, new GridBagConstraints(1, 1, 1, 1, 0.5, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
+        listPanel.add(new JScrollPane(itemList), new GridBagConstraints(0, 0, 3, 1, 1.0, 1.0, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(0, 0, 0, 0), 0, 0));
+
+        JButton add = new JButton("Add");
+        JButton clone = new JButton("Clone");
+        clone.setEnabled(false);
+        JButton remove = new JButton("Remove");
+        remove.setEnabled(false);
+
+        listPanel.add(add, new GridBagConstraints(0, 1, 1, 1, 0.33, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
+        listPanel.add(clone, new GridBagConstraints(1, 1, 1, 1, 0.33, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
+        listPanel.add(remove, new GridBagConstraints(2, 1, 1, 1, 0.33, 0.0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 0, 0), 0, 0));
 
         add.addActionListener(l ->
         {
@@ -110,6 +119,19 @@ public class ListPropertiesComponent<T> extends JPanel
             dirtyConsumer.accept(true);
             listModel.addElement(item);
             itemList.setSelectedIndex(listModel.getSize() - 1);
+        });
+
+        clone.addActionListener(l ->
+        {
+            T item = itemList.getSelectedValue();
+            if (item != null)
+            {
+                T newItem = itemCloner.apply(item);
+                int index = itemList.getSelectedIndex();
+                dirtyConsumer.accept(true);
+                listModel.add(index + 1, newItem);
+                itemList.setSelectedValue(newItem, true);
+            }
         });
 
         remove.addActionListener(l ->
@@ -136,6 +158,8 @@ public class ListPropertiesComponent<T> extends JPanel
                 return;
             }
             T item = itemList.getSelectedValue();
+            clone.setEnabled(item != null);
+            remove.setEnabled(item != null);
             propertiesComponent.setEnabled(item != null);
             if (item != null)
             {

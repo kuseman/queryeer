@@ -6,7 +6,6 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import javax.swing.SwingUtilities;
 import javax.swing.event.SwingPropertyChangeSupport;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.time.StopWatch;
 
@@ -483,17 +483,7 @@ class QueryFileModel implements IQueryFile
             return;
         }
 
-        DISPOSE_EXECUTOR.execute(() ->
-        {
-            try
-            {
-                engineState.close();
-            }
-            catch (IOException e)
-            {
-                // SWALLOW
-            }
-        });
+        DISPOSE_EXECUTOR.execute(() -> IOUtils.closeQuietly(engineState));
     }
 
     /** Execution state of this file */
