@@ -12,6 +12,8 @@ import javax.swing.JTable;
 import javax.swing.TransferHandler;
 import javax.swing.plaf.UIResource;
 
+import org.apache.commons.lang3.StringUtils;
+
 /** Transfer handler for query table */
 class TableTransferHandler extends TransferHandler implements UIResource
 {
@@ -20,19 +22,20 @@ class TableTransferHandler extends TransferHandler implements UIResource
     static
     {
         // CSOFF
-        FLAVORS = new DataFlavor[8];
+        FLAVORS = new DataFlavor[9];
         try
         {
-            FLAVORS[0] = new DataFlavor("text/html;class=java.lang.String");
+            FLAVORS[0] = new DataFlavor("text/html;class=java.lang.String", "Html");
             FLAVORS[1] = new DataFlavor("text/html;class=java.io.Reader");
             FLAVORS[2] = new DataFlavor("text/html;charset=unicode;class=java.io.InputStream");
 
-            FLAVORS[3] = new DataFlavor("text/plain;class=java.lang.String");
+            FLAVORS[3] = new DataFlavor("text/plain;class=java.lang.String", "Plain Text");
             FLAVORS[4] = new DataFlavor("text/plain;class=java.io.Reader");
             FLAVORS[5] = new DataFlavor("text/plain;charset=unicode;class=java.io.InputStream");
 
-            FLAVORS[6] = new DataFlavor("plb/sql-in;class=java.lang.String");
-            FLAVORS[7] = new DataFlavor("plb/sql-in-new-line;class=java.lang.String");
+            FLAVORS[6] = new DataFlavor("plb/sql-in;class=java.lang.String", "SQL IN");
+            FLAVORS[7] = new DataFlavor("plb/sql-in-new-line;class=java.lang.String", "SQL IN (New Line)");
+            FLAVORS[8] = new DataFlavor("plb/sql-union-all;class=java.lang.String", "SQL UNION ALL");
             // CSON
         }
         catch (Exception e)
@@ -191,7 +194,10 @@ class TableTransferHandler extends TransferHandler implements UIResource
             {
                 return toSqlIn(false);
             }
-
+            else if (mimeType.contains("sql-union-all"))
+            {
+                return toSqlUnionAll();
+            }
             return toPlain();
         }
 
@@ -210,8 +216,8 @@ class TableTransferHandler extends TransferHandler implements UIResource
                         : obj.toString();
                 if (!(obj instanceof Number))
                 {
-                    sqlIn.append('\'')
-                            .append(val)
+                    sqlIn.append("N\'")
+                            .append(StringUtils.replace(String.valueOf(val), "'", "''"))
                             .append('\'');
                 }
                 else
@@ -228,6 +234,82 @@ class TableTransferHandler extends TransferHandler implements UIResource
                 }
             }
             return sqlIn.toString();
+        }
+
+        private String toSqlUnionAll()
+        {
+            /* @formatter:off
+             *
+             * SELECT *
+             * FROM
+             * (
+             *              SELECT 1,3
+             *    UNION ALL SELECT 2,6
+             * ) x (header1, header2)
+             *
+             * @formatter:on
+             */
+            StringBuilder buf = new StringBuilder("""
+                    SELECT *
+                    FROM
+                    (
+                    """);
+            int rows = rowsValues.size();
+            for (int row = 0; row < rows; row++)
+            {
+                if (row > 0)
+                {
+                    buf.append(System.lineSeparator());
+                    buf.append("    UNION ALL SELECT ");
+                }
+                else
+                {
+                    buf.append("              SELECT ");
+                }
+                Object[] values = rowsValues.get(row);
+
+                boolean first = true;
+                for (Object obj : values)
+                {
+                    if (!first)
+                    {
+                        buf.append(',');
+                    }
+
+                    String val = (obj == null) ? ""
+                            : obj.toString();
+                    if (!(obj instanceof Number))
+                    {
+                        buf.append("N\'")
+                                .append(StringUtils.replace(String.valueOf(val), "'", "''"))
+                                .append('\'');
+                    }
+                    else
+                    {
+                        buf.append(val);
+                    }
+                    first = false;
+                }
+            }
+
+            buf.append(System.lineSeparator());
+            buf.append(") x (");
+
+            int cols = headerNames.length;
+            for (int i = 0; i < cols; i++)
+            {
+                if (i > 0)
+                {
+                    buf.append(", ");
+                }
+                buf.append('\"')
+                        .append(headerNames[i])
+                        .append('\"');
+            }
+            buf.append(')')
+                    .append(System.lineSeparator());
+
+            return buf.toString();
         }
 
         private String toHtml()

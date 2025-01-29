@@ -7,7 +7,11 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Frame;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.Window;
@@ -29,7 +33,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -37,12 +43,18 @@ import java.util.concurrent.RejectedExecutionException;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.ButtonGroup;
 import javax.swing.Icon;
+import javax.swing.JButton;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
@@ -53,7 +65,6 @@ import javax.swing.text.Element;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.Segment;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.mutable.MutableInt;
@@ -99,6 +110,7 @@ import org.slf4j.LoggerFactory;
 import com.queryeer.Constants;
 import com.queryeer.api.action.ActionUtils;
 import com.queryeer.api.component.ADocumentListenerAdapter;
+import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
@@ -123,6 +135,8 @@ class TextEditor implements ITextEditor, SearchListener
 
     private static final Icon SEARCH = FontIcon.of(FontAwesome.SEARCH);
     private static final Icon SHARE = FontIcon.of(FontAwesome.SHARE);
+    private static final KeyStroke PASTE_SPECIAL_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_V, Toolkit.getDefaultToolkit()
+            .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK);
 
     private final IEventBus eventBus;
     final ITextEditorKit editorKit;
@@ -135,6 +149,7 @@ class TextEditor implements ITextEditor, SearchListener
     private final FindDialog findDialog;
     private final ReplaceDialog replaceDialog;
     private final GoToDialog gotoDialog;
+    private final PasteSpecialDialog pasteSpecialDialog;
 
     /** Reuse the same event to avoid creating new objects on every change */
     private final CaretChangedEvent caretEvent = new CaretChangedEvent(new Caret());
@@ -159,6 +174,9 @@ class TextEditor implements ITextEditor, SearchListener
         // Unbind F2 since we use that to show quick datasources
         textEditor.getInputMap()
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), "none");
+        // Unbint CTRL/META+SHIFT+V since we use that for paste special
+        textEditor.getInputMap()
+                .put(PASTE_SPECIAL_STROKE, "none");
 
         scrollPane = new RTextScrollPane(textEditor, true);
         errorStrip = new ErrorStrip(textEditor);
@@ -213,6 +231,8 @@ class TextEditor implements ITextEditor, SearchListener
             }
         };
         gotoDialog.setIconImages(Constants.APPLICATION_ICONS);
+
+        pasteSpecialDialog = new PasteSpecialDialog();
 
         textEditor.addCaretListener(evt -> publishCaret());
         textEditor.addPropertyChangeListener(new PropertyChangeListener()
@@ -751,62 +771,14 @@ class TextEditor implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
             putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 3);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_V, Toolkit.getDefaultToolkit()
-                    .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK));
+            putValue(Action.ACCELERATOR_KEY, PASTE_SPECIAL_STROKE);
             putValue(Action.ACTION_COMMAND_KEY, "pasteSpecial");
         }
 
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            Clipboard clipboard = Toolkit.getDefaultToolkit()
-                    .getSystemClipboard();
-            DataFlavor[] flavors = clipboard.getAvailableDataFlavors();
-
-            List<DataFlavor> applicableFlavors = new ArrayList<>();
-            for (DataFlavor df : flavors)
-            {
-                if (String.class.equals(df.getRepresentationClass())
-                        && (df.getPrimaryType()
-                                .equals("text")
-                                || df.getPrimaryType()
-                                        .equals("plb")))
-                {
-                    applicableFlavors.add(df);
-                }
-            }
-
-            if (applicableFlavors.isEmpty())
-            {
-                return;
-            }
-
-            String[] values = applicableFlavors.stream()
-                    .map(f -> f.getHumanPresentableName())
-                    .toArray(String[]::new);
-            Object selected = JOptionPane.showInputDialog(null, "Paste special", "Select which type to paste", JOptionPane.QUESTION_MESSAGE, null, values, values[0]);
-            if (selected != null)
-            {
-                // null if the user cancels.
-                String selectedString = selected.toString();
-                int index = ArrayUtils.indexOf(values, selectedString);
-                if (index <= -1)
-                {
-                    return;
-                }
-
-                DataFlavor selectedFlavor = applicableFlavors.get(index);
-                try
-                {
-                    Object data = clipboard.getData(selectedFlavor);
-                    textEditor.getDocument()
-                            .insertString(textEditor.getCaretPosition(), String.valueOf(data), null);
-                }
-                catch (Exception ee)
-                {
-                    // Swallow
-                }
-            }
+            pasteSpecialDialog.setVisible(true);
         }
     };
 
@@ -1441,5 +1413,160 @@ class TextEditor implements ITextEditor, SearchListener
     {
         return value >= start
                 && value <= end;
+    }
+
+    /** Paste special dialog */
+    class PasteSpecialDialog extends DialogUtils.ADialog
+    {
+        private final JPanel flavorsPanel;
+        private final JTextArea preview;
+
+        PasteSpecialDialog()
+        {
+            setTitle("Paste Special");
+            setModal(true);
+            getContentPane().setLayout(new GridBagLayout());
+
+            Insets insets = new Insets(2, 2, 2, 2);
+
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.insets = insets;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+
+            getContentPane().add(new JLabel("Flavor"), gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 1;
+            gbc.insets = insets;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            flavorsPanel = new JPanel();
+
+            getContentPane().add(flavorsPanel, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 2;
+            gbc.gridwidth = 2;
+            gbc.insets = insets;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+
+            getContentPane().add(new JLabel("Preview"), gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 3;
+            gbc.gridwidth = 2;
+            gbc.weightx = 1.0d;
+            gbc.weighty = 1.0d;
+            gbc.insets = insets;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.BOTH;
+
+            preview = new JTextArea();
+            preview.setEditable(false);
+            getContentPane().add(new JScrollPane(preview), gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 4;
+            gbc.insets = insets;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+
+            JPanel buttonPanel = new JPanel();
+            getContentPane().add(buttonPanel, gbc);
+
+            JButton ok = new JButton("OK");
+            ok.addActionListener(l ->
+            {
+                try
+                {
+                    textEditor.getDocument()
+                            .insertString(textEditor.getCaretPosition(), preview.getText(), null);
+                }
+                catch (BadLocationException e)
+                {
+                    // Swallow
+                }
+                setVisible(false);
+            });
+            buttonPanel.add(ok);
+
+            JButton cancel = new JButton("Cancel");
+            cancel.addActionListener(l -> setVisible(false));
+            buttonPanel.add(cancel);
+
+            setPreferredSize(new Dimension(600, 400));
+            pack();
+        }
+
+        @Override
+        public void setVisible(boolean b)
+        {
+            // Populate flavors
+            if (b)
+            {
+                flavorsPanel.removeAll();
+
+                Clipboard clipboard = Toolkit.getDefaultToolkit()
+                        .getSystemClipboard();
+                DataFlavor[] flavors = clipboard.getAvailableDataFlavors();
+
+                Set<String> seenMimeTypes = new HashSet<>();
+                List<DataFlavor> applicableFlavors = new ArrayList<>();
+                for (DataFlavor df : flavors)
+                {
+                    if (String.class.equals(df.getRepresentationClass())
+                            && (df.getPrimaryType()
+                                    .equals("text")
+                                    || df.getPrimaryType()
+                                            .equals("plb")))
+                    {
+                        if (!seenMimeTypes.add(df.getPrimaryType() + "/" + df.getSubType()))
+                        {
+                            continue;
+                        }
+                        applicableFlavors.add(df);
+                    }
+                }
+
+                if (applicableFlavors.isEmpty())
+                {
+                    return;
+                }
+
+                ButtonGroup bg = new ButtonGroup();
+                for (DataFlavor df : applicableFlavors)
+                {
+                    JRadioButton rb = new JRadioButton(df.getHumanPresentableName());
+                    rb.addActionListener(l ->
+                    {
+                        try
+                        {
+                            preview.setText(String.valueOf(clipboard.getData(df)));
+                        }
+                        catch (Exception e)
+                        {
+                            // Swallow
+                        }
+                    });
+
+                    bg.add(rb);
+                    flavorsPanel.add(rb);
+                }
+
+                ((JRadioButton) flavorsPanel.getComponent(0)).doClick();
+                ((JRadioButton) flavorsPanel.getComponent(0)).setSelected(true);
+            }
+
+            super.setVisible(b);
+        }
     }
 }
