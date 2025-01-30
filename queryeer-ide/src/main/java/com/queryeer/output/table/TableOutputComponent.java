@@ -11,6 +11,7 @@ import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -347,6 +348,44 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
 
         Table table = new Table(contextMenuActions);
+        // Remove default Enter move to next cell/row, we view the cell value instead
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "none");
+
+        table.addKeyListener(new KeyAdapter()
+        {
+            @Override
+            public void keyTyped(KeyEvent e)
+            {
+                if (e.getKeyChar() == KeyEvent.VK_ENTER)
+                {
+                    int row = table.getSelectedRow();
+                    int col = table.getSelectedColumn();
+
+                    if (row >= 0
+                            && col >= 0)
+                    {
+
+                        Object value = table.getValueAt(row, col);
+                        String header = table.getColumnName(col);
+                        ITableContextMenuAction action = getAction(value);
+                        if (action != null)
+                        {
+                            // We need to set the context row/column for external actions to have correct values returned
+                            lastClickedTable = table;
+                            lastClickedTableRow = row;
+                            lastClickedTableColumn = col;
+                            action.getAction()
+                                    .actionPerformed(new ActionEvent(table, -1, ""));
+                        }
+                        else
+                        {
+                            ValueDialog.showValueDialog("Value viewer - " + header, value, ValueDialog.Format.UNKOWN);
+                        }
+                    }
+                }
+            }
+        });
 
         table.addMouseListener(new MouseAdapter()
         {
