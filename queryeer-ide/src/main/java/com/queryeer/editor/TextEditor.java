@@ -258,6 +258,7 @@ class TextEditor implements ITextEditor, SearchListener
         actions.addAll(editorKit.getActions());
         actions.addAll(asList(
                 toggleShowWhiteSpaceAction,
+                removeTrailingWhiteSpace,
                 toggleCommentAction,
                 showFindDialogAction,
                 showReplaceDialogAction,
@@ -724,6 +725,84 @@ class TextEditor implements ITextEditor, SearchListener
         {
             textEditor.setWhitespaceVisible(!textEditor.isWhitespaceVisible());
             textEditor.setEOLMarkersVisible(!textEditor.getEOLMarkersVisible());
+        }
+    };
+
+    private Action removeTrailingWhiteSpace = new AbstractAction("")
+    {
+        {
+            putValue(Action.NAME, "Remove Trailing Whitespace");
+            putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
+            putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
+            putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 6);
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e)
+        {
+            textEditor.beginAtomicEdit();
+            int caretPos = textEditor.getCaretPosition();
+            int numberOfRemovedCharsAfterCaretPos = 0;
+            try
+            {
+                Segment seg = new Segment();
+
+                int count = textEditor.getLineCount();
+                for (int i = 0; i < count; i++)
+                {
+                    // seg.setIndex(0);
+                    int start = textEditor.getLineStartOffset(i);
+                    int end = textEditor.getLineEndOffset(i);
+
+                    Document document = textEditor.getDocument();
+
+                    int length = end - start;
+                    if (length <= 0)
+                    {
+                        continue;
+                    }
+
+                    document.getText(start, end - start, seg);
+                    int whiteSpaceCount = 0;
+
+                    char c = seg.setIndex(seg.offset + length - 1);
+                    if (c == '\n')
+                    {
+                        end--;
+                        c = seg.previous();
+                    }
+                    while (c != Segment.DONE)
+                    {
+                        if (!Character.isSpaceChar(c))
+                        {
+                            break;
+                        }
+                        whiteSpaceCount++;
+                        c = seg.previous();
+                    }
+
+                    int removeLength = end - whiteSpaceCount;
+                    if (removeLength >= caretPos)
+                    {
+                        numberOfRemovedCharsAfterCaretPos += removeLength;
+                    }
+
+                    if (whiteSpaceCount > 0)
+                    {
+                        document.remove(removeLength, whiteSpaceCount);
+                    }
+                }
+
+                textEditor.setCaretPosition(caretPos - numberOfRemovedCharsAfterCaretPos);
+            }
+            catch (BadLocationException e1)
+            {
+                LOGGER.error("Error replacing whitespace", e1);
+            }
+            finally
+            {
+                textEditor.endAtomicEdit();
+            }
         }
     };
 

@@ -1092,6 +1092,11 @@ class QueryeerView extends JFrame
                 }
 
                 JMenuItem menuItem = new JMenuItem(action);
+                if (order >= editMenu.getItemCount())
+                {
+                    order = editMenu.getItemCount() - 1;
+                }
+
                 editMenu.add(menuItem, (int) order);
                 editorMenuActions.add(menuItem);
             }
