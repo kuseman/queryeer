@@ -1135,8 +1135,14 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
 
         sb.append(typeName);
         sb.append('(');
-        sb.append(columnSize);
-
+        if (columnSize == Integer.MAX_VALUE)
+        {
+            sb.append("MAX");
+        }
+        else
+        {
+            sb.append(columnSize);
+        }
         if (decimalDigits != null)
         {
             sb.append(", ");
