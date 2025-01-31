@@ -120,6 +120,7 @@ import com.queryeer.api.editor.ITextEditorDocumentParser.ParseItem;
 import com.queryeer.api.editor.ITextEditorDocumentParser.ToolTipItem;
 import com.queryeer.api.editor.ITextEditorKit;
 import com.queryeer.api.editor.TextSelection;
+import com.queryeer.api.extensions.output.table.TableTransferable;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.domain.Caret;
 import com.queryeer.event.CaretChangedEvent;
@@ -1600,18 +1601,56 @@ class TextEditor implements ITextEditor, SearchListener
 
                 Set<String> seenMimeTypes = new HashSet<>();
                 List<DataFlavor> applicableFlavors = new ArrayList<>();
+                DataFlavor plainStringFlavor = null;
+                boolean queryeerDataFound = false;
                 for (DataFlavor df : flavors)
                 {
-                    if (String.class.equals(df.getRepresentationClass())
-                            && (df.getPrimaryType()
-                                    .equals("text")
-                                    || df.getPrimaryType()
-                                            .equals("plb")))
+                    if (!String.class.equals(df.getRepresentationClass()))
+                    {
+                        continue;
+                    }
+
+                    boolean isQueryeer = df.getPrimaryType()
+                            .equals("queryeer");
+                    boolean isJavaString = df.getMimeType()
+                            .startsWith(TableTransferable.JAVA_SERIALIZED_OBJECT);
+                    boolean isPlainText = df.getMimeType()
+                            .startsWith(TableTransferable.PLAIN_TEXT);
+                    boolean isHtml = df.getMimeType()
+                            .startsWith("text/html");
+
+                    if (plainStringFlavor == null
+                            && isPlainText)
+                    {
+                        plainStringFlavor = df;
+                    }
+                    else if (plainStringFlavor == null
+                            && isJavaString)
+                    {
+                        plainStringFlavor = df;
+                    }
+                    else
+                    {
+                        isJavaString = false;
+                        isPlainText = false;
+                    }
+
+                    if (isQueryeer
+                            || isJavaString
+                            || isPlainText
+                            || isHtml)
                     {
                         if (!seenMimeTypes.add(df.getPrimaryType() + "/" + df.getSubType()))
                         {
                             continue;
                         }
+
+                        if (df.getPrimaryType()
+                                .equals("queryeer"))
+                        {
+                            queryeerDataFound = true;
+                        }
+
                         applicableFlavors.add(df);
                     }
                 }
@@ -1624,7 +1663,13 @@ class TextEditor implements ITextEditor, SearchListener
                 ButtonGroup bg = new ButtonGroup();
                 for (DataFlavor df : applicableFlavors)
                 {
-                    JRadioButton rb = new JRadioButton(df.getHumanPresentableName());
+                    boolean queryeer = df.getPrimaryType()
+                            .equals("queryeer");
+                    boolean html = df.getMimeType()
+                            .contains("html");
+                    JRadioButton rb = new JRadioButton(queryeer ? df.getHumanPresentableName()
+                            : html ? "Html"
+                                    : "Plain");
                     rb.addActionListener(l ->
                     {
                         try
@@ -1639,6 +1684,32 @@ class TextEditor implements ITextEditor, SearchListener
 
                     bg.add(rb);
                     flavorsPanel.add(rb);
+                }
+
+                // If we only have a java string
+                if (!queryeerDataFound
+                        && plainStringFlavor != null)
+                {
+                    DataFlavor df = plainStringFlavor;
+                    List.of(TableTransferable.SQL_IN, TableTransferable.SQL_IN_NEW_LINE)
+                            .forEach(s ->
+                            {
+                                JRadioButton rb = new JRadioButton(s);
+                                rb.addActionListener(l ->
+                                {
+                                    try
+                                    {
+                                        preview.setText(String.valueOf(TableTransferable.getSqlIn((String) clipboard.getData(df), s == TableTransferable.SQL_IN_NEW_LINE)));
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        // Swallow
+                                    }
+                                });
+
+                                bg.add(rb);
+                                flavorsPanel.add(rb);
+                            });
                 }
 
                 ((JRadioButton) flavorsPanel.getComponent(0)).doClick();

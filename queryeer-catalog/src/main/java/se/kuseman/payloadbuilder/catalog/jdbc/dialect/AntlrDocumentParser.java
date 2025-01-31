@@ -1,8 +1,12 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
+import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 import static java.util.Objects.requireNonNull;
 
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
 import java.io.Reader;
@@ -28,9 +32,12 @@ import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.event.ExecuteQueryEvent;
+import com.queryeer.api.extensions.output.table.TableTransferable;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
 import com.vmware.antlr4c3.CodeCompletionCore;
@@ -52,6 +59,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 /** Parser for antlr based database implementations */
 abstract class AntlrDocumentParser<T extends ParserRuleContext> implements ITextEditorDocumentParser
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AntlrDocumentParser.class);
     private static final String TABLE_TEMPLATE = Common.readResource("/se/kuseman/payloadbuilder/catalog/jdbc/templates/Table.html");
     protected static final String INDICES = "indices";
     protected static final String FOREIGN_KEYS = "foreignKeys";
@@ -172,6 +180,12 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     /** Get the table source text from rule used for tooltips/linkactions */
     protected abstract Pair<Interval, ObjectName> getProcedureFunction(ParserRuleContext ctx);
 
+    /** Returns the id for 'IN' lexer token. */
+    protected int getInTokenId()
+    {
+        return -1;
+    }
+
     /**
      * Builds a model for provided table source used when rendering template
      * 
@@ -199,7 +213,119 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         {
             return null;
         }
-        return getCompletionItems(tokenOffset);
+
+        CompletionResult completionResult = getCompletionItems(tokenOffset);
+
+        List<CompletionItem> clipboardCompletions = getClipboardCompletions(tokenOffset);
+
+        if (!clipboardCompletions.isEmpty())
+        {
+            List<CompletionItem> items = new ArrayList<>(completionResult.getItems()
+                    .size() + clipboardCompletions.size());
+            items.addAll(clipboardCompletions);
+            items.addAll(completionResult.getItems());
+            completionResult = new CompletionResult(items, completionResult.isPartialResult());
+        }
+
+        return completionResult;
+    }
+
+    /** If we are positioned at an IN expression see if we have anything in Clipboard that can be completed at offset. */
+    private List<CompletionItem> getClipboardCompletions(TokenOffset tokenOffset)
+    {
+        // Caret is between IN and next token => suggest
+        if (tokenOffset.prevTree instanceof TerminalNode node
+                && node.getSymbol()
+                        .getType() == getInTokenId())
+        {
+            return getClipboardSqlInCompletionItems(false);
+        }
+
+        Token in = tokenOffset.tree instanceof TerminalNode node
+                && node.getSymbol()
+                        .getType() == getInTokenId() ? node.getSymbol()
+                                : null;
+
+        // Caret is on IN after N char => suggest
+        // We don't want to suggest if the caret is between I and N
+        if (in != null
+                && tokenOffset.caretOffset > in.getStartIndex())
+        {
+            return getClipboardSqlInCompletionItems(true);
+        }
+        return emptyList();
+    }
+
+    private List<CompletionItem> getClipboardSqlInCompletionItems(boolean includeInToken)
+    {
+        Clipboard clipboard = Toolkit.getDefaultToolkit()
+                .getSystemClipboard();
+        DataFlavor[] flavors = clipboard.getAvailableDataFlavors();
+
+        DataFlavor plainTextDf = null;
+        List<CompletionItem> result = null;
+        for (DataFlavor df : flavors)
+        {
+            if (plainTextDf == null
+                    && String.class.equals(df.getRepresentationClass())
+                    && (df.getMimeType()
+                            .startsWith(TableTransferable.JAVA_SERIALIZED_OBJECT)
+                            || df.getMimeType()
+                                    .startsWith(TableTransferable.PLAIN_TEXT)))
+            {
+                plainTextDf = df;
+            }
+
+            try
+            {
+                if (df.getMimeType()
+                        .startsWith(TableTransferable.MIME_TYPE_SQL_IN))
+                {
+                    if (result == null)
+                    {
+                        result = new ArrayList<>();
+                    }
+
+                    String data = String.valueOf(clipboard.getData(df));
+                    result.add(new CompletionItem(List.of("in"), (includeInToken ? "in "
+                            : "") + data, df.getHumanPresentableName()));
+                }
+            }
+            catch (Exception e)
+            {
+                LOGGER.error("Error reading clipboard", e);
+            }
+        }
+
+        // See if the plain text is a newline based text
+        if (result == null
+                && plainTextDf != null)
+        {
+            try
+            {
+                String data = String.valueOf(clipboard.getData(plainTextDf));
+                if (TableTransferable.isSqlIn(data))
+                {
+                    result = new ArrayList<>();
+
+                    String sqlIn = TableTransferable.getSqlIn(data, false);
+                    String sqlInNewLine = TableTransferable.getSqlIn(data, true);
+
+                    result.add(new CompletionItem(List.of("in"), (includeInToken ? "in "
+                            : "") + sqlIn, TableTransferable.SQL_IN));
+                    result.add(new CompletionItem(List.of("in"), (includeInToken ? "in "
+                            : "") + sqlInNewLine, TableTransferable.SQL_IN_NEW_LINE));
+
+                }
+            }
+            catch (Exception e)
+            {
+                LOGGER.error("Error reading clipboard", e);
+            }
+        }
+
+        return result == null ? emptyList()
+                : result;
     }
 
     @Override
@@ -414,7 +540,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
                         && offset >= start
                         && offset <= stop + 1)
                 {
-                    return new TokenOffset(tokenIndex, node, prev);
+                    return new TokenOffset(offset, tokenIndex, node, prev);
                 }
                 // We passed the offset which means caret is at a hidden channel token
                 // Find that token in the input stream
@@ -428,7 +554,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
 
                     tokenIndex = tokenToSearch != null ? tokenToSearch.getTokenIndex()
                             : -1;
-                    return new TokenOffset(tokenIndex, node, prev);
+                    return new TokenOffset(offset, tokenIndex, node, prev);
                 }
 
                 prev = node;
@@ -462,7 +588,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         return null;
     }
 
-    protected record TokenOffset(int suggestTokenIndex, ParseTree tree, ParseTree prevTree)
+    protected record TokenOffset(int caretOffset, int suggestTokenIndex, ParseTree tree, ParseTree prevTree)
     {
     }
 
