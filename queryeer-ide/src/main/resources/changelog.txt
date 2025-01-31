@@ -2,6 +2,23 @@ CHANGELOG
 
 Queryeer
 
+v2.7.0
+chore: Bump Payloadbuilder
+fix: Fix column label in JDBC tree to show MAX instead of Integer.MAX_VALUE
+feat: Code-complete table copied values from clipboard when located at a IN-expression
+fix: Minor fixes in paste special dialog
+feat: Add support for OutputComponents to implement an extended OutputWriter to be able to receive metadata about a result set.
+This is implemented on TableOutputWriter and used ju JdbcQuery engine to print a description text above each result set with
+information about which connection/database etc. the result set was originating from.
+fix: Trigger value dialog in table when pressing enter
+feat: Add remove all trailing spaces action in TextEditor
+fix: Paste special fixes. More verbose dialog, added UNION ALL support
+feat: Add support for cloning connections (JDBC/Elastic)
+feat: Add support for testing JDBC connections in dialog
+fix: Change the flow in quick window framework to let model be more versatile reagarding selections of items.
+Now the implementer can return what shuold be done upon selection. For example reload model is an option that lets
+the implementer first authorize or in other ways ask user for input and then reload the quick items list.
+
 v2.6.0
 feat: Add support for quick change of datasources similar to quick change of files. Triggered by F2 and is query engine implementation specific. JDBC implemented so far
 feat: Add project files into quick files dialog
@@ -132,6 +149,11 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.9.1
+fix: Guard against NPE when analyzing a predicate with a dereference expression
+fix: Add issue where a dereference column/expression couldn't be used in indices
+fix: Add copy of nowUtc variable in copy-ctor of StatementContext
 
 v1.8.0
 fix: Don't write an initial newline in CsvOutputWriter when there are no columns or only empty columns
