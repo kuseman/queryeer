@@ -85,6 +85,8 @@ public interface ITextEditorDocumentParser
     /** Result of a code completion for an offset */
     static class CompletionResult
     {
+        public static final CompletionResult EMPTY = new CompletionResult(emptyList(), false);
+
         private final List<CompletionItem> items;
         private final boolean partialResult;
 
@@ -206,6 +208,11 @@ public interface ITextEditorDocumentParser
         public CompletionItem(String replacementText, String shortDesc, Icon icon)
         {
             this(List.of(replacementText), replacementText, shortDesc, null, icon, 0);
+        }
+
+        public CompletionItem(List<String> matchParts, String replacementText, String shortDesc)
+        {
+            this(matchParts, replacementText, shortDesc, null, null, 0);
         }
 
         public CompletionItem(String replacementText, int relevance)

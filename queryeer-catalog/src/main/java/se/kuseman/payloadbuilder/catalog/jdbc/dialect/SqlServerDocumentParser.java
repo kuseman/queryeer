@@ -449,6 +449,12 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
 
     @Override
+    protected int getInTokenId()
+    {
+        return TSqlLexer.IN;
+    }
+
+    @Override
     protected Pair<Interval, ObjectName> getTableSource(ParserRuleContext ctx)
     {
         Id_Context databaseCtx = null;
@@ -962,11 +968,13 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
             String schema = ctx.schema != null ? ctx.schema.getText()
                     : "";
-            String name = ctx.table.getText();
+            String name = ctx.table != null ? ctx.table.getText()
+                    : "";
 
             TableAliasType type = TableAliasType.TABLE;
 
-            if (ctx.table.TEMP_ID() != null)
+            if (ctx.table != null
+                    && ctx.table.TEMP_ID() != null)
             {
                 type = TableAliasType.TEMPTABLE;
                 database = "";

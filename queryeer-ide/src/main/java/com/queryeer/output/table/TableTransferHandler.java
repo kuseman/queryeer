@@ -1,49 +1,18 @@
 package com.queryeer.output.table;
 
-import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
-import java.awt.datatransfer.UnsupportedFlavorException;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.JComponent;
 import javax.swing.JTable;
 import javax.swing.TransferHandler;
-import javax.swing.plaf.UIResource;
 
-import org.apache.commons.lang3.StringUtils;
+import com.queryeer.api.extensions.output.table.TableTransferable;
 
 /** Transfer handler for query table */
-class TableTransferHandler extends TransferHandler implements UIResource
+class TableTransferHandler extends TransferHandler
 {
-    private static final DataFlavor[] FLAVORS;
-
-    static
-    {
-        // CSOFF
-        FLAVORS = new DataFlavor[9];
-        try
-        {
-            FLAVORS[0] = new DataFlavor("text/html;class=java.lang.String", "Html");
-            FLAVORS[1] = new DataFlavor("text/html;class=java.io.Reader");
-            FLAVORS[2] = new DataFlavor("text/html;charset=unicode;class=java.io.InputStream");
-
-            FLAVORS[3] = new DataFlavor("text/plain;class=java.lang.String", "Plain Text");
-            FLAVORS[4] = new DataFlavor("text/plain;class=java.io.Reader");
-            FLAVORS[5] = new DataFlavor("text/plain;charset=unicode;class=java.io.InputStream");
-
-            FLAVORS[6] = new DataFlavor("plb/sql-in;class=java.lang.String", "SQL IN");
-            FLAVORS[7] = new DataFlavor("plb/sql-in-new-line;class=java.lang.String", "SQL IN (New Line)");
-            FLAVORS[8] = new DataFlavor("plb/sql-union-all;class=java.lang.String", "SQL UNION ALL");
-            // CSON
-        }
-        catch (Exception e)
-        {
-            System.err.println("Error initalizing data flavours for JTable TransferHandler. " + e);
-        }
-    }
-
     /**
      * Create a Transferable to use as the source for a data transfer.
      *
@@ -70,7 +39,7 @@ class TableTransferHandler extends TransferHandler implements UIResource
 
     /** Create a data transferable from provided jtable */
     // CSOFF
-    static DataTransferable generate(JTable table, boolean includeHeaders)
+    static Transferable generate(JTable table, boolean includeHeaders)
     // CSON
     {
         int[] rows;
@@ -144,234 +113,6 @@ class TableTransferHandler extends TransferHandler implements UIResource
             }
         }
 
-        return new DataTransferable(headerNames, rowsValues);
-    }
-
-    /** Trsnaferable */
-    static class DataTransferable implements Transferable
-    {
-        private final String[] headerNames;
-        private final List<Object[]> rowsValues;
-
-        DataTransferable(String[] headerNames, List<Object[]> rowsValues)
-        {
-            this.headerNames = headerNames;
-            this.rowsValues = rowsValues;
-        }
-
-        @Override
-        public boolean isDataFlavorSupported(DataFlavor flavor)
-        {
-            for (int i = 0; i < FLAVORS.length; i++)
-            {
-                if (FLAVORS[i].equals(flavor))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public DataFlavor[] getTransferDataFlavors()
-        {
-            return FLAVORS;
-        }
-
-        @Override
-        public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException
-        {
-            String mimeType = flavor.getMimeType();
-            if (mimeType.contains("html"))
-            {
-                return toHtml();
-            }
-            else if (mimeType.contains("sql-in-new-line"))
-            {
-                return toSqlIn(true);
-            }
-            else if (mimeType.contains("sql-in"))
-            {
-                return toSqlIn(false);
-            }
-            else if (mimeType.contains("sql-union-all"))
-            {
-                return toSqlUnionAll();
-            }
-            return toPlain();
-        }
-
-        private String toSqlIn(boolean newLines)
-        {
-            int rows = rowsValues.size();
-            StringBuffer sqlIn = new StringBuffer();
-
-            for (int row = 0; row < rows; row++)
-            {
-                Object[] values = rowsValues.get(row);
-
-                // In uses first copied column only
-                Object obj = values[0];
-                String val = (obj == null) ? ""
-                        : obj.toString();
-                if (!(obj instanceof Number))
-                {
-                    sqlIn.append("N\'")
-                            .append(StringUtils.replace(String.valueOf(val), "'", "''"))
-                            .append('\'');
-                }
-                else
-                {
-                    sqlIn.append(val);
-                }
-                if (row < rows - 1)
-                {
-                    sqlIn.append(",");
-                    if (newLines)
-                    {
-                        sqlIn.append(System.lineSeparator());
-                    }
-                }
-            }
-            return sqlIn.toString();
-        }
-
-        private String toSqlUnionAll()
-        {
-            /* @formatter:off
-             *
-             * SELECT *
-             * FROM
-             * (
-             *              SELECT 1,3
-             *    UNION ALL SELECT 2,6
-             * ) x (header1, header2)
-             *
-             * @formatter:on
-             */
-            StringBuilder buf = new StringBuilder("""
-                    SELECT *
-                    FROM
-                    (
-                    """);
-            int rows = rowsValues.size();
-            for (int row = 0; row < rows; row++)
-            {
-                if (row > 0)
-                {
-                    buf.append(System.lineSeparator());
-                    buf.append("    UNION ALL SELECT ");
-                }
-                else
-                {
-                    buf.append("              SELECT ");
-                }
-                Object[] values = rowsValues.get(row);
-
-                boolean first = true;
-                for (Object obj : values)
-                {
-                    if (!first)
-                    {
-                        buf.append(',');
-                    }
-
-                    String val = (obj == null) ? ""
-                            : obj.toString();
-                    if (!(obj instanceof Number))
-                    {
-                        buf.append("N\'")
-                                .append(StringUtils.replace(String.valueOf(val), "'", "''"))
-                                .append('\'');
-                    }
-                    else
-                    {
-                        buf.append(val);
-                    }
-                    first = false;
-                }
-            }
-
-            buf.append(System.lineSeparator());
-            buf.append(") x (");
-
-            int cols = headerNames.length;
-            for (int i = 0; i < cols; i++)
-            {
-                if (i > 0)
-                {
-                    buf.append(", ");
-                }
-                buf.append('\"')
-                        .append(headerNames[i])
-                        .append('\"');
-            }
-            buf.append(')')
-                    .append(System.lineSeparator());
-
-            return buf.toString();
-        }
-
-        private String toHtml()
-        {
-            int cols = headerNames.length;
-
-            StringBuilder htmlBuf = new StringBuilder();
-            htmlBuf.append("<html>\n<body>\n<table>\n");
-            htmlBuf.append("<tr>\n");
-            for (int col = 0; col < cols; col++)
-            {
-                String columnName = headerNames[col];
-                htmlBuf.append("  <th>")
-                        .append(columnName)
-                        .append("</th>\n");
-            }
-            htmlBuf.append("</tr>\n");
-
-            int rows = rowsValues.size();
-            for (int row = 0; row < rows; row++)
-            {
-                Object[] values = rowsValues.get(row);
-                for (int col = 0; col < cols; col++)
-                {
-                    Object obj = values[col];
-                    String val = (obj == null) ? ""
-                            : obj.toString();
-                    htmlBuf.append("  <td>" + val + "</td>\n");
-                }
-                htmlBuf.append("</tr>\n");
-            }
-            htmlBuf.append("</table>\n</body>\n</html>");
-            return htmlBuf.toString();
-        }
-
-        private String toPlain()
-        {
-            int cols = headerNames.length;
-            int rows = rowsValues.size();
-
-            StringBuilder plainBuf = new StringBuilder();
-            for (int row = 0; row < rows; row++)
-            {
-                Object[] values = rowsValues.get(row);
-                for (int col = 0; col < cols; col++)
-                {
-                    Object obj = values[col];
-                    String val = (obj == null) ? ""
-                            : obj.toString();
-
-                    plainBuf.append(val);
-                    if (col < cols - 1)
-                    {
-                        plainBuf.append('\t');
-                    }
-                }
-                if (row < rows - 1)
-                {
-                    plainBuf.append(System.lineSeparator());
-                }
-            }
-            return plainBuf.toString();
-        }
+        return new TableTransferable(headerNames, rowsValues);
     }
 }

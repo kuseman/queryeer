@@ -76,6 +76,12 @@ class PrestoDocumentParser extends AntlrDocumentParser<SqlBaseParser.SingleState
     }
 
     @Override
+    protected int getInTokenId()
+    {
+        return SqlBaseLexer.IN;
+    }
+
+    @Override
     protected Set<Integer> getProcedureFunctionsRuleIndices()
     {
         return emptySet();
@@ -120,7 +126,7 @@ class PrestoDocumentParser extends AntlrDocumentParser<SqlBaseParser.SingleState
     @Override
     protected CompletionResult getCompletionItems(TokenOffset tokenOffset)
     {
-        return null;
+        return CompletionResult.EMPTY;
     }
 
     @Override
