@@ -71,6 +71,13 @@
             <outputDirectory>plugins/queryeer-catalog-${project.version}
             </outputDirectory>
         </fileSet>
+        <fileSet>
+            <directory>${basedir}/target/jre-win64</directory>
+            <outputDirectory>jre-win64</outputDirectory>
+            <includes>
+                <include>**/*</include>
+            </includes>
+        </fileSet>
     </fileSets>
     <formats>
         <format>dir</format>

@@ -14,6 +14,7 @@
         <root>${basedir}/..</root>
         <main.basedir>${project.parent.basedir}</main.basedir>
         <maven.deploy.skip>true</maven.deploy.skip>
+        <jdk.version>17.0.14+10</jdk.version>
     </properties>
     
     <dependencies>
@@ -110,9 +111,134 @@
                             </execution>
                         </executions>
                     </plugin>
+                    <plugin>
+                        <groupId>com.igormaznitsa</groupId>
+                        <artifactId>mvn-jlink-wrapper</artifactId>
+                        <version>1.2.1</version>
+                        <configuration>
+                            <addModules>
+                                <addModule>java.base</addModule>
+                                <addModule>java.compiler</addModule>
+                                <addModule>java.datatransfer</addModule>
+                                <addModule>java.desktop</addModule>
+                                <addModule>java.logging</addModule>
+                                <addModule>java.management</addModule>
+                                <addModule>java.naming</addModule>
+                                <addModule>java.scripting</addModule>
+                                <addModule>java.sql</addModule>
+                                <addModule>java.xml</addModule>
+                                <addModule>java.rmi</addModule>
+                                <addModule>java.net.http</addModule>
+                                <addModule>jdk.jsobject</addModule>
+                                <addModule>jdk.crypto.ec</addModule>
+                                <addModule>jdk.unsupported</addModule>
+                                <addModule>jdk.unsupported.desktop</addModule>
+                                <addModule>jdk.xml.dom</addModule>
+                                <addModule>java.security.jgss</addModule>
+                                <addModule>jdk.httpserver</addModule>
+                                <addModule>jdk.dynalink</addModule>
+                            </addModules>
+                            <options>
+                                <option>--compress=2</option>
+                                <option>--no-header-files</option>
+                                <option>--no-man-pages</option>
+                                <option>--vm=client</option>
+                            </options>
+                            <output/>
+                            <tool/>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>call-jlink-win</id>
+                                <goals>
+                                    <goal>jlink</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <output>${project.build.directory}${file.separator}jre-win64</output>
+                                    <provider>BELLSOFT</provider>
+                                    <providerConfig>
+                                        <version>${jdk.version}</version>
+                                        <arch>amd64-full</arch>
+                                        <type>jdk</type>
+                                        <os>windows</os>
+                                    </providerConfig>
+                                </configuration>
+                            </execution>
+                            <!--
+                            <execution>
+                                <id>call-jlink-linux</id>
+                                <goals>
+                                    <goal>jlink</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <output>${project.build.directory}${file.separator}jre-linux64</output>
+                                    <provider>BELLSOFT</provider>
+                                    <providerConfig>
+                                        <version>${jdk.version}</version>
+                                        <arch>amd64-full</arch>
+                                        <type>jdk</type>
+                                        <os>linux</os>
+                                    </providerConfig>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>call-jlink-macos</id>
+                                <goals>
+                                    <goal>jlink</goal>
+                                </goals>
+                                <phase>package</phase>
+                                <configuration>
+                                    <output>${project.build.directory}${file.separator}jre-macos64</output>
+                                    <provider>BELLSOFT</provider>
+                                    <providerConfig>
+                                        <version>${jdk.version}</version>
+                                        <arch>amd64-full</arch>
+                                        <type>jdk</type>
+                                        <os>macos</os>
+                                    </providerConfig>
+                                </configuration>
+                            </execution>
+                            -->
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>com.akathist.maven.plugins.launch4j</groupId>
+                        <artifactId>launch4j-maven-plugin</artifactId>
+                        <version>2.4.1</version>
+                        <executions>
+                            <execution>
+                                <id>l4j-clui</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>launch4j</goal>
+                                </goals>
+                                <configuration>
+                                    <headerType>console</headerType>
+                                    <outfile>${project.build.directory}${file.separator}queryeer-${project.version}-dist${file.separator}queryeer-${project.version}${file.separator}queryeer.exe</outfile>
+                                    <errTitle>Queryeer</errTitle>
+                                    <icon>src/main/dist/win/queryeer.ico</icon>
+                                    <jar>${project.build.directory}${file.separator}queryeer-${project.version}-dist${file.separator}queryeer-${project.version}${file.separator}lib${file.separator}queryeer-ide-${project.version}.jar</jar>
+                                    <classPath>
+                                        <mainClass>com.queryeer.Main</mainClass>
+                                        <addDependencies>true</addDependencies>
+                                        <jarLocation>lib/</jarLocation>
+                                    </classPath>
+                                    <jre>
+                                        <path>./jre-win64</path>
+                                        <opts>
+                                            <opt>-Dfile.encoding=UTF-8</opt>
+                                            <opt>-Dplugins=./plugins</opt>
+                                            <opt>-Dshared=./shared</opt>
+                                        </opts>
+                                    </jre>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                 </plugins>
             </build>
-
         </profile>
     </profiles>
 </project>
