@@ -13,6 +13,7 @@ import java.util.function.BooleanSupplier;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.payloadbuilder.IPayloadbuilderState;
 import com.queryeer.payloadbuilder.CatalogsConfigurable.QueryeerCatalog;
+import com.queryeer.payloadbuilder.VariablesConfigurable.Environment;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
@@ -24,6 +25,9 @@ class PayloadbuilderState implements IPayloadbuilderState, BooleanSupplier
     private final CatalogsConfigurable catalogsConfigurable;
     private final QuerySession querySession;
     volatile boolean abort;
+
+    /** Variable environment that was used for execution. */
+    Environment environment;
 
     PayloadbuilderState(IQueryEngine queryEngine, CatalogsConfigurable catalogsConfigurable, QuerySession querySession)
     {

@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import javax.swing.JButton;
@@ -120,8 +121,10 @@ class OptionsDialog extends DialogUtils.ADialog
         ok.setEnabled(false);
         ok.addActionListener(l1 ->
         {
-            commit();
-            setVisible(false);
+            if (commit())
+            {
+                setVisible(false);
+            }
         });
         cancel = new JButton("Cancel");
         cancel.setEnabled(false);
@@ -178,28 +181,29 @@ class OptionsDialog extends DialogUtils.ADialog
         }
     }
 
-    private void commit()
+    private boolean commit()
     {
+        AtomicBoolean anyFail = new AtomicBoolean(false);
         configurableNodes.forEach(node ->
         {
             if (node.dirty)
             {
-                try
+                if (node.getConfigurable()
+                        .commitChanges())
                 {
-                    node.getConfigurable()
-                            .commitChanges();
-                }
-                finally
-                {
-                    // Always set dirty flag because else we might end up with
-                    // not being able to close dialog
                     node.dirty = false;
+                }
+                else
+                {
+                    anyFail.set(true);
                 }
             }
         });
 
-        ok.setEnabled(false);
-        cancel.setEnabled(false);
+        ok.setEnabled(anyFail.get());
+        cancel.setEnabled(anyFail.get());
+
+        return !anyFail.get();
     }
 
     @Override

@@ -60,9 +60,10 @@ import com.queryeer.api.service.IConfig;
 /** Configurable for payloadbuilder module */
 class CatalogsConfigurable implements IConfigurable
 {
+    static final String PAYLOADBUILDER = "Payloadbuilder";
     private static final Logger LOGGER = LoggerFactory.getLogger(CatalogsConfigurable.class);
     private static final String NAME = CatalogsConfigurable.class.getPackageName();
-    private static final ObjectMapper MAPPER = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+    static final ObjectMapper MAPPER = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     private final IConfig config;
     private final List<ICatalogExtensionFactory> catalogExtensionFactories;
@@ -98,7 +99,7 @@ class CatalogsConfigurable implements IConfigurable
     @Override
     public String groupName()
     {
-        return "Payloadbuilder";
+        return PAYLOADBUILDER;
     }
 
     @Override
@@ -114,7 +115,7 @@ class CatalogsConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         File file = config.getConfigFileName(NAME);
 
@@ -128,12 +129,13 @@ class CatalogsConfigurable implements IConfigurable
         catch (IOException e)
         {
             JOptionPane.showMessageDialog(component, "Error saving config, message: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
 
         // Re-initalize to get a new copy in UI
         component.init(payloadBuilderConfig.catalogs);
         this.payloadbuilderConfig = payloadBuilderConfig;
+        return true;
     }
 
     @Override

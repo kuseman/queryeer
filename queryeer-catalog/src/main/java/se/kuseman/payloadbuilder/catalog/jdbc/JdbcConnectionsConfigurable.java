@@ -57,7 +57,7 @@ class JdbcConnectionsConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         connectionsModel.setConnections(getComponent().getResult());
         boolean save = true;
@@ -73,10 +73,10 @@ class JdbcConnectionsConfigurable implements IConfigurable
             String encryptedPass = cryptoService.encryptString(pass);
             if (encryptedPass == null)
             {
-                save = false;
-                continue;
+                return false;
             }
 
+            save = true;
             con.setPassword(encryptedPass);
         }
 
@@ -85,6 +85,7 @@ class JdbcConnectionsConfigurable implements IConfigurable
             config.saveExtensionConfig(NAME, singletonMap(CONNECTIONS, connectionsModel.getConnections()));
             getComponent().init(connectionsModel.copyConnections());
         }
+        return true;
     }
 
     @Override

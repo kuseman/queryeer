@@ -275,7 +275,7 @@ class QueryeerConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         config.setDefaultQueryEngine((IQueryEngine) defaultQueryEngineModel.getSelectedItem());
         int rowCount = queryEngineAssociationsModel.getRowCount();
@@ -287,6 +287,7 @@ class QueryeerConfigurable implements IConfigurable
         }
         config.setSharedFolderPath(sharedFolder);
         config.save();
+        return true;
     }
 
     @Override
