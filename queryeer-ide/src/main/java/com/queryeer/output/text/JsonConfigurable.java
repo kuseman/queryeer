@@ -81,14 +81,15 @@ class JsonConfigurable implements IConfigurable
 
     @SuppressWarnings("unchecked")
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         if (component == null)
         {
-            return;
+            return false;
         }
         settings = (JsonSettingsWrapper) component.getTarget();
         config.saveExtensionConfig(NAME, MAPPER.convertValue(settings, Map.class));
+        return true;
     }
 
     @Override

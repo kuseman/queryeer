@@ -170,7 +170,7 @@ class TableActionsConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         QueryActions queryActions = component.getQueryActions();
         File configFileName = config.getConfigFileName(NAME);
@@ -182,9 +182,10 @@ class TableActionsConfigurable implements IConfigurable
         catch (IOException e)
         {
             JOptionPane.showMessageDialog(component, "Error saving config, message: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
         this.queryActions = queryActions;
+        return true;
     }
 
     private void notifyDirtyStateConsumers()

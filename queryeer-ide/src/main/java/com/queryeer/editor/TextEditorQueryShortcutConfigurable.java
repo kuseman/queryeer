@@ -149,7 +149,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         Shortcuts shortcuts = component.getShortcuts();
         shortcuts.parseExpressions(expressionEvaluator, true);
@@ -163,9 +163,10 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         catch (IOException e)
         {
             JOptionPane.showMessageDialog(component, "Error saving config, message: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
         this.shortcuts = shortcuts;
+        return true;
     }
 
     @Override
