@@ -63,7 +63,7 @@ class ESCatalogConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         connectionsModel.setConnections(getComponent().getResult());
 
@@ -82,10 +82,10 @@ class ESCatalogConfigurable implements IConfigurable
             String encryptedPass = cryptoService.encryptString(pass);
             if (encryptedPass == null)
             {
-                save = false;
-                continue;
+                return false;
             }
 
+            save = true;
             con.setAuthPassword(encryptedPass);
         }
 
@@ -94,6 +94,7 @@ class ESCatalogConfigurable implements IConfigurable
             config.saveExtensionConfig(NAME, singletonMap(CONNECTIONS, connectionsModel.getConnections()));
             getComponent().init(connectionsModel.copyConnections());
         }
+        return true;
     }
 
     @Override

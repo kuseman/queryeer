@@ -131,24 +131,30 @@ class QueryeerController implements PropertyChangeListener
                 .setText(getMemoryString())).start();
         view.setRecentFiles(config.getRecentFiles());
 
-        SwingUtilities.invokeLater(() ->
+        Thread t = new Thread(() ->
         {
             final String message = aboutDialog.getNewVersionString();
             if (message != null)
             {
-                view.getLabelVersion()
-                        .setText("<html><b>New version available!</b>");
-                view.getLabelVersion()
-                        .addMouseListener(new MouseAdapter()
-                        {
-                            @Override
-                            public void mouseClicked(MouseEvent e)
+                SwingUtilities.invokeLater(() ->
+                {
+                    view.getLabelVersion()
+                            .setText("<html><b>New version available!</b>");
+                    view.getLabelVersion()
+                            .addMouseListener(new MouseAdapter()
                             {
-                                aboutDialog.showNewVersionMessage(message);
-                            }
-                        });
+                                @Override
+                                public void mouseClicked(MouseEvent e)
+                                {
+                                    aboutDialog.showNewVersionMessage(message);
+                                }
+                            });
+                });
             }
         });
+        t.setDaemon(true);
+        t.setName("VersionChecker");
+        t.start();
     }
 
     private void initSession()

@@ -13,13 +13,20 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JPanel;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import com.queryeer.Constants;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.IEditorFactory;
@@ -27,6 +34,7 @@ import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.editor.ITextEditorKit;
 import com.queryeer.api.editor.TextSelection;
+import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.engine.QueryEngineException;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
@@ -34,6 +42,7 @@ import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension.ExceptionAction;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.payloadbuilder.CatalogsConfigurable.QueryeerCatalog;
+import com.queryeer.payloadbuilder.VariablesConfigurable.Environment;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
@@ -60,13 +69,14 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     private final IEditorFactory editorFactory;
 
     PayloadbuilderQueryEngine(IEventBus eventBus, CatalogsConfigurable catalogsConfigurable, CatalogExtensionViewFactory catalogExtensionViewFactory, CompletionRegistry completionRegistry,
-            IEditorFactory editorFactory)
+            IEditorFactory editorFactory, VariablesConfigurable variablesConfigurable)
     {
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.catalogsConfigurable = requireNonNull(catalogsConfigurable, "catalogsConfigurable");
         this.completionRegistry = requireNonNull(completionRegistry, "completionRegistry");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
-        this.quickPropertiesComponent = QuickPropertiesComponent.create(requireNonNull(catalogExtensionViewFactory, "catalogExtensionViewFactory"), catalogsConfigurable.getCatalogs());
+        this.quickPropertiesComponent = QuickPropertiesComponent.create(eventBus, requireNonNull(variablesConfigurable, "variablesConfigurable"),
+                requireNonNull(catalogExtensionViewFactory, "catalogExtensionViewFactory"), catalogsConfigurable.getCatalogs());
     }
 
     @Override
@@ -137,6 +147,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
                 editor = textEditor;
             }
 
+            boolean injectEnvironment = false;
             String queryText;
             if (query instanceof ExecuteQueryContext ctx)
             {
@@ -144,7 +155,13 @@ class PayloadbuilderQueryEngine implements IQueryEngine
             }
             else
             {
+                injectEnvironment = true;
                 queryText = String.valueOf(query);
+            }
+
+            if (injectEnvironment)
+            {
+                quickPropertiesComponent.beforeExecute(queryFile);
             }
 
             boolean complete = false;
@@ -246,12 +263,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
                 }
                 finally
                 {
-                    // Update views to reflect changed values after query
-                    for (CatalogExtensionView view : quickPropertiesComponent.catalogViews)
-                    {
-                        view.afterExecute(queryFile);
-                    }
-
+                    quickPropertiesComponent.afterExecute(queryFile);
                     state.abort = false;
                 }
             }
@@ -314,10 +326,21 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     /** Quick properties with a panel per active catalog */
     static class QuickPropertiesComponent extends JPanel
     {
-        private List<CatalogExtensionView> catalogViews = new ArrayList<>();
-
-        QuickPropertiesComponent()
+        private static final Environment EMPTY_ENV = new Environment()
         {
+            {
+                name = " ";
+            }
+        };
+        private final VariablesConfigurable variablesConfigurable;
+        private List<CatalogExtensionView> catalogViews = new ArrayList<>();
+        private final DefaultComboBoxModel<VariablesConfigurable.Environment> environmentsModel;
+
+        QuickPropertiesComponent(VariablesConfigurable variablesConfigurable)
+        {
+            this.variablesConfigurable = variablesConfigurable;
+            this.environmentsModel = new DefaultComboBoxModel<>();
+            variablesConfigurable.addConfigChangedListener(() -> setVariablesEnvironments());
             setLayout(new GridBagLayout());
         }
 
@@ -330,8 +353,28 @@ class PayloadbuilderQueryEngine implements IQueryEngine
             }
         }
 
+        void beforeExecute(IQueryFile queryFile)
+        {
+            Environment env = (Environment) environmentsModel.getSelectedItem();
+            if (env != EMPTY_ENV)
+            {
+                PayloadbuilderState state = queryFile.getEngineState();
+                // Store choosen env. in the files state in case it's a long running query and the user
+                // switches env during execution, then we cannot clear correctly after execution
+                state.environment = env;
+                variablesConfigurable.beforeQuery(state.getQuerySession(), env);
+            }
+        }
+
         void afterExecute(IQueryFile queryFile)
         {
+            PayloadbuilderState state = queryFile.getEngineState();
+            if (state.environment != null)
+            {
+                variablesConfigurable.afterQuery(state.getQuerySession(), state.environment);
+                state.environment = null;
+            }
+
             // Update views to reflect changed values after query
             for (CatalogExtensionView view : catalogViews)
             {
@@ -339,12 +382,73 @@ class PayloadbuilderQueryEngine implements IQueryEngine
             }
         }
 
-        static QuickPropertiesComponent create(CatalogExtensionViewFactory factory, List<QueryeerCatalog> catalogs)
+        void setVariablesEnvironments()
         {
-            QuickPropertiesComponent result = new QuickPropertiesComponent();
+            environmentsModel.removeAllElements();
+            environmentsModel.addElement(EMPTY_ENV);
+            for (VariablesConfigurable.Environment env : variablesConfigurable.getEnvironments())
+            {
+                environmentsModel.addElement(env);
+            }
+        }
 
-            int y = 0;
+        static QuickPropertiesComponent create(IEventBus eventBus, VariablesConfigurable variablesConfigurable, CatalogExtensionViewFactory factory, List<QueryeerCatalog> catalogs)
+        {
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = 0;
+            gbc.insets = new Insets(0, 3, 3, 3);
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+
+            QuickPropertiesComponent result = new QuickPropertiesComponent(variablesConfigurable);
+            result.add(new JLabel("Variables: "), gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 1;
+            gbc.gridy = 0;
+            gbc.weightx = 1.0d;
+            gbc.insets = new Insets(0, 0, 3, 3);
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            JComboBox<VariablesConfigurable.Environment> environments = new JComboBox<>();
+            environments.setRenderer(new DefaultListCellRenderer()
+            {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+                {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    Environment env = (Environment) value;
+                    setText("");
+                    if (env != null)
+                    {
+                        setText(env.name);
+                    }
+                    return this;
+                }
+            });
+            environments.setModel(result.environmentsModel);
+            result.add(environments, gbc);
+
+            gbc = new GridBagConstraints();
+            gbc.gridx = 2;
+            gbc.gridy = 0;
+            gbc.insets = new Insets(0, 0, 3, 3);
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            JButton varsConfig = new JButton(Constants.COG);
+            varsConfig.addActionListener(l ->
+            {
+                eventBus.publish(new ShowOptionsEvent(VariablesConfigurable.class));
+            });
+            result.add(varsConfig, gbc);
+
+            result.setVariablesEnvironments();
+
             Insets insets = new Insets(0, 0, 3, 0);
+            int y = 1;
             for (QueryeerCatalog catalog : catalogs)
             {
                 if (catalog.isDisabled())
@@ -360,9 +464,9 @@ class PayloadbuilderQueryEngine implements IQueryEngine
 
                 CatalogExtensionView extensionView = factory.create(extension, catalog.getAlias());
                 result.catalogViews.add(extensionView);
-                result.add(extensionView, new GridBagConstraints(0, y++, 1, 1, 1, 0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
+                result.add(extensionView, new GridBagConstraints(0, y++, 3, 1, 1, 0, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
             }
-            result.add(new JPanel(), new GridBagConstraints(0, y, 1, 1, 1, 1, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
+            result.add(new JPanel(), new GridBagConstraints(0, y, 3, 1, 1, 1, GridBagConstraints.BASELINE, GridBagConstraints.HORIZONTAL, insets, 0, 0));
             return result;
         }
     }

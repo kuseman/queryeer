@@ -63,7 +63,7 @@ final class Utils
             c.setRequestProperty("Content-length", "0");
             c.setUseCaches(false);
             c.setAllowUserInteraction(false);
-            c.setConnectTimeout(250);
+            c.setConnectTimeout(1500);
             c.setReadTimeout(5000);
             c.connect();
             int status = c.getResponseCode();
