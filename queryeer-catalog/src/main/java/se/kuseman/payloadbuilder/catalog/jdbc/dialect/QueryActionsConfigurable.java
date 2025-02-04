@@ -165,7 +165,7 @@ class QueryActionsConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         QueryActions queryActions = component.getQueryActions()
                 .clone();
@@ -180,9 +180,10 @@ class QueryActionsConfigurable implements IConfigurable
         catch (IOException e)
         {
             JOptionPane.showMessageDialog(component, "Error saving config, message: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
         this.queryActions = queryActions;
+        return true;
     }
 
     @Override

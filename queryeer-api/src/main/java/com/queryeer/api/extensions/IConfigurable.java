@@ -58,9 +58,12 @@ public interface IConfigurable extends IExtension
      * <pre>
      * Configurable is responsible for storing state to disk etc.
      * </pre>
+     *
+     * @return True if commit succeeded otherwise false and configurable will remain in dirty state.
      */
-    default void commitChanges()
+    default boolean commitChanges()
     {
+        return true;
     }
 
     /**
