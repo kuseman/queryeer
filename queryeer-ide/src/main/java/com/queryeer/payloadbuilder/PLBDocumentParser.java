@@ -38,7 +38,6 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.mutable.MutableBoolean;
-import org.fife.ui.rsyntaxtextarea.parser.ParserNotice;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -767,7 +766,7 @@ class PLBDocumentParser implements ITextEditorDocumentParser
         }
     }
 
-    /** Listener for errors and transform these into {@link ParserNotice}'s */
+    /** Listener for errors and transform these into {@link ParseItem}'s */
     private static class ErrorListener extends BaseErrorListener
     {
         private final List<ParseItem> result;

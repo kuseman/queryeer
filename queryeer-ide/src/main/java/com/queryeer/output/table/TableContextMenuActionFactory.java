@@ -1,6 +1,7 @@
 package com.queryeer.output.table;
 
 import static java.util.Arrays.asList;
+import static java.util.Objects.requireNonNull;
 
 import java.awt.Desktop;
 import java.awt.event.ActionEvent;
@@ -17,28 +18,37 @@ import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
-import com.queryeer.dialog.ValueDialog;
 import com.queryeer.output.table.Model.QueryeerImage;
 
 /** Default factory for table context menu */
 class TableContextMenuActionFactory implements ITableContextMenuActionFactory
 {
+    private final IDialogFactory dialogFactory;
+
+    TableContextMenuActionFactory(IDialogFactory dialogFactory)
+    {
+        this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
+    }
+
     @Override
     public List<ITableContextMenuAction> create(ITableOutputComponent outputcomponent)
     {
-        return asList(new ViewAsJsonAction(outputcomponent), new ViewAsXmlAction(outputcomponent), new OpenInBrowserAction(outputcomponent));
+        return asList(new ViewAsJsonAction(dialogFactory, outputcomponent), new ViewAsXmlAction(dialogFactory, outputcomponent), new OpenInBrowserAction(outputcomponent));
     }
 
     /** View as JSON */
     private static class ViewAsJsonAction implements ITableContextMenuAction
     {
+        private final IDialogFactory dialogFactory;
         private final ITableOutputComponent outputcomponent;
 
-        ViewAsJsonAction(ITableOutputComponent outputcomponent)
+        ViewAsJsonAction(IDialogFactory dialogFactory, ITableOutputComponent outputcomponent)
         {
+            this.dialogFactory = dialogFactory;
             this.outputcomponent = outputcomponent;
         }
 
@@ -58,7 +68,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 {
                     ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
                     Object value = selectedRow.getCellValue();
-                    ValueDialog.showValueDialog("Json viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.JSON);
+                    dialogFactory.showValueDialog("Json viewer - " + selectedRow.getCellHeader(), value, IDialogFactory.Format.JSON);
                 }
             };
         }
@@ -101,10 +111,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
 
     private static class ViewAsXmlAction implements ITableContextMenuAction
     {
+        private final IDialogFactory dialogFactory;
         private final ITableOutputComponent outputcomponent;
 
-        ViewAsXmlAction(ITableOutputComponent outputcomponent)
+        ViewAsXmlAction(IDialogFactory dialogFactory, ITableOutputComponent outputcomponent)
         {
+            this.dialogFactory = dialogFactory;
             this.outputcomponent = outputcomponent;
         }
 
@@ -124,7 +136,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 {
                     ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
                     Object value = selectedRow.getCellValue();
-                    ValueDialog.showValueDialog("XML viewer - " + selectedRow.getCellHeader(), value, ValueDialog.Format.XML);
+                    dialogFactory.showValueDialog("XML viewer - " + selectedRow.getCellHeader(), value, IDialogFactory.Format.XML);
                 }
             };
         }

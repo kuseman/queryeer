@@ -9,6 +9,7 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -21,10 +22,14 @@ import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.UIManager.LookAndFeelInfo;
 import javax.swing.event.TableModelEvent;
 import javax.swing.event.TableModelListener;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -37,6 +42,7 @@ import com.queryeer.api.extensions.engine.IQueryEngine;
 /** Configurable for Queryeer. Base settings for engines etc. */
 class QueryeerConfigurable implements IConfigurable
 {
+    private static final LookAndFeelInfo SYSTEM = new LookAndFeelInfo("System Default", UIManager.getSystemLookAndFeelClassName());
     private final Config config;
     private final List<Consumer<Boolean>> dirtyStateConsumers = new ArrayList<>();
     private Component component;
@@ -44,6 +50,7 @@ class QueryeerConfigurable implements IConfigurable
     private JTextField sharedFolderTextField;
     private File sharedFolder;
     private DefaultComboBoxModel<IQueryEngine> defaultQueryEngineModel = new DefaultComboBoxModel<>();
+    private DefaultComboBoxModel<LookAndFeelInfo> lookAndFeelInfoModel = new DefaultComboBoxModel<>();
     private DefaultTableModel queryEngineAssociationsModel = new DefaultTableModel(new String[] { "File Extension", "Query Engine" }, 0)
     {
         @Override
@@ -76,9 +83,18 @@ class QueryeerConfigurable implements IConfigurable
     {
         if (component == null)
         {
-            JPanel panel = new JPanel(new GridBagLayout());
+            int y = 0;
 
-            panel.add(new JLabel("Default Query Engine:"), new GridBagConstraints(0, 0, 1, 1, 0.0d, 0.0d, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.NONE, new Insets(0, 2, 2, 2), 0, 0));
+            Insets insets = new Insets(0, 2, 2, 2);
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = y;
+            gbc.insets = insets;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+
+            JPanel panel = new JPanel(new GridBagLayout());
+            panel.add(new JLabel("Default Query Engine:"), gbc);
 
             JComboBox<IQueryEngine> defaultQueryEngine = new JComboBox<>();
             defaultQueryEngine.setRenderer(new DefaultListCellRenderer()
@@ -95,15 +111,89 @@ class QueryeerConfigurable implements IConfigurable
             });
             defaultQueryEngine.setModel(defaultQueryEngineModel);
 
-            panel.add(defaultQueryEngine, new GridBagConstraints(1, 0, 1, 1, 1.0d, 0.0d, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 2, 2), 0, 0));
+            gbc.gridx = 1;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            panel.add(defaultQueryEngine, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = ++y;
+            gbc.fill = GridBagConstraints.NONE;
+
+            String lafToolTip = "Change look and feel. Might need a restart of application to make change take total effect.";
+            panel.add(new JLabel("Look And Feel:")
+            {
+                {
+                    setToolTipText(lafToolTip);
+                }
+            }, gbc);
+
+            JComboBox<LookAndFeelInfo> lookAndFeel = new JComboBox<>();
+            lookAndFeel.setToolTipText(lafToolTip);
+            lookAndFeel.setRenderer(new DefaultListCellRenderer()
+            {
+                @Override
+                public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus)
+                {
+                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                    LookAndFeelInfo laf = (LookAndFeelInfo) value;
+                    setText(laf.getName());
+                    return this;
+                }
+            });
+
+            lookAndFeelInfoModel.addElement(SYSTEM);
+            List<LookAndFeelInfo> lafs = new ArrayList<>();
+            lafs.addAll(Arrays.asList(UIManager.getInstalledLookAndFeels()));
+            lafs.sort((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.getName(), b.getName()));
+            lookAndFeelInfoModel.addAll(lafs);
+
+            lookAndFeel.setModel(lookAndFeelInfoModel);
+            setLafFromConfig();
+
+            lookAndFeel.addActionListener(l ->
+            {
+                LookAndFeelInfo laf = (LookAndFeelInfo) lookAndFeel.getSelectedItem();
+                try
+                {
+                    boolean dirty = !Objects.equals(config.getLookAndFeelClassName(), laf.getClassName());
+                    notifyDirty(dirty);
+
+                    UIManager.setLookAndFeel(laf.getClassName());
+                    Window[] windows = Window.getWindows();
+                    for (Window window : windows)
+                    {
+                        SwingUtilities.updateComponentTreeUI(window);
+                        window.pack();
+                    }
+                }
+                catch (Exception e)
+                {
+                    JOptionPane.showMessageDialog(panel, "Error setting Look And Feel: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            });
+
+            gbc.gridx = 1;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            panel.add(lookAndFeel, gbc);
 
             JLabel openNewFilesLastLabel = new JLabel("Open New Files Last:");
             openNewFilesLastLabel.setToolTipText("Should new files be opened last or after current");
-            panel.add(openNewFilesLastLabel, new GridBagConstraints(0, 1, 1, 1, 0.0d, 0.0d, GridBagConstraints.WEST, GridBagConstraints.NONE, new Insets(0, 0, 2, 2), 0, 0));
+
+            gbc.gridx = 0;
+            gbc.gridy = ++y;
+            gbc.fill = GridBagConstraints.NONE;
+
+            panel.add(openNewFilesLastLabel, gbc);
 
             JCheckBox openNewFilesLast = new JCheckBox();
             openNewFilesLast.setToolTipText(openNewFilesLastLabel.getToolTipText());
-            panel.add(openNewFilesLast, new GridBagConstraints(1, 1, 1, 1, 1.0d, 0.0d, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 2, 2), 0, 0));
+
+            gbc.gridx = 1;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            panel.add(openNewFilesLast, gbc);
 
             String sharedFolderToolTip = "<html>" + """
                     Location of shared folder. This can be set to keep location after upgrades.
@@ -151,7 +241,7 @@ class QueryeerConfigurable implements IConfigurable
                 notifyDirty(dirty);
             });
 
-            GridBagConstraints gbc = new GridBagConstraints();
+            gbc = new GridBagConstraints();
             gbc.gridx = 0;
             gbc.gridy = 0;
             gbc.anchor = GridBagConstraints.WEST;
@@ -175,16 +265,29 @@ class QueryeerConfigurable implements IConfigurable
             gbc.anchor = GridBagConstraints.WEST;
             sharedFolderPanel.add(clearSharedFolder, gbc);
 
+            gbc = new GridBagConstraints();
+            gbc.gridx = 0;
+            gbc.gridy = ++y;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+
             panel.add(new JLabel("Shared Folder:")
             {
                 {
                     setToolTipText(sharedFolderToolTip);
                 }
-            }, new GridBagConstraints(0, 2, 1, 1, 0.0d, 0.0d, GridBagConstraints.WEST, GridBagConstraints.NONE, new Insets(0, 0, 2, 2), 0, 0));
+            }, gbc);
 
-            panel.add(sharedFolderPanel, new GridBagConstraints(1, 2, 1, 1, 1.0d, 0.0d, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, new Insets(0, 0, 2, 2), 0, 0));
-            panel.add(new JLabel("Query Engine Associations:"),
-                    new GridBagConstraints(0, 3, 2, 1, 1.0d, 0.0d, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.NONE, new Insets(0, 2, 2, 2), 0, 0));
+            gbc.gridx = 1;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+
+            panel.add(sharedFolderPanel, gbc);
+
+            gbc.gridx = 0;
+            gbc.gridy = ++y;
+            gbc.fill = GridBagConstraints.NONE;
+
+            panel.add(new JLabel("Query Engine Associations:"), gbc);
 
             JTable queryEngineAssociations = new JTable();
             queryEngineAssociations.setRowHeight(queryEngineAssociations.getRowHeight() + 2);
@@ -208,8 +311,14 @@ class QueryeerConfigurable implements IConfigurable
 
             queryEngineAssociations.setModel(queryEngineAssociationsModel);
 
-            panel.add(new JScrollPane(queryEngineAssociations),
-                    new GridBagConstraints(0, 4, 2, 1, 1.0d, 1.0d, GridBagConstraints.BASELINE_LEADING, GridBagConstraints.BOTH, new Insets(0, 2, 2, 2), 0, 0));
+            gbc.gridx = 0;
+            gbc.gridy = ++y;
+            gbc.gridwidth = 2;
+            gbc.weightx = 1.0d;
+            gbc.weighty = 1.0d;
+            gbc.fill = GridBagConstraints.BOTH;
+
+            panel.add(new JScrollPane(queryEngineAssociations), gbc);
 
             openNewFilesLast.setSelected(config.isOpenNewFilesLast());
 
@@ -278,6 +387,7 @@ class QueryeerConfigurable implements IConfigurable
     public boolean commitChanges()
     {
         config.setDefaultQueryEngine((IQueryEngine) defaultQueryEngineModel.getSelectedItem());
+        config.setLookAndFeelClassName(((LookAndFeelInfo) lookAndFeelInfoModel.getSelectedItem()).getClassName());
         int rowCount = queryEngineAssociationsModel.getRowCount();
         for (int i = 0; i < rowCount; i++)
         {
@@ -295,6 +405,7 @@ class QueryeerConfigurable implements IConfigurable
     {
         sharedFolderTextField.setText(config.getSharedFolderPath());
         defaultQueryEngineModel.setSelectedItem(config.getDefaultQueryEngine());
+        setLafFromConfig();
         int rowCount = queryEngineAssociationsModel.getRowCount();
         for (int i = 0; i < rowCount; i++)
         {
@@ -302,6 +413,22 @@ class QueryeerConfigurable implements IConfigurable
                     .get(i);
 
             queryEngineAssociationsModel.setValueAt(ass.getExtension(), i, 0);
+        }
+    }
+
+    private void setLafFromConfig()
+    {
+        String lookAndFeelClassName = Objects.toString(config.getLookAndFeelClassName(), "");
+        int count = lookAndFeelInfoModel.getSize();
+        for (int i = 0; i < count; i++)
+        {
+            if (lookAndFeelInfoModel.getElementAt(i)
+                    .getClassName()
+                    .equalsIgnoreCase(lookAndFeelClassName))
+            {
+                lookAndFeelInfoModel.setSelectedItem(lookAndFeelInfoModel.getElementAt(i));
+                break;
+            }
         }
     }
 

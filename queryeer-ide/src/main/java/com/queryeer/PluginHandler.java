@@ -109,7 +109,7 @@ class PluginHandler
             String lowerPluginName = lowerCase(pluginName);
             if (plugins.containsKey(lowerPluginName))
             {
-                System.err.println("Plugin with: " + pluginName + ", already loaded");
+                LOGGER.error("Plugin {}, already loaded ", pluginName);
                 continue;
             }
 

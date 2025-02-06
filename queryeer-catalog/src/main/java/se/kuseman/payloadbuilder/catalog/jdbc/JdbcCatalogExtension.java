@@ -51,23 +51,17 @@ class JdbcCatalogExtension implements ICatalogExtension
     private final JdbcCompletionProvider completionProvider;
     private final IQueryFileProvider queryFileProvider;
     private final String catalogAlias;
-    private final PropertiesComponent propertiesComponent;
+    private final Icons icons;
+    private PropertiesComponent propertiesComponent;
 
     JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, CatalogCrawlService crawlService, Icons icons, DatabaseProvider databaseProvider,
             String catalogAlias)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.completionProvider = new JdbcCompletionProvider(connectionsModel, requireNonNull(crawlService, "crawlService"), requireNonNull(databaseProvider, "databaseProvider"));
+        this.icons = requireNonNull(icons, "icons");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.catalogAlias = catalogAlias;
-        this.propertiesComponent = new PropertiesComponent(icons, connectionsModel, (con) -> setupConnection(con), (con, database) -> setupDatabase(con, database), queryFile ->
-        {
-            // Update properties if was the current file that completed execution
-            if (queryFileProvider.getCurrentFile() == queryFile)
-            {
-                update(queryFile);
-            }
-        }, queryFile -> update(queryFile));
     }
 
     @Override
@@ -181,6 +175,17 @@ class JdbcCatalogExtension implements ICatalogExtension
     @Override
     public Component getQuickPropertiesComponent()
     {
+        if (propertiesComponent == null)
+        {
+            this.propertiesComponent = new PropertiesComponent(icons, connectionsModel, (con) -> setupConnection(con), (con, database) -> setupDatabase(con, database), queryFile ->
+            {
+                // Update properties if was the current file that completed execution
+                if (queryFileProvider.getCurrentFile() == queryFile)
+                {
+                    update(queryFile);
+                }
+            }, queryFile -> update(queryFile));
+        }
         return propertiesComponent;
     }
 

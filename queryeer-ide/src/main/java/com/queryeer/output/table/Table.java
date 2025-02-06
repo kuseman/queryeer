@@ -20,13 +20,14 @@ import javax.swing.table.JTableHeader;
 import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 
+import com.queryeer.UiUtils;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 
 /** The table component representing a result set */
 class Table extends JTable
 {
     static final String POPUP_TRIGGER_LOCATION = "popupTriggerLocation";
-    private final CellRenderer cellRenderer;
+    final CellRenderer cellRenderer;
     private final TableColumnAdjuster adjuster = new TableColumnAdjuster(this, 10);
     private final List<Integer> adjustedWidths = new ArrayList<>();
     final JPopupMenu tablePopupMenu = new JPopupMenu();
@@ -42,7 +43,7 @@ class Table extends JTable
         setDefaultRenderer(Object.class, cellRenderer);
         addMouseListener(cellRenderer);
         addMouseMotionListener(cellRenderer);
-
+        adaptToLookAndFeel();
         getTableHeader().addMouseListener(new MouseAdapter()
         {
             @Override
@@ -96,6 +97,11 @@ class Table extends JTable
             return true;
         }
         return super.isCellSelected(row, column);
+    }
+
+    void adaptToLookAndFeel()
+    {
+        cellRenderer.setDarkMode(UiUtils.isDarkLookAndFeel());
     }
 
     void adjustColumns()

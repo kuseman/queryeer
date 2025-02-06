@@ -54,4 +54,8 @@ public interface IEditor
     /** Return component for this editor */
     JComponent getComponent();
 
+    /** Close editor and free up resources etc. */
+    default void close()
+    {
+    }
 }

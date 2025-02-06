@@ -93,9 +93,9 @@ class CatalogExtensionView extends JPanel
 
         for (Component component : extensionPanel.getComponents())
         {
-            if (component instanceof ICatalogExtensionView)
+            if (component instanceof ICatalogExtensionView view)
             {
-                ((ICatalogExtensionView) component).afterExecute(queryFile);
+                view.afterExecute(queryFile);
             }
         }
     }
@@ -106,9 +106,9 @@ class CatalogExtensionView extends JPanel
 
         for (Component component : extensionPanel.getComponents())
         {
-            if (component instanceof ICatalogExtensionView)
+            if (component instanceof ICatalogExtensionView view)
             {
-                ((ICatalogExtensionView) component).focus(queryFile);
+                view.focus(queryFile);
             }
         }
     }

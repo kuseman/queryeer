@@ -44,22 +44,23 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LoggingEvent;
 
 import com.queryeer.api.component.DialogUtils;
-import com.queryeer.dialog.ValueDialog;
-import com.queryeer.dialog.ValueDialog.Format;
+import com.queryeer.api.component.IDialogFactory;
 
 /** Logs dialog */
 class LogsDialog extends DialogUtils.AFrame
 {
     static DefaultTableModel logsModel;
     private DefaultTableModel loggersModel;
+    private IDialogFactory dialogFactory;
 
-    LogsDialog(JFrame parent)
+    LogsDialog(JFrame parent, IDialogFactory dialogFactory)
     {
         super("Logs");
         if (logsModel != null)
         {
             throw new IllegalArgumentException("Logs dialog instantiated multiple times");
         }
+        this.dialogFactory = dialogFactory;
 
         initDialog();
 
@@ -87,7 +88,7 @@ class LogsDialog extends DialogUtils.AFrame
                     logsTable.setRowSelectionInterval(row, row);
                     String header = logsTable.getModel()
                             .getColumnName(col);
-                    ValueDialog.showValueDialog(header, logsTable.getValueAt(row, col), Format.UNKOWN);
+                    dialogFactory.showValueDialog(header, logsTable.getValueAt(row, col), IDialogFactory.Format.UNKOWN);
                 }
             }
         });

@@ -27,6 +27,12 @@ public interface ITextEditorKit
         return 80;
     }
 
+    /** Returns true if editor should be readonly otherwise false. */
+    default boolean readOnly()
+    {
+        return false;
+    }
+
     /** Return a document parser for this kit */
     default ITextEditorDocumentParser getDocumentParser()
     {

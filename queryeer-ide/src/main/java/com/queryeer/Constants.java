@@ -37,7 +37,14 @@ public class Constants
     static final Icon PARAGRAPH = FontIcon.of(FontAwesome.PARAGRAPH);
     static final Icon EDIT = FontIcon.of(FontAwesome.EDIT);
     public static final Icon COG = FontIcon.of(FontAwesome.COG);
-    public static final int SCROLLBAR_WIDTH = ((Integer) UIManager.get("ScrollBar.width")).intValue();
+    public static final int SCROLLBAR_WIDTH;
+
+    static
+    {
+        Integer scrollBarWidth = (Integer) UIManager.get("ScrollBar.width");
+        SCROLLBAR_WIDTH = scrollBarWidth != null ? scrollBarWidth.intValue()
+                : 17;
+    }
 
     public static final Image APPLICATION_ICON_48;
     public static final Image APPLICATION_ICON_96;

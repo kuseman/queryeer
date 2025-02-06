@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import javax.swing.JOptionPane;
+import javax.swing.UIManager;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
@@ -43,6 +44,8 @@ class Config implements IConfig
     private final File sessionFile;
     private final File recentFilesFile;
 
+    @JsonProperty
+    private String lookAndFeelClassName = UIManager.getSystemLookAndFeelClassName();
     @JsonProperty
     private String sharedFolderPath;
     @JsonProperty
@@ -72,7 +75,8 @@ class Config implements IConfig
     {
         this.etcFolder = etcFolder;
         File file = new File(etcFolder, CONFIG);
-        if (!file.exists())
+        boolean configExists = file.exists();
+        if (!configExists)
         {
             JOptionPane.showMessageDialog(null, """
                     Config folder: '%s' doesn't exist, creating.
@@ -119,7 +123,7 @@ class Config implements IConfig
 
         sharedFolder = getSharedFolderInternal();
         recentFilesFile = new File(etcFolder, RECENT_FILES);
-        loadRecentFiles(file);
+        loadRecentFiles(file, configExists);
     }
 
     private File getSharedFolderInternal()
@@ -140,7 +144,7 @@ class Config implements IConfig
         return null;
     }
 
-    private void loadRecentFiles(File configFile)
+    private void loadRecentFiles(File configFile, boolean configExists)
     {
         // Move old recent files setting to new file
         if (!recentFilesFile.exists())
@@ -149,13 +153,16 @@ class Config implements IConfig
             // anymore
             try
             {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> value = MAPPER.readValue(configFile, Map.class);
-                @SuppressWarnings("unchecked")
-                List<String> list = (List<String>) value.get("recentFiles");
-                if (!CollectionUtils.isEmpty(list))
+                if (configExists)
                 {
-                    this.recentFiles.addAll(list);
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> value = MAPPER.readValue(configFile, Map.class);
+                    @SuppressWarnings("unchecked")
+                    List<String> list = (List<String>) value.get("recentFiles");
+                    if (!CollectionUtils.isEmpty(list))
+                    {
+                        this.recentFiles.addAll(list);
+                    }
                 }
                 recentFilesFile.createNewFile();
                 saveRecentFiles();
@@ -188,6 +195,16 @@ class Config implements IConfig
     File getEtcFolder()
     {
         return etcFolder;
+    }
+
+    String getLookAndFeelClassName()
+    {
+        return lookAndFeelClassName;
+    }
+
+    void setLookAndFeelClassName(String lookAndFeelClassName)
+    {
+        this.lookAndFeelClassName = lookAndFeelClassName;
     }
 
     File getSharedFolder()

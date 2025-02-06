@@ -85,6 +85,7 @@ import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.engine.IQueryEngine;
@@ -144,6 +145,7 @@ class QueryeerView extends JFrame
     private final LogsDialog logsDialog;
     private final DialogUtils.QuickSearchWindow<FilesQuickSearchModel.ListItem> filesQuickSearchWindow;
     private final DialogUtils.QuickSearchWindow<IQuickSearchModel.Item> datasourcesQuickSearchWindow;
+    private final JPopupMenu queryEnginesPopup;
 
     private boolean suppressChangeEvents = false;
 
@@ -159,8 +161,18 @@ class QueryeerView extends JFrame
     private List<JMenuItem> editorMenuActions = new ArrayList<>();
 
     // CSOFF
-    QueryeerView(QueryeerModel model, QueryFileTabbedPane tabbedPane, ProjectsView projectsView, IEventBus eventBus, List<IOutputExtension> outputExtensions,
-            List<IOutputFormatExtension> outputFormatExtensions, List<IQueryEngine> queryEngines, ActionRegistry actionRegistry)
+    //@formatter:off
+    QueryeerView(
+            QueryeerModel model,
+            QueryFileTabbedPane tabbedPane,
+            ProjectsView projectsView,
+            IEventBus eventBus,
+            List<IOutputExtension> outputExtensions,
+            List<IOutputFormatExtension> outputFormatExtensions,
+            List<IQueryEngine> queryEngines,
+            ActionRegistry actionRegistry,
+            IDialogFactory dialogFactory)
+    //@formatter:on
     // CSON
     {
         setLocationRelativeTo(null);
@@ -251,7 +263,27 @@ class QueryeerView extends JFrame
         panelStatus.add(labelCaret);
         panelStatus.add(labelVersion);
 
-        topPanel = new JPanel();
+        topPanel = new JPanel()
+        {
+            @Override
+            public void updateUI()
+            {
+                // Piggyback on UI changes to propagate to components not in hierarchy
+                if (queryEnginesPopup != null)
+                {
+                    SwingUtilities.updateComponentTreeUI(queryEnginesPopup);
+                }
+                if (panelQueryEngineProperties != null)
+                {
+                    for (IQueryEngine engine : queryEngines)
+                    {
+                        SwingUtilities.updateComponentTreeUI(engine.getQuickPropertiesComponent());
+                    }
+                }
+
+                super.updateUI();
+            }
+        };
         topPanel.setLayout(new BorderLayout());
         getContentPane().add(topPanel, BorderLayout.NORTH);
 
@@ -444,7 +476,7 @@ class QueryeerView extends JFrame
         newQueryButton.setText("New Query");
         newQueryButton.setToolTipText("Open New Query Window (" + getAcceleratorText(newQueryKeyStroke) + ")");
 
-        final JPopupMenu queryEnginesPopup = new JPopupMenu();
+        queryEnginesPopup = new JPopupMenu();
         for (IQueryEngine qe : queryEngines.stream()
                 .sorted(Comparator.comparingInt(IQueryEngine::order))
                 .toList())
@@ -661,8 +693,8 @@ class QueryeerView extends JFrame
                     }
                 });
 
-        tasksDialog = new TasksDialog(this, eventBus, running -> SwingUtilities.invokeLater(() -> labelTasksSpinner.setVisible(running)));
-        logsDialog = new LogsDialog(this);
+        tasksDialog = new TasksDialog(this, eventBus, dialogFactory, running -> SwingUtilities.invokeLater(() -> labelTasksSpinner.setVisible(running)));
+        logsDialog = new LogsDialog(this, dialogFactory);
 
         eventBus.register(this);
         bindOutputExtensions(outputExtensions);

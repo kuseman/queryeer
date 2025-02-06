@@ -37,9 +37,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -88,6 +90,7 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SquiggleUnderlineHighlightPainter;
 import org.fife.ui.rsyntaxtextarea.TextEditorPane;
+import org.fife.ui.rsyntaxtextarea.Theme;
 import org.fife.ui.rsyntaxtextarea.parser.AbstractParser;
 import org.fife.ui.rsyntaxtextarea.parser.DefaultParseResult;
 import org.fife.ui.rsyntaxtextarea.parser.DefaultParserNotice;
@@ -108,6 +111,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.Constants;
+import com.queryeer.UiUtils;
 import com.queryeer.api.action.ActionUtils;
 import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.DialogUtils;
@@ -128,9 +132,16 @@ import com.queryeer.event.CaretChangedEvent;
 /** Text editor implemented with {@link RSyntaxTextArea} */
 class TextEditor implements ITextEditor, SearchListener
 {
-    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(5, new BasicThreadFactory.Builder().daemon(true)
-            .namingPattern("TextEditor-Parser#%d")
-            .build());
+    private static final ExecutorService EXECUTOR;
+
+    static
+    {
+        ThreadPoolExecutor tp = new ThreadPoolExecutor(5, 20, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new BasicThreadFactory.Builder().namingPattern("TextEditor-Parser#-%d")
+                .daemon(true)
+                .build());
+        tp.allowCoreThreadTimeOut(true);
+        EXECUTOR = tp;
+    }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TextEditor.class);
 
@@ -145,7 +156,6 @@ class TextEditor implements ITextEditor, SearchListener
     private final Panel panel;
 
     final TextEditorPane textEditor;
-    private final ErrorStrip errorStrip;
     private final RTextScrollPane scrollPane;
     private final FindDialog findDialog;
     private final ReplaceDialog replaceDialog;
@@ -156,8 +166,14 @@ class TextEditor implements ITextEditor, SearchListener
     private final CaretChangedEvent caretEvent = new CaretChangedEvent(new Caret());
     private final List<PropertyChangeListener> propertyChangeListeners = new ArrayList<>();
 
+    private ErrorStrip errorStrip;
     private EditorParser parser;
     private EditorCompleter completer;
+
+    TextEditor(ITextEditorKit editorKit)
+    {
+        this(null, editorKit);
+    }
 
     TextEditor(IEventBus eventBus, ITextEditorKit editorKit)
     {
@@ -171,6 +187,10 @@ class TextEditor implements ITextEditor, SearchListener
         textEditor.setBracketMatchingEnabled(true);
         textEditor.setTabSize(2);
         textEditor.setTabsEmulated(true);
+        textEditor.setEditable(!editorKit.readOnly());
+
+        UIManager.addPropertyChangeListener(uiManagerListener);
+        adaptToLookAndFeel();
 
         // Unbind F2 since we use that to show quick datasources
         textEditor.getInputMap()
@@ -180,7 +200,6 @@ class TextEditor implements ITextEditor, SearchListener
                 .put(PASTE_SPECIAL_STROKE, "none");
 
         scrollPane = new RTextScrollPane(textEditor, true);
-        errorStrip = new ErrorStrip(textEditor);
 
         findDialog = new FindDialog((Frame) null, this)
         {
@@ -304,7 +323,12 @@ class TextEditor implements ITextEditor, SearchListener
             putClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS, actions);
 
             add(scrollPane);
-            add(errorStrip, BorderLayout.LINE_END);
+            // Add error strip if have a parser installed
+            if (parser != null)
+            {
+                errorStrip = new ErrorStrip(textEditor);
+                add(errorStrip, BorderLayout.LINE_END);
+            }
         }
     }
 
@@ -354,7 +378,50 @@ class TextEditor implements ITextEditor, SearchListener
         }
     }
 
+    private PropertyChangeListener uiManagerListener = new PropertyChangeListener()
+    {
+        @Override
+        public void propertyChange(PropertyChangeEvent evt)
+        {
+            if ("lookAndFeel".equals(evt.getPropertyName()))
+            {
+                adaptToLookAndFeel();
+            }
+        }
+    };
+
+    private void adaptToLookAndFeel()
+    {
+        String themeName = UiUtils.isDarkLookAndFeel() ? "dark.xml"
+                : "default.xml";
+
+        try
+        {
+            Theme theme = Theme.load(TextEditor.class.getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/" + themeName));
+            theme.apply(textEditor);
+        }
+        catch (IOException ioe)
+        { // Never happens
+            ioe.printStackTrace();
+        }
+    }
+
     // IEditor
+
+    @Override
+    public void close()
+    {
+        if (parser != null)
+        {
+            Future<?> session = parser.currentSession;
+            if (session != null
+                    && !session.isDone())
+            {
+                session.cancel(true);
+            }
+        }
+        UIManager.removePropertyChangeListener(uiManagerListener);
+    }
 
     @Override
     public void clearBeforeExecution()
@@ -697,6 +764,10 @@ class TextEditor implements ITextEditor, SearchListener
 
     private void publishCaret()
     {
+        if (eventBus == null)
+        {
+            return;
+        }
         caretEvent.getCaret()
                 .setLineNumber(textEditor.getCaretLineNumber() + 1);
         caretEvent.getCaret()
@@ -871,7 +942,7 @@ class TextEditor implements ITextEditor, SearchListener
             putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 0);
             putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
                     .getMenuShortcutKeyMaskEx()));
-            putValue(Action.ACTION_COMMAND_KEY, "find");
+            putValue(Action.ACTION_COMMAND_KEY, com.queryeer.api.action.Constants.FIND_ACTION);
         }
 
         @Override
