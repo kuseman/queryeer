@@ -13,7 +13,9 @@ import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -39,19 +41,27 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(CellRenderer.class);
     private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-    private static final Color TABLE_NULL_BACKGROUND = new Color(255, 253, 237);
-    private static final Color TABLE_REGULAR_BACKGROUND = UIManager.getColor("Table.dropCellBackground");
+    private static final Color TABLE_NULL_BACKGROUND_LIGHT = new Color(255, 253, 237);
+    private static final Color TABLE_NULL_BACKGROUND_DARK = new Color(85, 85, 85);
     private static final Cursor HAND_CURSOR = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
     private static final Cursor DEFAULT_CURSOR = Cursor.getDefaultCursor();
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().namingPattern("TableCellImageLoader-%d")
-            .daemon(true)
-            .build());
+    private static final ExecutorService EXECUTOR;
+
+    static
+    {
+        ThreadPoolExecutor tp = new ThreadPoolExecutor(5, 20, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new BasicThreadFactory.Builder().namingPattern("TableCellImageLoader-%d")
+                .daemon(true)
+                .build());
+        tp.allowCoreThreadTimeOut(true);
+        EXECUTOR = tp;
+    }
 
     private final List<ITableContextMenuAction> actions;
     private final int actionsSize;
     private int row = -1;
     private int col = -1;
     private boolean isRollover = false;
+    private boolean dark;
 
     CellRenderer(List<ITableContextMenuAction> actions)
     {
@@ -148,12 +158,13 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
             setText("NULL");
             if (!isSelected)
             {
-                setBackground(TABLE_NULL_BACKGROUND);
+                setBackground(dark ? TABLE_NULL_BACKGROUND_DARK
+                        : TABLE_NULL_BACKGROUND_LIGHT);
             }
         }
         else if (!isSelected)
         {
-            setBackground(TABLE_REGULAR_BACKGROUND);
+            setBackground(UIManager.getColor("Table.background"));
         }
 
         return this;
@@ -234,6 +245,11 @@ class CellRenderer extends DefaultTableCellRenderer implements MouseListener, Mo
     @Override
     public void mouseClicked(MouseEvent e)
     {
+    }
+
+    void setDarkMode(boolean dark)
+    {
+        this.dark = dark;
     }
 
     private boolean hasLinkAction(JTable table, int row, int col)

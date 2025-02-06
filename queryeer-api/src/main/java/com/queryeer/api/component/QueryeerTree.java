@@ -3,10 +3,11 @@ package com.queryeer.api.component;
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -27,7 +28,6 @@ import java.util.function.Supplier;
 import javax.swing.AbstractAction;
 import javax.swing.AbstractCellEditor;
 import javax.swing.Action;
-import javax.swing.BoxLayout;
 import javax.swing.Icon;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -36,7 +36,6 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeWillExpandListener;
@@ -99,6 +98,17 @@ public class QueryeerTree extends JTree
     // CSON
     {
         this.hyperLinksEnabled = value;
+    }
+
+    @Override
+    public void updateUI()
+    {
+        if (contextPopup != null)
+        {
+            SwingUtilities.updateComponentTreeUI(contextPopup);
+            SwingUtilities.updateComponentTreeUI(linkActionsPopup);
+        }
+        super.updateUI();
     }
 
     @Override
@@ -392,12 +402,7 @@ public class QueryeerTree extends JTree
     /** Renderer that renders a {@link JCheckBox} for nodes that implements {@link CheckBoxNode} */
     private class CheckBoxNodeRenderer extends DefaultTreeCellRenderer
     {
-        private static final Color SELECTIONFOREGROUND = UIManager.getColor("Tree.selectionForeground");
-        private static final Color SELECTIONBACKGROUND = UIManager.getColor("Tree.selectionBackground");
-        private static final Color TEXTFOREGROUNG = UIManager.getColor("Tree.textForeground");
-        private static final Color TEXTBACKGROUND = UIManager.getColor("Tree.textBackground");
-
-        private final JPanel checkBoxPanel = new JPanel();
+        private final JPanel checkBoxPanel = new JPanel(new GridBagLayout());
         private final JLabel labelIcon = new JLabel();
         private final JLabel labelStatusIcon = new JLabel();
         private final JLabel label = new JLabel();
@@ -409,29 +414,23 @@ public class QueryeerTree extends JTree
         @SuppressWarnings("unchecked")
         CheckBoxNodeRenderer()
         {
+            checkBoxPanel.setOpaque(false);
+            labelIcon.setOpaque(false);
+            labelStatusIcon.setOpaque(false);
             label.setBorder(new EmptyBorder(0, 1, 0, 3));
             labelIcon.setBorder(new EmptyBorder(0, 0, 0, 3));
-
-            checkBoxPanel.setLayout(new BoxLayout(checkBoxPanel, BoxLayout.X_AXIS));
-            checkBoxPanel.add(checkBox);
-            checkBoxPanel.add(labelIcon);
-            checkBoxPanel.add(labelStatusIcon);
-            checkBoxPanel.add(label);
-            checkBoxPanel.setOpaque(true);
-            labelIcon.setOpaque(true);
-            labelStatusIcon.setOpaque(true);
-            checkBox.setOpaque(true);
-            label.setOpaque(true);
-            labelIcon.setBackground(TEXTBACKGROUND);
-            labelStatusIcon.setBackground(TEXTBACKGROUND);
-            checkBoxPanel.setBackground(TEXTBACKGROUND);
-            checkBox.setBackground(TEXTBACKGROUND);
-
             this.regularFont = label.getFont();
             @SuppressWarnings("rawtypes")
             Map attributes = regularFont.getAttributes();
             attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
             this.underLinefont = regularFont.deriveFont(attributes);
+        }
+
+        /** We manage our own icons on separate JLables */
+        @Override
+        public Icon getIcon()
+        {
+            return null;
         }
 
         @Override
@@ -441,9 +440,26 @@ public class QueryeerTree extends JTree
 
             QueryeerTreeNode treeNode = (QueryeerTreeNode) value;
             RegularNode node = treeNode.node;
-            label.setText(node.getTitle());
 
-            label.setFont(treeNode.underline ? underLinefont
+            String title = node.getTitle();
+            setText(title);
+
+            GridBagConstraints gbc = new GridBagConstraints();
+            checkBoxPanel.removeAll();
+            gbc.gridx = 0;
+            gbc.anchor = GridBagConstraints.WEST;
+            gbc.fill = GridBagConstraints.NONE;
+            checkBoxPanel.add(checkBox, gbc);
+            gbc.gridx = 1;
+            checkBoxPanel.add(labelIcon, gbc);
+            gbc.gridx = 2;
+            checkBoxPanel.add(labelStatusIcon, gbc);
+            gbc.gridx = 3;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.weightx = 1.0d;
+            checkBoxPanel.add(this, gbc);
+
+            setFont(treeNode.underline ? underLinefont
                     : regularFont);
 
             labelIcon.setIcon(node.getIcon());
@@ -460,18 +476,6 @@ public class QueryeerTree extends JTree
             }
 
             checkBox.setVisible(false);
-
-            if (selected
-                    || hasFocus)
-            {
-                label.setForeground(SELECTIONFOREGROUND);
-                label.setBackground(SELECTIONBACKGROUND);
-            }
-            else
-            {
-                label.setForeground(TEXTFOREGROUNG);
-                label.setBackground(TEXTBACKGROUND);
-            }
             if (node instanceof CheckBoxNode)
             {
                 checkBox.setVisible(true);

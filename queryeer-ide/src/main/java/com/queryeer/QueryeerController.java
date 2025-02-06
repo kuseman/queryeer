@@ -85,14 +85,14 @@ class QueryeerController implements PropertyChangeListener
 
     private int newFileCounter = 1;
 
-    QueryeerController(Config config, IEventBus eventBus, QueryeerModel model, QueryeerView view, OptionsDialog optionsDialog, List<IOutputExtension> outputExtensions)
+    QueryeerController(Config config, IEventBus eventBus, QueryeerModel model, QueryeerView view, List<IOutputExtension> outputExtensions, List<IConfigurable> configurables)
     {
         this.view = requireNonNull(view, "view");
         this.config = requireNonNull(config, "config");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.model = requireNonNull(model, "model");
         this.model.addPropertyChangeListener(this);
-        this.optionsDialog = requireNonNull(optionsDialog, "optionsDialog");
+        this.optionsDialog = new OptionsDialog(view, requireNonNull(configurables, "configurables"));
         this.outputExtensions = requireNonNull(outputExtensions, "outputExtensions");
 
         if (!isBlank(QueryeerView.class.getPackage()
@@ -483,18 +483,6 @@ class QueryeerController implements PropertyChangeListener
                 }
             }
         }
-        for (IOutputComponent component : file.getOutputComponents())
-        {
-            try
-            {
-                component.dispose();
-            }
-            catch (Exception e)
-            {
-                LOGGER.error("Error disposing {}", component.getClass(), e);
-            }
-        }
-
         model.removeFile(file);
     }
 

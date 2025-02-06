@@ -22,6 +22,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -39,13 +40,30 @@ class OptionsDialog extends DialogUtils.ADialog
     private final List<Configurable> configurableNodes = new ArrayList<>();
     private final DefaultMutableTreeNode root;
     private final JPanel configComponentPanel = new JPanel();
-    private final JTree optionsTree = new JTree();
+    private final JTree optionsTree = new JTree()
+    {
+        @Override
+        public void updateUI()
+        {
+            // Call update UI on all configurable nodes that are not currently connected in dialog
+            for (Configurable c : configurableNodes)
+            {
+                if (c.configComponent != null
+                        && c.configComponent.getParent() == null)
+                {
+                    SwingUtilities.updateComponentTreeUI(c.configComponent);
+                }
+            }
+
+            super.updateUI();
+        }
+    };
     private JButton ok;
     private JButton cancel;
 
-    OptionsDialog(List<IConfigurable> configurables)
+    OptionsDialog(Frame parent, List<IConfigurable> configurables)
     {
-        super((Frame) null, "Options", true);
+        super(parent, "Options", true);
         this.configurables = requireNonNull(configurables, "configurables");
         root = initRootNode();
         initDialog();

@@ -9,6 +9,7 @@ import java.util.List;
 import javax.swing.KeyStroke;
 
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
@@ -20,11 +21,13 @@ class TableOutputExtension implements IOutputExtension
 {
     private final List<ITableContextMenuActionFactory> contextMenuActionFactories;
     private final TableActionsConfigurable tableActionsConfigurable;
+    private final IDialogFactory dialogFactory;
 
-    TableOutputExtension(List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable)
+    TableOutputExtension(List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable, IDialogFactory dialogFactory)
     {
         this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
         this.tableActionsConfigurable = requireNonNull(tableActionsConfigurable, "tableActionsConfigurable");
+        this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
     }
 
     @Override
@@ -49,7 +52,7 @@ class TableOutputExtension implements IOutputExtension
     @Override
     public IOutputComponent createResultComponent(IQueryFile queryFile)
     {
-        return new TableOutputComponent(queryFile, this, contextMenuActionFactories, tableActionsConfigurable);
+        return new TableOutputComponent(queryFile, this, contextMenuActionFactories, tableActionsConfigurable, dialogFactory);
     }
 
     @Override

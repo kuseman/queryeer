@@ -37,9 +37,9 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.service.IEventBus;
-import com.queryeer.dialog.ValueDialog;
 import com.queryeer.domain.Task;
 import com.queryeer.event.TaskCompletedEvent;
 import com.queryeer.event.TaskStartedEvent;
@@ -55,10 +55,12 @@ class TasksDialog extends DialogUtils.AFrame
     private TasksTableModel tasksTableModel;
     private final Timer timer;
     private final Consumer<Boolean> tasksRunningConsumer;
+    private final IDialogFactory dialogFactory;
 
-    TasksDialog(JFrame parent, IEventBus eventBus, Consumer<Boolean> tasksRunningConsumer)
+    TasksDialog(JFrame parent, IEventBus eventBus, IDialogFactory dialogFactory, Consumer<Boolean> tasksRunningConsumer)
     {
         super("Tasks");
+        this.dialogFactory = dialogFactory;
         this.tasksRunningConsumer = tasksRunningConsumer;
         initDialog();
         eventBus.register(this);
@@ -90,7 +92,7 @@ class TasksDialog extends DialogUtils.AFrame
                     if (col == TasksTableModel.STATUS_COLUMN_INDEX)
                     {
                         TaskRow taskRow = tasksTableModel.tasks.get(row);
-                        ValueDialog.showValueDialog("Task status - " + taskRow.task.getName(), tasksTable.getValueAt(row, col), ValueDialog.Format.UNKOWN);
+                        dialogFactory.showValueDialog("Task status - " + taskRow.task.getName(), tasksTable.getValueAt(row, col), IDialogFactory.Format.UNKOWN);
                     }
                 }
             }

@@ -14,6 +14,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,7 +44,6 @@ import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 
 import org.apache.commons.lang3.StringUtils;
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
@@ -56,6 +57,8 @@ import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.action.IActionRegistry.KeyboardShortcut;
 import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.DialogUtils;
+import com.queryeer.api.editor.IEditor;
+import com.queryeer.api.editor.ITextEditorKit;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.engine.IQueryEngine;
@@ -366,8 +369,28 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
 
     private class ShortcutPanel extends JPanel
     {
+        private static final ITextEditorKit SQLKIT = new ITextEditorKit()
+        {
+            @Override
+            public String getSyntaxMimeType()
+            {
+                return "text/sql";
+            }
+
+            @Override
+            public int getRows()
+            {
+                return 6;
+            }
+
+            @Override
+            public int getColumns()
+            {
+                return 10;
+            }
+        };
         private DefaultListModel<TextEditorQueryShortcutOverride> overridesModel;
-        private RSyntaxTextArea queryField;
+        private TextEditor queryField;
         private JComboBox<OutputType> outputCombo;
         private TextEditorQueryShortcut shortcut = new TextEditorQueryShortcut();
         private boolean notify = true;
@@ -376,7 +399,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         {
             notify = false;
             this.shortcut = shortcut;
-            queryField.setText(shortcut.getQuery());
+            queryField.setValue(shortcut.getQuery());
             outputCombo.setSelectedItem(shortcut.getOutput());
             overridesModel.clear();
             overridesModel.addAll(shortcut.getOverrides());
@@ -411,22 +434,23 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
             gbc.anchor = GridBagConstraints.NORTH;
             add(queryLabel, gbc);
 
-            queryField = new RSyntaxTextArea();
-            queryField.getDocument()
-                    .addDocumentListener(new ADocumentListenerAdapter()
+            queryField = new TextEditor(SQLKIT);
+            queryField.addPropertyChangeListener(new PropertyChangeListener()
+            {
+
+                @Override
+                public void propertyChange(PropertyChangeEvent evt)
+                {
+                    if (IEditor.VALUE_CHANGED.equalsIgnoreCase(evt.getPropertyName()))
                     {
-                        @Override
-                        protected void update()
+                        shortcut.setQuery(queryField.getValue(true));
+                        if (notify)
                         {
-                            shortcut.setQuery(queryField.getText());
-                            if (notify)
-                            {
-                                notifyDirtyStateConsumers();
-                            }
+                            notifyDirtyStateConsumers();
                         }
-                    });
-            queryField.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_SQL);
-            queryField.setRows(6);
+                    }
+                }
+            });
             gbc = new GridBagConstraints();
             gbc.weightx = 0.6d;
             gbc.weighty = 1.0d;
@@ -435,10 +459,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
             gbc.gridy = 1;
             // gbc.gridheight = 2;
             gbc.insets = new Insets(2, 2, 2, 2);
-            JScrollPane scrollPane = new JScrollPane(queryField);
-            scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-            scrollPane.setWheelScrollingEnabled(true);
-            add(scrollPane, gbc);
+            add(queryField.getComponent(), gbc);
 
             JLabel outputType = new JLabel("Output Type:");
             gbc = new GridBagConstraints();
@@ -748,19 +769,21 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         gbc.anchor = GridBagConstraints.WEST;
         dialog.add(queryLabel, gbc);
 
-        RSyntaxTextArea queryField = new RSyntaxTextArea(override.getQuery());
-        queryField.setSyntaxEditingStyle(RSyntaxTextArea.SYNTAX_STYLE_SQL);
-        queryField.setRows(7);
-        queryField.getDocument()
-                .addDocumentListener(new ADocumentListenerAdapter()
+        TextEditor queryField = new TextEditor(ShortcutPanel.SQLKIT);
+        queryField.setValue(override.getQuery());
+        queryField.addPropertyChangeListener(new PropertyChangeListener()
+        {
+            @Override
+            public void propertyChange(PropertyChangeEvent evt)
+            {
+                if (IEditor.VALUE_CHANGED.equalsIgnoreCase(evt.getPropertyName()))
                 {
-                    @Override
-                    protected void update()
-                    {
-                        override.setQuery(queryField.getText());
-                        notifyDirtyStateConsumers();
-                    }
-                });
+                    override.setQuery(queryField.getValue(true));
+                    notifyDirtyStateConsumers();
+                }
+            }
+        });
+
         gbc = new GridBagConstraints();
         gbc.insets = new Insets(2, 2, 2, 2);
         gbc.gridx = 0;
@@ -769,10 +792,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         gbc.weighty = 1.0d;
         gbc.gridwidth = 2;
         gbc.fill = GridBagConstraints.BOTH;
-        scroll = new JScrollPane(queryField);
-        scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-        scroll.setWheelScrollingEnabled(true);
-        dialog.add(scroll, gbc);
+        dialog.add(queryField.getComponent(), gbc);
 
         // Output type combo box
         JLabel outputLabel = new JLabel("Output Type:");

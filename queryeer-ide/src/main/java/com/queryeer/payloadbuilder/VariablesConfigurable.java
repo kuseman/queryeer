@@ -590,6 +590,7 @@ class VariablesConfigurable implements IConfigurable
 
             environments.addActionListener(l ->
             {
+                disableNotify = true;
                 Environment env = (Environment) environments.getSelectedItem();
                 removeEnv.setEnabled(env != null);
                 name.setText(env != null ? env.name
@@ -598,7 +599,7 @@ class VariablesConfigurable implements IConfigurable
                 variablesModel.fireTableDataChanged();
                 secretVariablesModel.fireTableDataChanged();
                 setWarnings();
-                notifyDirtyStateConsumers();
+                disableNotify = false;
             });
 
             variables.getSelectionModel()
