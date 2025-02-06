@@ -20,6 +20,8 @@ import javax.swing.event.SwingPropertyChangeSupport;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.time.StopWatch;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.queryeer.FileWatchService.FileWatchListener;
 import com.queryeer.api.IQueryFile;
@@ -37,6 +39,7 @@ import com.queryeer.api.extensions.output.text.ITextOutputComponent;
  **/
 class QueryFileModel implements IQueryFile
 {
+    private static final Logger LOGGER = LoggerFactory.getLogger(QueryFileModel.class);
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this, true);
     static final String DIRTY = "dirty";
     static final String FILE = "file";
@@ -74,7 +77,7 @@ class QueryFileModel implements IQueryFile
     QueryFileModel(IQueryEngine queryEngine, IQueryEngine.IState engineState, IEditor editor, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file, boolean newFile)
     {
         this.queryEngine = requireNonNull(queryEngine, "queryEngine");
-        this.engineState = engineState;
+        this.engineState = requireNonNull(engineState, "engineState");
         this.editor = requireNonNull(editor, "editor");
         this.outputExtension = outputExtension;
         this.outputFormat = outputFormat;
@@ -478,11 +481,19 @@ class QueryFileModel implements IQueryFile
     /** Dispose file. Closing all stored states etc */
     void dispose()
     {
-        if (engineState == null)
+        for (IOutputComponent component : outputComponents)
         {
-            return;
+            try
+            {
+                component.dispose();
+            }
+            catch (Exception e)
+            {
+                LOGGER.error("Error disposing {}", component.getClass(), e);
+            }
         }
 
+        editor.close();
         DISPOSE_EXECUTOR.execute(() -> IOUtils.closeQuietly(engineState));
     }
 

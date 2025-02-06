@@ -9,7 +9,6 @@ import static java.util.stream.Collectors.toMap;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -55,6 +54,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -165,7 +165,7 @@ class QueryActionsConfigurable implements IConfigurable
     }
 
     @Override
-    public void commitChanges()
+    public boolean commitChanges()
     {
         QueryActions queryActions = component.getQueryActions()
                 .clone();
@@ -180,9 +180,10 @@ class QueryActionsConfigurable implements IConfigurable
         catch (IOException e)
         {
             JOptionPane.showMessageDialog(component, "Error saving config, message: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return;
+            return false;
         }
         this.queryActions = queryActions;
+        return true;
     }
 
     @Override
@@ -926,7 +927,7 @@ class QueryActionsConfigurable implements IConfigurable
             actionTargetsPanel.setEnabled(action.getSubItems()
                     .isEmpty());
             actionTargetsPanel.setLayout(new BoxLayout(actionTargetsPanel, BoxLayout.Y_AXIS));
-            actionTargetsPanel.setBackground(Color.WHITE);
+            actionTargetsPanel.setBackground(UIManager.getColor("List.background"));
 
             for (ActionTarget target : ActionTarget.values())
             {
@@ -934,7 +935,7 @@ class QueryActionsConfigurable implements IConfigurable
                 JCheckBox checkBox = new JCheckBox(WordUtils.capitalizeFully(target.name()));
                 checkBox.setEnabled(action.getSubItems()
                         .isEmpty());
-                checkBox.setBackground(Color.WHITE);
+                checkBox.setBackground(UIManager.getColor("List.background"));
                 checkBox.setSelected(action.getActionTargets()
                         .contains(target));
                 checkBox.addActionListener(l ->
@@ -974,7 +975,7 @@ class QueryActionsConfigurable implements IConfigurable
             JPanel actionTypesPanel = new JPanel();
             actionTypesPanel.setEnabled(action.getSubItems()
                     .isEmpty());
-            actionTypesPanel.setBackground(Color.WHITE);
+            actionTypesPanel.setBackground(UIManager.getColor("List.background"));
             actionTypesPanel.setLayout(new BoxLayout(actionTypesPanel, BoxLayout.Y_AXIS));
 
             for (ActionType type : ActionType.values())
@@ -984,7 +985,7 @@ class QueryActionsConfigurable implements IConfigurable
                 checkBox.setEnabled(action.getSubItems()
                         .isEmpty());
                 checkBox.setToolTipText(type.getTooltip());
-                checkBox.setBackground(Color.WHITE);
+                checkBox.setBackground(UIManager.getColor("List.background"));
                 checkBox.setSelected(action.getActionTypes()
                         .contains(type));
                 checkBox.addActionListener(l ->
@@ -1022,7 +1023,7 @@ class QueryActionsConfigurable implements IConfigurable
             add(new JLabel("Object Types:"), gbc);
 
             JPanel objectTypesPanel = new JPanel();
-            objectTypesPanel.setBackground(Color.WHITE);
+            objectTypesPanel.setBackground(UIManager.getColor("List.background"));
             objectTypesPanel.setLayout(new BoxLayout(objectTypesPanel, BoxLayout.Y_AXIS));
 
             for (ObjectType type : ObjectType.values())
@@ -1031,7 +1032,7 @@ class QueryActionsConfigurable implements IConfigurable
                 JCheckBox checkBox = new JCheckBox(WordUtils.capitalizeFully(type.name()));
                 checkBox.setEnabled(action.getSubItems()
                         .isEmpty());
-                checkBox.setBackground(Color.WHITE);
+                checkBox.setBackground(UIManager.getColor("List.background"));
                 checkBox.setSelected(action.getObjectTypes()
                         .contains(type));
                 checkBox.addActionListener(l ->

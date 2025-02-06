@@ -6,7 +6,6 @@ import static org.apache.commons.lang3.StringUtils.equalsAnyIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
@@ -32,6 +31,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringEscapeUtils;
@@ -158,7 +158,7 @@ class QueryPlanOutputComponent implements IQueryPlanOutputComponent
             if (!isBlank(statementText))
             {
                 JTextField lblStmTest = new JTextField(statementText);
-                lblStmTest.setBackground(Color.WHITE);
+                lblStmTest.setBackground(UIManager.getColor("TextField.background"));
                 lblStmTest.setEditable(false);
                 lblStmTest.setToolTipText("<html><p width=\"500\">" + StringEscapeUtils.escapeHtml4(statementText) + "</p></html>");
 

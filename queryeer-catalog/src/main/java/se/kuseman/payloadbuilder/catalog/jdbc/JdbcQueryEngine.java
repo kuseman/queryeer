@@ -58,12 +58,15 @@ class JdbcQueryEngine implements IQueryEngine
             .namingPattern("JdbcQueryEngine#-%d")
             .build());
 
+    private final CatalogCrawlService crawlService;
     private final JdbcConnectionsModel connectionsModel;
     private final Icons icons;
     private final IEventBus eventBus;
     private final IEditorFactory editorFactory;
     private final DatasourcesQuickSearchModel datasourcesQuickSearchModel;
-    private final JdbcEngineQuickPropertiesComponent quickProperties;
+    private final IQueryFileProvider queryFileProvider;
+    private final DatabaseProvider databaseProvider;
+    private JdbcEngineQuickPropertiesComponent quickProperties;
 
     //@formatter:off
     JdbcQueryEngine(
@@ -77,26 +80,32 @@ class JdbcQueryEngine implements IQueryEngine
             DatasourcesQuickSearchModel datasourcesQuickSearchModel)
     {
         //@formatter:on
+        this.crawlService = requireNonNull(crawlService, "crawlService");
+        this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.icons = requireNonNull(icons, "icons");
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
+        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
         this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
-        //@formatter:off
-        this.quickProperties = new JdbcEngineQuickPropertiesComponent(
-                this,
-                icons,
-                requireNonNull(queryFileProvider, "queryFileProvider"),
-                connectionsModel,
-                eventBus,
-                requireNonNull(databaseProvider, "databaseProvider"),
-                requireNonNull(crawlService, "crawlService"));
-        //@formatter:on
     }
 
     @Override
     public Component getQuickPropertiesComponent()
     {
+        if (quickProperties == null)
+        {
+          //@formatter:off
+            this.quickProperties = new JdbcEngineQuickPropertiesComponent(
+                    this,
+                    icons,
+                    requireNonNull(queryFileProvider, "queryFileProvider"),
+                    connectionsModel,
+                    eventBus,
+                    requireNonNull(databaseProvider, "databaseProvider"),
+                    requireNonNull(crawlService, "crawlService"));
+            //@formatter:on
+        }
         return quickProperties;
     }
 
@@ -145,7 +154,8 @@ class JdbcQueryEngine implements IQueryEngine
             ITextOutputComponent textOutput = queryFile.getOutputComponent(ITextOutputComponent.class);
 
             // Internal query
-            if (query instanceof ExecuteQueryContext ctx)
+            if (query instanceof ExecuteQueryContext ctx
+                    && state != null)
             {
                 queryText = ctx.getQuery();
                 if (queryText == null)
@@ -228,7 +238,10 @@ class JdbcQueryEngine implements IQueryEngine
     @Override
     public void focus(IQueryFile queryFile)
     {
-        quickProperties.focus(queryFile);
+        if (quickProperties != null)
+        {
+            quickProperties.focus(queryFile);
+        }
     }
 
     @Override
@@ -297,7 +310,7 @@ class JdbcQueryEngine implements IQueryEngine
                                 break;
                             }
 
-                            rowCount += writeResultSet(queryFile, connection, rs, writer, engineState);
+                            rowCount += writeResultSet(queryFile, connection, engineState, state, rs, writer);
                         }
 
                         if (!state.isAbort())
@@ -363,7 +376,7 @@ class JdbcQueryEngine implements IQueryEngine
         }
     }
 
-    private int writeResultSet(IQueryFile queryFile, Connection connection, ResultSet rs, OutputWriter writer, JdbcEngineState state) throws SQLException, IOException
+    private int writeResultSet(IQueryFile queryFile, Connection connection, JdbcEngineState engineState, ConnectionState state, ResultSet rs, OutputWriter writer) throws SQLException, IOException
     {
         int rowCount = 0;
         Pair<int[], String[]> pair = getColumnsMeta(rs);
@@ -374,7 +387,7 @@ class JdbcQueryEngine implements IQueryEngine
         {
             //@formatter:off
             Map<String, Object> metaData = MapUtils.ofEntries(true,
-                    MapUtils.entry("Connection", state.connectionState.getJdbcConnection().getName()),
+                    MapUtils.entry("Connection", state.getJdbcConnection().getName()),
                     MapUtils.entry("Database", state.getJdbcDatabase().usesSchemaAsDatabase() ? connection.getSchema()
                             : connection.getCatalog())
                     );
@@ -391,8 +404,8 @@ class JdbcQueryEngine implements IQueryEngine
 
         while (rs.next())
         {
-            if (state.connectionState != null
-                    && state.connectionState.isAbort())
+            if (state != null
+                    && state.isAbort())
             {
                 LOGGER.debug("Aborting query due to abort in state");
                 break;
@@ -400,9 +413,8 @@ class JdbcQueryEngine implements IQueryEngine
 
             if (first)
             {
-                if (state.getJdbcDatabase() != null
-                        && !state.getJdbcDatabase()
-                                .processResultSet(queryFile, state, rs))
+                if (!state.getJdbcDatabase()
+                        .processResultSet(queryFile, engineState, rs))
                 {
                     LOGGER.debug("Aborting query due to JdbcDatabase#processResultSet returned false");
                     return 0;

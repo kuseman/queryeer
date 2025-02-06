@@ -5,7 +5,6 @@ import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.GridBagConstraints;
@@ -19,6 +18,8 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -47,6 +48,7 @@ import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TableModelEvent;
@@ -62,13 +64,12 @@ import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
 import com.queryeer.api.IQueryFile;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
-import com.queryeer.dialog.ValueDialog;
-import com.queryeer.dialog.ValueDialog.Format;
 
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
@@ -86,6 +87,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private Table lastClickedTable;
     private int lastClickedTableRow;
     private int lastClickedTableColumn;
+    private IDialogFactory dialogFactory;
 
     class TableComponent extends JPanel
     {
@@ -104,7 +106,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 metaPanel.setMaximumSize(new Dimension(100, 18));
 
                 JTextField value = new JTextField();
-                value.setBackground(Color.WHITE);
+                value.setBackground(UIManager.getColor("TextField.background"));
                 value.setEditable(false);
                 value.setText(resultMetaData.entrySet()
                         .stream()
@@ -121,7 +123,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 metaPanel.add(value, gbc);
 
                 JButton showValue = new JButton("...");
-                showValue.addActionListener(l -> ValueDialog.showValueDialog("Result Set Meta Data", resultMetaData, Format.JSON));
+                showValue.addActionListener(l -> dialogFactory.showValueDialog("Result Set Meta Data", resultMetaData, IDialogFactory.Format.JSON));
 
                 gbc = new GridBagConstraints();
                 gbc.gridx = 1;
@@ -137,13 +139,17 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
     }
 
-    TableOutputComponent(IQueryFile queryFile, IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable)
+    TableOutputComponent(IQueryFile queryFile, IOutputExtension extension, List<ITableContextMenuActionFactory> contextMenuActionFactories, TableActionsConfigurable tableActionsConfigurable,
+            IDialogFactory dialogFactory)
     {
         this.queryFile = queryFile;
         this.tableActionsConfigurable = requireNonNull(tableActionsConfigurable, "tableActionsConfigurable");
         this.extension = requireNonNull(extension, "extension");
         this.contextMenuActionFactories = requireNonNull(contextMenuActionFactories, "contextMenuActionFactories");
+        this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
         setLayout(new BorderLayout());
+
+        UIManager.addPropertyChangeListener(uiManagerChangeListener);
 
         KeyStroke findKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
                 .getMenuShortcutKeyMaskEx());
@@ -167,6 +173,21 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             }
         };
     }
+
+    private final PropertyChangeListener uiManagerChangeListener = new PropertyChangeListener()
+    {
+        @Override
+        public void propertyChange(PropertyChangeEvent evt)
+        {
+            if ("lookAndFeel".equals(evt.getPropertyName()))
+            {
+                for (TableComponent tc : tables)
+                {
+                    tc.table.adaptToLookAndFeel();
+                }
+            }
+        }
+    };
 
     private final Action showFindDialogAction = new AbstractAction()
     {
@@ -438,7 +459,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         }
                         else
                         {
-                            ValueDialog.showValueDialog("Value viewer - " + header, value, ValueDialog.Format.UNKOWN);
+                            dialogFactory.showValueDialog("Value viewer - " + header, value, IDialogFactory.Format.UNKOWN);
                         }
                     }
                 }
@@ -469,7 +490,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                         // Don't trigger link actions on double click
                         if (action == null)
                         {
-                            ValueDialog.showValueDialog("Value viewer - " + table.getColumnName(col), value, ValueDialog.Format.UNKOWN);
+                            dialogFactory.showValueDialog("Value viewer - " + table.getColumnName(col), value, IDialogFactory.Format.UNKOWN);
                         }
                     }
                 }
@@ -936,5 +957,11 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 
             super.setVisible(visible);
         }
+    }
+
+    @Override
+    public void dispose()
+    {
+        UIManager.removePropertyChangeListener(uiManagerChangeListener);
     }
 }

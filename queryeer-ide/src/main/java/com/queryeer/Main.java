@@ -6,17 +6,20 @@ import java.awt.Taskbar;
 import java.awt.Taskbar.Feature;
 import java.io.File;
 import java.io.IOException;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.util.List;
 
 import javax.swing.JComponent;
 import javax.swing.RepaintManager;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.formdev.flatlaf.FlatLaf;
 import com.queryeer.api.action.IActionRegistry;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.ICryptoService;
@@ -26,6 +29,11 @@ import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.service.ITemplateService;
 
+import io.github.classgraph.ClassGraph;
+import io.github.classgraph.ClassInfo;
+import io.github.classgraph.ClassInfoList;
+import io.github.classgraph.ScanResult;
+
 /** Main of Queryeer */
 public class Main
 {
@@ -34,6 +42,16 @@ public class Main
     /** Main */
     public static void main(String[] args) throws Exception
     {
+        Thread.currentThread()
+                .setUncaughtExceptionHandler(new UncaughtExceptionHandler()
+                {
+                    @Override
+                    public void uncaughtException(Thread t, Throwable e)
+                    {
+                        e.printStackTrace();
+                        System.exit(0);
+                    }
+                });
         /* Trap CMD-q on OSX to properly run shutdown hooks etc. */
         System.setProperty("apple.eawt.quitStrategy", "CLOSE_ALL_WINDOWS");
         System.setProperty("apple.awt.application.name", "Queryeer");
@@ -56,29 +74,34 @@ public class Main
             etcProp += "/.queryeer";
         }
 
+        File etcFolder = new File(etcProp);
+        Config config = new Config(etcFolder);
+
+        String laf = config.getLookAndFeelClassName();
         try
         {
-            String lafProp = System.getProperty("laf");
-            if (isBlank(lafProp))
+            if (isBlank(laf))
             {
-                lafProp = UIManager.getSystemLookAndFeelClassName();
+                laf = UIManager.getSystemLookAndFeelClassName();
             }
-            UIManager.setLookAndFeel(lafProp);
+            UIManager.setLookAndFeel(laf);
         }
-        catch (ClassNotFoundException | InstantiationException | IllegalAccessException | UnsupportedLookAndFeelException ex)
+        catch (Exception ex)
+
         // CSOFF
         {
-            ex.printStackTrace();
+            LOGGER.error("Error setting LAF: {}", laf, ex);
         }
         // CSON
-        File etcFolder = new File(etcProp);
         File backupFolder = new File(etcFolder, "backup");
         if (!backupFolder.exists())
         {
             backupFolder.mkdirs();
         }
         ServiceLoader serviceLoader = new ServiceLoader();
-        wire(etcFolder, backupFolder, serviceLoader);
+        wire(config, backupFolder, serviceLoader);
+
+        installFlatLafs();
 
         QueryeerController controller = serviceLoader.get(QueryeerController.class);
 
@@ -93,6 +116,34 @@ public class Main
             controller.getView()
                     .setVisible(true);
         });
+    }
+
+    private static void installFlatLafs()
+    {
+        Thread t = new Thread(() ->
+        {
+            String method = "installLafInfo";
+            try (ScanResult scanResult = new ClassGraph().enableClassInfo()
+                    .enableMethodInfo()
+                    .scan())
+            {
+                ClassInfoList list = scanResult.getSubclasses(FlatLaf.class)
+                        .filter(c -> !c.isAbstract())
+                        .filter(c -> c.hasDeclaredMethod(method));
+                for (ClassInfo ci : list)
+                {
+                    ci.loadClass()
+                            .getMethod(method)
+                            .invoke(null);
+                }
+            }
+            catch (Exception e)
+            {
+                LOGGER.error("Error installing LAF", e);
+            }
+        });
+        t.setDaemon(true);
+        t.start();
     }
 
     private static void setTaskBarInfo()
@@ -110,7 +161,7 @@ public class Main
         }
     }
 
-    private static void wire(File etcFolder, File backupFolder, ServiceLoader serviceLoader) throws IOException, InstantiationException, IllegalAccessException
+    private static void wire(Config config, File backupFolder, ServiceLoader serviceLoader) throws IOException, InstantiationException, IllegalAccessException
     {
         serviceLoader.register(serviceLoader);
 
@@ -122,7 +173,6 @@ public class Main
         serviceLoader.register(ICryptoService.class, cryptoService);
         serviceLoader.register(ITemplateService.class, new TemplateService());
 
-        Config config = new Config(etcFolder);
         serviceLoader.register(IConfig.class, config);
         serviceLoader.register(config);
 
@@ -134,16 +184,16 @@ public class Main
 
         FileWatchService watchService = new FileWatchService();
         serviceLoader.register(watchService);
-        // UI
 
+        // UI
         QueryeerModel queryeerModel = new QueryeerModel(config, backupFolder, watchService);
         serviceLoader.register(IQueryFileProvider.class, queryeerModel);
         serviceLoader.register(queryeerModel);
         serviceLoader.register(QueryeerView.class);
         serviceLoader.register(QueryeerController.class);
-        serviceLoader.register(OptionsDialog.class);
         serviceLoader.register(QueryFileTabbedPane.class);
         serviceLoader.register(ProjectsView.class);
+        serviceLoader.register(DialogFactory.class, List.of(IDialogFactory.class));
 
         serviceLoader.register(IIconFactory.class, new IconFactory());
 

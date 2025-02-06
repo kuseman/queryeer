@@ -47,7 +47,12 @@ class TableOutputWriter implements QueryeerOutputWriter
         }
 
         this.model = new Model();
-        this.model.setColumns(asList(columns));
+
+        List<String> allColumns = new ArrayList<>(asList(columns));
+        // Insert the row id column first
+        allColumns.add(0, "");
+
+        this.model.setColumns(allColumns);
 
         // Need a sync call here else we will have races on fast queries where we append wrong models
         try

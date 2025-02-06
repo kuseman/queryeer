@@ -52,9 +52,9 @@ class ESCatalogExtension implements ICatalogExtension
     private final IQueryFileProvider queryFileProvider;
     private final String catalogAlias;
     private final ESConnectionsModel connectionsModel;
-    private final QuickPropertiesPanel quickPropertiesPanel;
     private final ESCompletionProvider completionProvider;
     private final IIconFactory iconFactory;
+    private QuickPropertiesPanel quickPropertiesPanel;
 
     ESCatalogExtension(IQueryFileProvider queryFileProvider, ESConnectionsModel connectionsModel, ESCompletionProvider completionProvider, String catalogAlias, IIconFactory iconFactory)
     {
@@ -62,7 +62,6 @@ class ESCatalogExtension implements ICatalogExtension
         this.catalogAlias = catalogAlias;
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.iconFactory = requireNonNull(iconFactory, "iconFactory");
-        this.quickPropertiesPanel = new QuickPropertiesPanel();
         this.completionProvider = completionProvider;
     }
 
@@ -169,6 +168,10 @@ class ESCatalogExtension implements ICatalogExtension
     @Override
     public Component getQuickPropertiesComponent()
     {
+        if (quickPropertiesPanel == null)
+        {
+            quickPropertiesPanel = new QuickPropertiesPanel();
+        }
         return quickPropertiesPanel;
     }
 
