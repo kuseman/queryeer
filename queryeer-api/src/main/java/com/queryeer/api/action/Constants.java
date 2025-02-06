@@ -26,4 +26,7 @@ public interface Constants
 
     /** Edit menu */
     public static final String EDIT_MENU = "edit";
+
+    /** Name of find action. */
+    public static final String FIND_ACTION = "find";
 }

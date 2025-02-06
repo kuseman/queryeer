@@ -55,6 +55,7 @@ public class ESCatalogExtensionTest extends Assert
         ESCompletionProvider completionProvider = new ESCompletionProvider(model);
 
         ESCatalogExtension extension = new ESCatalogExtension(queryFileProvider, model, completionProvider, "es", iconFactory);
+        extension.getQuickPropertiesComponent();
 
         // Not a credentials exception
         assertEquals(ICatalogExtension.ExceptionAction.NONE, extension.handleException(session, new CatalogException("es", "fail")));

@@ -8,6 +8,7 @@ import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.Window;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -135,7 +136,11 @@ class AboutDialog extends DialogUtils.ADialog
         pane.setOpaque(false);
         pane.setBorder(BorderFactory.createEmptyBorder());
         pane.setBackground(new Color(0, 0, 0, 0));
-        JOptionPane.showMessageDialog(this, pane, "Version Check", JOptionPane.INFORMATION_MESSAGE);
+
+        Window activeWindow = javax.swing.FocusManager.getCurrentManager()
+                .getActiveWindow();
+
+        JOptionPane.showMessageDialog(activeWindow, pane, "Version Check", JOptionPane.INFORMATION_MESSAGE);
     }
 
     void checkNewVersion()

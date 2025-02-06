@@ -21,6 +21,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
@@ -64,24 +65,30 @@ class PayloadbuilderQueryEngine implements IQueryEngine
 
     private final IEventBus eventBus;
     private final CatalogsConfigurable catalogsConfigurable;
-    private final QuickPropertiesComponent quickPropertiesComponent;
+    private final CatalogExtensionViewFactory catalogExtensionViewFactory;
     private final CompletionRegistry completionRegistry;
     private final IEditorFactory editorFactory;
+    private final VariablesConfigurable variablesConfigurable;
+    private QuickPropertiesComponent quickPropertiesComponent;
 
     PayloadbuilderQueryEngine(IEventBus eventBus, CatalogsConfigurable catalogsConfigurable, CatalogExtensionViewFactory catalogExtensionViewFactory, CompletionRegistry completionRegistry,
             IEditorFactory editorFactory, VariablesConfigurable variablesConfigurable)
     {
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.catalogsConfigurable = requireNonNull(catalogsConfigurable, "catalogsConfigurable");
+        this.catalogExtensionViewFactory = requireNonNull(catalogExtensionViewFactory, "catalogExtensionViewFactory");
         this.completionRegistry = requireNonNull(completionRegistry, "completionRegistry");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
-        this.quickPropertiesComponent = QuickPropertiesComponent.create(eventBus, requireNonNull(variablesConfigurable, "variablesConfigurable"),
-                requireNonNull(catalogExtensionViewFactory, "catalogExtensionViewFactory"), catalogsConfigurable.getCatalogs());
+        this.variablesConfigurable = requireNonNull(variablesConfigurable, "variablesConfigurable");
     }
 
     @Override
     public Component getQuickPropertiesComponent()
     {
+        if (quickPropertiesComponent == null)
+        {
+            this.quickPropertiesComponent = QuickPropertiesComponent.create(eventBus, variablesConfigurable, catalogExtensionViewFactory, catalogsConfigurable.getCatalogs());
+        }
         return quickPropertiesComponent;
     }
 
@@ -122,7 +129,10 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     @Override
     public void focus(IQueryFile queryFile)
     {
-        quickPropertiesComponent.focus(queryFile);
+        if (quickPropertiesComponent != null)
+        {
+            quickPropertiesComponent.focus(queryFile);
+        }
     }
 
     @Override
@@ -376,10 +386,13 @@ class PayloadbuilderQueryEngine implements IQueryEngine
             }
 
             // Update views to reflect changed values after query
-            for (CatalogExtensionView view : catalogViews)
+            SwingUtilities.invokeLater(() ->
             {
-                view.afterExecute(queryFile);
-            }
+                for (CatalogExtensionView view : catalogViews)
+                {
+                    view.afterExecute(queryFile);
+                }
+            });
         }
 
         void setVariablesEnvironments()
