@@ -15,9 +15,9 @@ import javax.swing.Action;
 
 import org.apache.commons.lang3.StringUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
@@ -181,7 +181,7 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         @Override
         public Action getAction()
         {
-            return new AbstractAction("Open In Browser", FontIcon.of(FontAwesome.CLOUD))
+            return new AbstractAction("Open In Browser", IconFactory.of(FontAwesome.CLOUD))
             {
                 @Override
                 public void actionPerformed(ActionEvent e)

@@ -59,7 +59,6 @@ import javax.swing.event.ListDataListener;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +68,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.DialogUtils;
@@ -621,7 +621,7 @@ class TableActionsConfigurable implements IConfigurable
             JPanel buttonListPanel = new JPanel();
             buttonListPanel.setLayout(new BoxLayout(buttonListPanel, BoxLayout.X_AXIS));
 
-            JButton add = new JButton(FontIcon.of(FontAwesome.PLUS, 8));
+            JButton add = new JButton(IconFactory.of(FontAwesome.PLUS, 8));
             add.setToolTipText("Add Action");
             add.addActionListener(l ->
             {
@@ -629,7 +629,7 @@ class TableActionsConfigurable implements IConfigurable
                 action.name = "New Action";
                 actionsListModel.addElement(action);
             });
-            JButton remove = new JButton(FontIcon.of(FontAwesome.MINUS, 8));
+            JButton remove = new JButton(IconFactory.of(FontAwesome.MINUS, 8));
             remove.addActionListener(l ->
             {
                 QueryAction selectedValue = actionsList.getSelectedValue();
@@ -640,7 +640,7 @@ class TableActionsConfigurable implements IConfigurable
             });
             remove.setToolTipText("Remove Selected Action");
             remove.setEnabled(false);
-            JButton addTemplate = new JButton(FontIcon.of(FontAwesome.FILE_TEXT_O, 8));
+            JButton addTemplate = new JButton(IconFactory.of(FontAwesome.FILE_TEXT_O, 8));
             addTemplate.setToolTipText("Add Template");
             addTemplate.addActionListener(l ->
             {
@@ -659,7 +659,7 @@ class TableActionsConfigurable implements IConfigurable
                     actionsListModel.addElement(action.clone());
                 }
             });
-            JButton test = new JButton(FontIcon.of(FontAwesome.CODEPEN, 8));
+            JButton test = new JButton(IconFactory.of(FontAwesome.CODEPEN, 8));
             test.setEnabled(false);
             test.setToolTipText("Open Test Editor");
             test.addActionListener(l ->
@@ -914,7 +914,7 @@ class TableActionsConfigurable implements IConfigurable
                 metaParamsString += "</ul>";
             }
 
-            JLabel templateQueryLabel = new JLabel("Template Query:", FontIcon.of(FontAwesome.INFO), SwingConstants.LEADING);
+            JLabel templateQueryLabel = new JLabel("Template Query:", IconFactory.of(FontAwesome.INFO), SwingConstants.LEADING);
             templateQueryLabel.setToolTipText("<html>" + """
                     <b>PayloadBuilder Query</b> that acts as both activation and template generator.<br/>
                     If this query don't return any rows this action is considered disabled.<br/>

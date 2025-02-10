@@ -33,7 +33,6 @@ import javax.swing.table.TableCellRenderer;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils;
@@ -47,8 +46,8 @@ import com.queryeer.event.TaskStartedEvent;
 /** Tasks dialog */
 class TasksDialog extends DialogUtils.AFrame
 {
-    private static final Icon CHECK_CIRCLE = FontIcon.of(FontAwesome.CHECK_CIRCLE);
-    private static final Icon EXCLAMATION_CIRCLE = FontIcon.of(FontAwesome.EXCLAMATION_CIRCLE);
+    private static final Icon CHECK_CIRCLE = IconFactory.of(FontAwesome.CHECK_CIRCLE);
+    private static final Icon EXCLAMATION_CIRCLE = IconFactory.of(FontAwesome.EXCLAMATION_CIRCLE);
     private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
     private JTable tasksTable;

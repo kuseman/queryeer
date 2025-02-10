@@ -37,7 +37,6 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
 import com.l2fprod.common.propertysheet.DefaultProperty;
 import com.l2fprod.common.propertysheet.Property;
@@ -49,6 +48,9 @@ import com.mxgraph.swing.mxGraphComponent;
 import com.mxgraph.swing.util.mxCellOverlay;
 import com.mxgraph.util.mxConstants;
 import com.mxgraph.view.mxGraph;
+import com.queryeer.Constants;
+import com.queryeer.IconFactory;
+import com.queryeer.UiUtils;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputComponent;
 import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputExtension;
@@ -77,7 +79,7 @@ class QueryPlanOutputComponent implements IQueryPlanOutputComponent
     @Override
     public Icon icon()
     {
-        return FontIcon.of(FontAwesome.OBJECT_GROUP);
+        return IconFactory.of(FontAwesome.OBJECT_GROUP);
     }
 
     @Override
@@ -322,7 +324,6 @@ class QueryPlanOutputComponent implements IQueryPlanOutputComponent
         {
             // 1 pixel per 10 factor
             int rowCount = link.getRowCount();
-            boolean zeroRowCount = rowCount <= 0;
             int thickNess = 0;
             while (rowCount > 0)
             {
@@ -334,8 +335,15 @@ class QueryPlanOutputComponent implements IQueryPlanOutputComponent
                 thickNess++;
             }
 
-            return String.format("rounded=true;edgeStyle=entityRelationEdgeStyle;dashed=%s;strokeColor=#000000;startArrow=block;endArrow=none;strokeWidth=%d;", zeroRowCount ? "true"
-                    : "false", thickNess);
+            String stroke = "#000000";
+            if (UiUtils.isDarkLookAndFeel())
+            {
+                stroke = Constants.DARK_THEME_LIGHT_COLOR_HEX;
+            }
+
+            boolean zeroRowCount = rowCount <= 0;
+            return String.format("rounded=true;edgeStyle=entityRelationEdgeStyle;dashed=%s;strokeColor=%s;startArrow=block;endArrow=none;strokeWidth=%d;", zeroRowCount ? "true"
+                    : "false", stroke, thickNess);
         }
 
         private static String formatValueForTooltip(Object value)

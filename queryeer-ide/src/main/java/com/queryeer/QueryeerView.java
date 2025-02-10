@@ -75,7 +75,6 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -110,7 +109,7 @@ class QueryeerView extends JFrame
     private static final String OPEN_QUICK_FILES = "Queryeer.OpenQuickFiles";
     private static final String OPEN_QUICK_DATASOURCES = "Queryeer.OpenQuickDatasources";
     private static final String STOP = "Queryeer.Stop";
-    private static final Icon TASKS_ICON = FontIcon.of(FontAwesome.TASKS);
+    private static final Icon TASKS_ICON = IconFactory.of(FontAwesome.TASKS);
     private static final Icon SPINNER = AnimatedIcon.createSmallSpinner();
 
     private final JPanel topPanel;
@@ -223,7 +222,7 @@ class QueryeerView extends JFrame
         labelTasks.setMaximumSize(new Dimension(16, 16));
         labelTasks.setIcon(TASKS_ICON);
 
-        JLabel labelLogs = new JLabel(FontIcon.of(FontAwesome.FILE_TEXT_O));
+        JLabel labelLogs = new JLabel(IconFactory.of(FontAwesome.FILE_TEXT_O));
         labelLogs.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
         labelLogs.setToolTipText("Logs");
         labelLogs.addMouseListener(new MouseAdapter()
@@ -610,7 +609,7 @@ class QueryeerView extends JFrame
         leftTabbedPane.addTab("Properties", new JScrollPane(panelQueryEngineProperties));
         leftTabbedPane.addTab("Projects", projectsView);
 
-        leftTabbedPane.setIconAt(1, FontIcon.of(FontAwesome.FILES_O));
+        leftTabbedPane.setIconAt(1, IconFactory.of(FontAwesome.FILES_O));
 
         splitPane.setLeftComponent(leftTabbedPane);
 
@@ -738,7 +737,7 @@ class QueryeerView extends JFrame
 
                     if (file == model.getSelectedFile())
                     {
-                        windowItem.setIcon(FontIcon.of(FontAwesome.CHECK));
+                        windowItem.setIcon(IconFactory.of(FontAwesome.CHECK));
                     }
 
                     windowItem.putClientProperty(FILE_MODEL, file);
@@ -773,7 +772,7 @@ class QueryeerView extends JFrame
                     if (modelItem != null
                             && fileModel == modelItem)
                     {
-                        item.setIcon(FontIcon.of(FontAwesome.CHECK));
+                        item.setIcon(IconFactory.of(FontAwesome.CHECK));
                     }
                 }
                 updateState(fileModel);
@@ -1547,8 +1546,8 @@ class QueryeerView extends JFrame
 
         static class ListItem implements IQuickSearchModel.Item
         {
-            private static final Icon FILES_O = FontIcon.of(FontAwesome.FILES_O);
-            private static final Icon FILE_O = FontIcon.of(FontAwesome.FILE_O);
+            private static final Icon FILES_O = IconFactory.of(FontAwesome.FILES_O);
+            private static final Icon FILE_O = IconFactory.of(FontAwesome.FILE_O);
             private final Type type;
             private final QueryFileModel queryFile;
             private final File file;

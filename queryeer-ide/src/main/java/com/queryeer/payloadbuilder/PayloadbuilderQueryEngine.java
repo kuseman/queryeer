@@ -25,9 +25,9 @@ import javax.swing.SwingUtilities;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.IEditorFactory;
@@ -61,7 +61,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
 {
     /** All query tabs share a common cache to be able to reuse cached data etc. */
     private static final InMemoryGenericCache GENERIC_CACHE = new InMemoryGenericCache("QuerySession", true);
-    private static final Icon ICON = FontIcon.of(FontAwesome.PRODUCT_HUNT);
+    private static final Icon ICON = IconFactory.of(FontAwesome.PRODUCT_HUNT);
 
     private final IEventBus eventBus;
     private final CatalogsConfigurable catalogsConfigurable;

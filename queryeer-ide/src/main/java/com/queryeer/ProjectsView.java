@@ -63,7 +63,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -123,7 +122,7 @@ class ProjectsView extends JPanel
 
         JPanel buttonPanel = new JPanel();
         buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
-        JButton add = new JButton(FontIcon.of(FontAwesome.PLUS, 8));
+        JButton add = new JButton(IconFactory.of(FontAwesome.PLUS, 8));
         add.setToolTipText("Add Project");
         add.addActionListener(l ->
         {
@@ -154,7 +153,7 @@ class ProjectsView extends JPanel
         });
         buttonPanel.add(add);
 
-        JButton remove = new JButton(FontIcon.of(FontAwesome.MINUS, 8));
+        JButton remove = new JButton(IconFactory.of(FontAwesome.MINUS, 8));
         remove.setToolTipText("Remove Selected Project");
         remove.setEnabled(false);
         remove.addActionListener(l ->
@@ -171,7 +170,7 @@ class ProjectsView extends JPanel
         });
         buttonPanel.add(remove);
 
-        JButton collapseAll = new JButton(FontIcon.of(FontAwesome.WINDOW_MINIMIZE, 8));
+        JButton collapseAll = new JButton(IconFactory.of(FontAwesome.WINDOW_MINIMIZE, 8));
         collapseAll.setToolTipText("Collapse All");
         collapseAll.addActionListener(l ->
         {
@@ -188,7 +187,7 @@ class ProjectsView extends JPanel
         });
         buttonPanel.add(collapseAll);
 
-        JButton settings = new JButton(FontIcon.of(FontAwesome.COG, 8));
+        JButton settings = new JButton(IconFactory.of(FontAwesome.COG, 8));
         settings.setEnabled(false);
         settings.setToolTipText("Change Selected Project Settings");
         settings.addActionListener(l ->
@@ -216,7 +215,7 @@ class ProjectsView extends JPanel
         });
         buttonPanel.add(settings);
 
-        syncButton = new JToggleButton(FontIcon.of(FontAwesome.ARROWS_H, 8));
+        syncButton = new JToggleButton(IconFactory.of(FontAwesome.ARROWS_H, 8));
         syncButton.setToolTipText("Sync Projects Tree With Selected Tab");
         syncButton.setSelected(projectsConfig.syncProjectView);
         syncButton.addActionListener(l ->

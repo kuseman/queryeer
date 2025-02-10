@@ -106,11 +106,11 @@ import org.fife.ui.rtextarea.SearchEngine;
 import org.fife.ui.rtextarea.SearchResult;
 import org.fife.ui.rtextarea.ToolTipSupplier;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.UiUtils;
 import com.queryeer.api.action.ActionUtils;
 import com.queryeer.api.component.ADocumentListenerAdapter;
@@ -145,8 +145,8 @@ class TextEditor implements ITextEditor, SearchListener
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TextEditor.class);
 
-    private static final Icon SEARCH = FontIcon.of(FontAwesome.SEARCH);
-    private static final Icon SHARE = FontIcon.of(FontAwesome.SHARE);
+    private static final Icon SEARCH = IconFactory.of(FontAwesome.SEARCH);
+    private static final Icon SHARE = IconFactory.of(FontAwesome.SHARE);
     private static final KeyStroke PASTE_SPECIAL_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_V, Toolkit.getDefaultToolkit()
             .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK);
 
@@ -803,7 +803,7 @@ class TextEditor implements ITextEditor, SearchListener
         }
     };
 
-    private Action toggleShowWhiteSpaceAction = new AbstractAction("", FontIcon.of(FontAwesome.PARAGRAPH))
+    private Action toggleShowWhiteSpaceAction = new AbstractAction("", IconFactory.of(FontAwesome.PARAGRAPH))
     {
         {
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_TOOLBAR, true);
@@ -898,7 +898,7 @@ class TextEditor implements ITextEditor, SearchListener
         }
     };
 
-    private Action toggleCommentAction = new AbstractAction("", FontIcon.of(FontAwesome.INDENT))
+    private Action toggleCommentAction = new AbstractAction("", IconFactory.of(FontAwesome.INDENT))
     {
         {
             putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_TOOLBAR, true);

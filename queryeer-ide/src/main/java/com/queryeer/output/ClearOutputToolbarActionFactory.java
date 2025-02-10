@@ -9,8 +9,8 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
+import com.queryeer.IconFactory;
 import com.queryeer.api.extensions.IExtensionAction;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputToolbarActionFactory;
@@ -39,7 +39,7 @@ class ClearOutputToolbarActionFactory implements IOutputToolbarActionFactory
                     action = new AbstractAction()
                     {
                         {
-                            putValue(SMALL_ICON, FontIcon.of(FontAwesome.REMOVE));
+                            putValue(SMALL_ICON, IconFactory.of(FontAwesome.REMOVE));
                             putValue(SHORT_DESCRIPTION, "Clear");
                         }
 

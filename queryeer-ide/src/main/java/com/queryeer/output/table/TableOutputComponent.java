@@ -60,9 +60,9 @@ import org.fife.rsta.ui.search.SearchEvent;
 import org.fife.rsta.ui.search.SearchListener;
 import org.fife.ui.rtextarea.SearchContext;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.IExtensionAction;
@@ -323,7 +323,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     @Override
     public Icon icon()
     {
-        return FontIcon.of(FontAwesome.TABLE);
+        return IconFactory.of(FontAwesome.TABLE);
     }
 
     @Override
