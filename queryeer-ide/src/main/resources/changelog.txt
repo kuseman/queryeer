@@ -2,6 +2,15 @@ CHANGELOG
 
 Queryeer
 
+v2.8.0
+chore: Bump payloadbuilder
+feat: Wrap icons in a proxy that adapts to current LAF to render them as dark or light
+feat: Add support for LAF's. Stored in config and choosen in queryeer configurable
+feat: Add FlatLaf dependency along with intellij themes
+fix: Alter thread pools in texteditor and table output component to cached variants with limit
+feat: Add Variables configurable for Payloadbuilder to be able to inject vars and secret vars into session before execute.
+fix: Let configurables return if commit succeeded or not to be able to stay in dirty state if for some reason a configurable couldn't commit.
+
 v2.7.0
 chore: Bump Payloadbuilder
 fix: Fix column label in JDBC tree to show MAX instead of Integer.MAX_VALUE
@@ -149,6 +158,11 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.9.2
+fix: Add proper URL encoding of endpoints in HttpCatalog
+fix: Guard against NPE when fetching datastreams without any properties
+fix: Fix index seek to adapt to batch_size option and call downstream datasource in batches
 
 v1.9.1
 fix: Guard against NPE when analyzing a predicate with a dereference expression
