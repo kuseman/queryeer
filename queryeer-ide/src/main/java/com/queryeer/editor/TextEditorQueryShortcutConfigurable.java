@@ -45,13 +45,13 @@ import javax.swing.SwingUtilities;
 
 import org.apache.commons.lang3.StringUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.api.action.IActionRegistry;
 import com.queryeer.api.action.IActionRegistry.ActionScope;
 import com.queryeer.api.action.IActionRegistry.KeyboardShortcut;
@@ -425,7 +425,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
 
             String shortcutText = getAcceleratorText(DEFAULT_SHORTCUT_KEYSTROKES[index]);
             // Query label and text field
-            JLabel queryLabel = new JLabel(shortcutText, FontIcon.of(FontAwesome.INFO), SwingConstants.LEADING);
+            JLabel queryLabel = new JLabel(shortcutText, IconFactory.of(FontAwesome.INFO), SwingConstants.LEADING);
             addQueryInformationTooltip(queryLabel, shortcutText);
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -632,7 +632,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         // Rule input
-        JLabel ruleLabel = new JLabel("Rule:", FontIcon.of(FontAwesome.INFO), SwingConstants.LEADING);
+        JLabel ruleLabel = new JLabel("Rule:", IconFactory.of(FontAwesome.INFO), SwingConstants.LEADING);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.anchor = GridBagConstraints.WEST;
@@ -760,7 +760,7 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
         dialog.add(queryEngineCombo, gbc);
 
         // Query input
-        JLabel queryLabel = new JLabel("Query:", FontIcon.of(FontAwesome.INFO), SwingConstants.LEADING);
+        JLabel queryLabel = new JLabel("Query:", IconFactory.of(FontAwesome.INFO), SwingConstants.LEADING);
         addQueryInformationTooltip(queryLabel, shortcutText);
         gbc = new GridBagConstraints();
         gbc.insets = new Insets(2, 2, 2, 2);

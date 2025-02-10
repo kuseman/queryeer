@@ -42,7 +42,6 @@ import javax.swing.table.DefaultTableCellRenderer;
 
 import org.apache.commons.lang3.reflect.MethodUtils;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,6 +49,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.queryeer.Constants;
+import com.queryeer.IconFactory;
 import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.service.IConfig;
@@ -365,7 +365,7 @@ class VariablesConfigurable implements IConfigurable
             add(environments, gbc);
 
             JPanel envButtonPanel = new JPanel();
-            JButton addEnv = new JButton(FontIcon.of(FontAwesome.PLUS, 8));
+            JButton addEnv = new JButton(IconFactory.of(FontAwesome.PLUS, 8));
             addEnv.addActionListener(l ->
             {
                 Environment env = new Environment();
@@ -379,7 +379,7 @@ class VariablesConfigurable implements IConfigurable
                 notifyDirtyStateConsumers();
             });
             envButtonPanel.add(addEnv);
-            JButton removeEnv = new JButton(FontIcon.of(FontAwesome.MINUS, 8));
+            JButton removeEnv = new JButton(IconFactory.of(FontAwesome.MINUS, 8));
             removeEnv.addActionListener(l ->
             {
                 Environment env = (Environment) environmentsModel.getSelectedItem();
@@ -464,7 +464,7 @@ class VariablesConfigurable implements IConfigurable
             secretVariablesModel = new VariablesTableModel(true);
 
             JPanel variableButtonPanel = new JPanel();
-            JButton addVar = new JButton(FontIcon.of(FontAwesome.PLUS, 8));
+            JButton addVar = new JButton(IconFactory.of(FontAwesome.PLUS, 8));
             addVar.addActionListener(l ->
             {
                 Environment env = (Environment) environmentsModel.getSelectedItem();
@@ -480,7 +480,7 @@ class VariablesConfigurable implements IConfigurable
                 notifyDirtyStateConsumers();
             });
             variableButtonPanel.add(addVar);
-            JButton removeVar = new JButton(FontIcon.of(FontAwesome.MINUS, 8));
+            JButton removeVar = new JButton(IconFactory.of(FontAwesome.MINUS, 8));
             removeVar.addActionListener(l ->
             {
                 Environment env = (Environment) environmentsModel.getSelectedItem();
@@ -547,7 +547,7 @@ class VariablesConfigurable implements IConfigurable
 
             secretVariablesPanel.add(new JScrollPane(secretVariables), BorderLayout.CENTER);
             JPanel secretVariableButtonPanel = new JPanel();
-            JButton addSecretVar = new JButton(FontIcon.of(FontAwesome.PLUS, 8));
+            JButton addSecretVar = new JButton(IconFactory.of(FontAwesome.PLUS, 8));
             addSecretVar.addActionListener(l ->
             {
                 Environment env = (Environment) environmentsModel.getSelectedItem();
@@ -563,7 +563,7 @@ class VariablesConfigurable implements IConfigurable
                 notifyDirtyStateConsumers();
             });
             secretVariableButtonPanel.add(addSecretVar);
-            JButton removeSecretVar = new JButton(FontIcon.of(FontAwesome.MINUS, 8));
+            JButton removeSecretVar = new JButton(IconFactory.of(FontAwesome.MINUS, 8));
             removeSecretVar.addActionListener(l ->
             {
                 Environment env = (Environment) environmentsModel.getSelectedItem();

@@ -24,10 +24,10 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.queryeer.IconFactory;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
@@ -61,10 +61,10 @@ class CompletionRegistry
 {
     private static final List<String> EXPRESSION_FUNCTIONS = List.of("cast", "dateadd", "datepart", "datediff");
 
-    private static final Icon COLUMNS = FontIcon.of(FontAwesome.COLUMNS);
-    private static final Icon GEAR = FontIcon.of(FontAwesome.GEAR);
-    private static final Icon TABLE = FontIcon.of(FontAwesome.TABLE);
-    private static final Icon TIMES_CIRCLE = FontIcon.of(FontAwesome.TIMES_CIRCLE);
+    private static final Icon COLUMNS = IconFactory.of(FontAwesome.COLUMNS);
+    private static final Icon GEAR = IconFactory.of(FontAwesome.GEAR);
+    private static final Icon TABLE = IconFactory.of(FontAwesome.TABLE);
+    private static final Icon TIMES_CIRCLE = IconFactory.of(FontAwesome.TIMES_CIRCLE);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CompletionRegistry.class);
     private static final QualifiedName TABLE_META_CACHE = QualifiedName.of("TableMeta");

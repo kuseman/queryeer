@@ -14,8 +14,8 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
+import com.queryeer.IconFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
@@ -42,7 +42,7 @@ class GraphOutputComponent implements IOutputComponent
     @Override
     public Icon icon()
     {
-        return FontIcon.of(FontAwesome.BAR_CHART);
+        return IconFactory.of(FontAwesome.BAR_CHART);
     }
 
     @Override

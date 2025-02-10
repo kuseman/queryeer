@@ -33,8 +33,8 @@ import javax.swing.text.StyledDocument;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
-import org.kordamp.ikonli.swing.FontIcon;
 
+import com.queryeer.IconFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.ITextEditor;
@@ -80,7 +80,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     @Override
     public Icon icon()
     {
-        return FontIcon.of(FontAwesome.FILE_TEXT_O);
+        return IconFactory.of(FontAwesome.FILE_TEXT_O);
     }
 
     @Override
