@@ -40,6 +40,7 @@
             </directory>
             <includes>
                 <include>icons8*</include>
+                <include>splash*</include>
             </includes>
             <outputDirectory>icons/</outputDirectory>
         </fileSet>

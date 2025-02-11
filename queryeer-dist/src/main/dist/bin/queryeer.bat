@@ -13,4 +13,4 @@ for %%A in (*.jar) do (
    SET "CLASSPATH=!CLASSPATH!;!LIB_DIR!\%%A"
 )
 
-java -cp "%CLASSPATH%" -Dfile.encoding=UTF-8 -Dplugins="%PLUGINS_DIR%" -Dshared="%SHARED_DIR%" com.queryeer.Main
+java -cp "%CLASSPATH%" -splash:../icons/splash.png -Dfile.encoding=UTF-8 -Dplugins="%PLUGINS_DIR%" -Dshared="%SHARED_DIR%" com.queryeer.Main

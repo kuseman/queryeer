@@ -48,6 +48,9 @@ public class Main
                 .getUptime());
         time = System.currentTimeMillis();
 
+        Splash.init();
+        Splash.updateProgress("Starting");
+
         Thread.currentThread()
                 .setUncaughtExceptionHandler(new UncaughtExceptionHandler()
                 {
@@ -67,6 +70,7 @@ public class Main
         UIManager.put("OptionPane.noButtonMnemonic", "78");
         UIManager.put("OptionPane.cancelButtonMnemonic", "67");
 
+        Splash.updateProgress("Initalizing config");
         String etcProp = System.getProperty("etc");
 
         if (isBlank(etcProp))
@@ -81,11 +85,13 @@ public class Main
         }
 
         File etcFolder = new File(etcProp);
-        Config config = new Config(etcFolder);
 
+        // CSOFF
+        Config config = new Config(etcFolder);
+        // CSON
         LOGGER.debug("Config init time: {} ms", System.currentTimeMillis() - time);
         time = System.currentTimeMillis();
-
+        Splash.updateProgress("Setting look and feel");
         String laf = config.getLookAndFeelClassName();
         try
         {
@@ -102,7 +108,7 @@ public class Main
 
         LOGGER.debug("LAF install time: {} ms", System.currentTimeMillis() - time);
         time = System.currentTimeMillis();
-
+        Splash.updateProgress("Loading plugins");
         File backupFolder = new File(etcFolder, "backup");
         if (!backupFolder.exists())
         {
@@ -116,6 +122,7 @@ public class Main
 
         installFlatLafs();
 
+        Splash.updateProgress("Starting");
         QueryeerController controller = serviceLoader.get(QueryeerController.class);
 
         // Start all Swing applications on the EDT.
@@ -128,6 +135,7 @@ public class Main
             }
 
             LOGGER.debug("UI init time: {} ms", System.currentTimeMillis() - time);
+            Splash.dispose();
             controller.getView()
                     .setVisible(true);
         });
