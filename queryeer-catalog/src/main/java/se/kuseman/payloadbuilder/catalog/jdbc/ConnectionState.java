@@ -54,7 +54,9 @@ class ConnectionState implements Closeable
         // Create a new connection if needed
         if (!isValid)
         {
-            connection = jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), new String(jdbcConnection.getRuntimePassword()));
+            String password = jdbcConnection.getRuntimePassword() != null ? new String(jdbcConnection.getRuntimePassword())
+                    : "";
+            connection = jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
             sessionId = jdbcDatabase.getSessionId(connection);
             if (database == null)
             {
@@ -63,23 +65,6 @@ class ConnectionState implements Closeable
             else
             {
                 setDatabaseOnConnection(database, null);
-            }
-        }
-        return connection;
-    }
-
-    Connection createConnection() throws SQLException
-    {
-        Connection connection = jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), new String(jdbcConnection.getRuntimePassword()));
-        if (database != null)
-        {
-            if (jdbcDatabase.usesSchemaAsDatabase())
-            {
-                connection.setSchema(database);
-            }
-            else
-            {
-                connection.setCatalog(database);
             }
         }
         return connection;

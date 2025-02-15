@@ -178,7 +178,7 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     {
         if (connectionState != null)
         {
-            return connectionState.createConnection();
+            return connectionState.getConnection();
         }
         return null;
     }

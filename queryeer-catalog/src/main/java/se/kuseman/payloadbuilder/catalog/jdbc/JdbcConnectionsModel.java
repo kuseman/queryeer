@@ -22,7 +22,6 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IQueryFileProvider;
-import com.queryeer.api.utils.ArrayUtils;
 import com.queryeer.api.utils.CredentialUtils;
 import com.queryeer.api.utils.CredentialUtils.Credentials;
 import com.queryeer.api.utils.CredentialUtils.ValidationHandler;
@@ -135,27 +134,34 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
         Window activeWindow = javax.swing.FocusManager.getCurrentManager()
                 .getActiveWindow();
 
-        if (isBlank(url)
-                || isBlank(username))
-        {
-            JOptionPane.showMessageDialog(activeWindow, "URL and Username must be set to test connection", "Enter URL/Username", JOptionPane.INFORMATION_MESSAGE);
-            return;
-        }
-
-        String password = connection.getPassword();
-        // Password less connection, ask for password
+        // NOTE! We set password to a non empty string to not trigger
+        // empty password in CredentialsUtils which would otherwise make the dialog not to return success.
+        String password = "  ";
         boolean readOnlyPassword = true;
-        if (isBlank(password))
+        // Some connections has credentials even without username/password (Windows Native Auth for SQLServer for example.)
+        if (!connection.hasCredentials())
         {
-            readOnlyPassword = false;
-        }
-        // .. else decrypt it
-        else
-        {
-            password = cryptoService.decryptString(password);
+            if (isBlank(url)
+                    || isBlank(username))
+            {
+                JOptionPane.showMessageDialog(activeWindow, "URL and Username must be set to test connection", "Enter URL/Username", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            password = connection.getPassword();
+            // Password less connection, ask for password
             if (isBlank(password))
             {
-                return;
+                readOnlyPassword = false;
+            }
+            // .. else decrypt it
+            else
+            {
+                password = cryptoService.decryptString(password);
+                if (isBlank(password))
+                {
+                    return;
+                }
             }
         }
 
@@ -300,14 +306,16 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
             }
 
             char[] runtimePassword = connection.getRuntimePassword();
-            if (ArrayUtils.isEmpty(runtimePassword))
+            if (!connection.hasCredentials())
             {
                 return emptyList();
             }
 
+            String password = runtimePassword == null ? ""
+                    : new String(runtimePassword);
             JdbcDatabase database = databaseProvider.getDatabase(connection.getJdbcURL());
             setEnableRealod(false);
-            try (java.sql.Connection sqlConnection = database.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(runtimePassword)))
+            try (java.sql.Connection sqlConnection = database.createConnection(connection.getJdbcURL(), connection.getUsername(), password))
             {
                 List<String> loadedDatabases = new ArrayList<>();
                 if (database.usesSchemaAsDatabase())
