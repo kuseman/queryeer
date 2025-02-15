@@ -188,7 +188,12 @@ class QueryFileModel implements IQueryFile
                         }
 
                         IOutputExtension selectedOutputExtension = outputExtension;
-                        selectOutputComponent(selectedOutputExtension.getResultOutputComponentClass());
+
+                        Class<? extends IOutputComponent> outputComponentClass = selectedOutputExtension.getResultOutputComponentClass();
+                        if (outputComponentClass != null)
+                        {
+                            selectOutputComponent(outputComponentClass);
+                        }
                     }
                     break;
                 case ABORTED:
