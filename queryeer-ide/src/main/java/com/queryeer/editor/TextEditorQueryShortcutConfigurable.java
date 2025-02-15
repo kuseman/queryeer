@@ -614,7 +614,8 @@ class TextEditorQueryShortcutConfigurable implements IConfigurable
                 + "Query that will be executed when trigged by keyboard shortcut: "
                 + "<b/>" + shortcutText + "</b>"
                 + "<br/>"
-                + "Selected text in editor is available as a placeholder <b>${selectedText}</b>"
+                + "Selected text in editor is available as a placeholder <b>${selectedText}</b><br/>"
+                + "NOTE! A shortcut can be present without placeholder."
                 + "</html>";
         //@formatter:on
 
