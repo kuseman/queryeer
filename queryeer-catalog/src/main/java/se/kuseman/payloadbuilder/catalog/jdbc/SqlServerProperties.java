@@ -172,6 +172,19 @@ class SqlServerProperties implements IPropertyAware
                        + (!isBlank(urlSuffix) ? (";" + urlSuffix)
                                : "");
             }
+        },
+        WINDOWS_NATIVE_AUTHENTICATION("Windows Native Authentication (Windows Only)")
+        {
+            @Override
+            String generateURL(String server, String domain, String applicationName, String urlSuffix)
+            {
+                return "jdbc:sqlserver://" + server
+                       + ";integratedSecurity=true;authenticationScheme=NativeAuthentication"
+                       + (!isBlank(applicationName) ? (";applicationName=" + applicationName)
+                               : "")
+                       + (!isBlank(urlSuffix) ? (";" + urlSuffix)
+                               : "");
+            }
         };
 
         private final String title;

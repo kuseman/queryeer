@@ -15,6 +15,7 @@ import com.queryeer.api.component.Property;
 
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.catalog.Common;
+import se.kuseman.payloadbuilder.catalog.jdbc.SqlServerProperties.AuthenticationType;
 
 /** Server connection. */
 public class JdbcConnection implements IPropertyAware
@@ -278,6 +279,14 @@ public class JdbcConnection implements IPropertyAware
 
     boolean hasCredentials()
     {
+        // Windows Native auth type on SqlServer doesn't require a password
+        if (type == SqlType.SQLSERVER
+                && sqlServerProperties != null
+                && sqlServerProperties.getAuthenticationType() == AuthenticationType.WINDOWS_NATIVE_AUTHENTICATION)
+        {
+            return true;
+        }
+
         return !isBlank(username)
                 && !ArrayUtils.isEmpty(runtimePassword);
     }
