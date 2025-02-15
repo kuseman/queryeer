@@ -1,6 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 import static se.kuseman.payloadbuilder.catalog.jdbc.JdbcQueryEngine.EXECUTOR;
 
 import java.time.Duration;
@@ -28,6 +29,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 @Inject
 class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickSearchModel.DatasourceItem>
 {
+    private static final String ERROR_LOADING_MESSAGE = "Error occured while loading connection. Check logs for more information.";
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasourcesQuickSearchModel.class);
     private final JdbcConnectionsModel connectionsModel;
     private final IQueryFileProvider queryFileProvider;
@@ -112,10 +114,18 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
                 continue;
             }
 
+            boolean loading = loadInfo.loading;
             // Connection is failing, stall it for a bit
             if (!loadInfo.shouldTryAgain()
-                    || loadInfo.loading)
+                    || loading)
             {
+                // Return a connection with a warning icon to indicate that there were errors
+                // during load
+                if (!loading)
+                {
+                    itemConsumer.accept(new DatasourceItem(connection, null, ERROR_LOADING_MESSAGE));
+                }
+
                 continue;
             }
 
@@ -143,6 +153,8 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
                     catch (Exception e)
                     {
                         loadInfo.lastFailTime = System.currentTimeMillis();
+                        // Add a failure node
+                        itemConsumer.accept(new DatasourceItem(connection, null, ERROR_LOADING_MESSAGE));
                         LOGGER.error("Error loading databases for: {}", connection.getName(), e);
                     }
                     finally
@@ -170,11 +182,18 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         private final JdbcConnection connection;
         private final String database;
         private final String title;
+        private final String failureMessage;
 
         DatasourceItem(JdbcConnection connection, String database)
         {
+            this(connection, database, null);
+        }
+
+        DatasourceItem(JdbcConnection connection, String database, String failureMessage)
+        {
             this.connection = connection;
             this.database = database;
+            this.failureMessage = failureMessage;
             this.title = connection.getName() + (database != null ? (" / " + database)
                     : "");
         }
@@ -186,6 +205,12 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         }
 
         @Override
+        public String getTooltip()
+        {
+            return failureMessage;
+        }
+
+        @Override
         public Icon getIcon()
         {
             return icons.database;
@@ -194,6 +219,10 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         @Override
         public Icon getStatusIcon()
         {
+            if (!isBlank(failureMessage))
+            {
+                return icons.warningIcon;
+            }
             if (!connection.hasCredentials())
             {
                 return icons.lock;
