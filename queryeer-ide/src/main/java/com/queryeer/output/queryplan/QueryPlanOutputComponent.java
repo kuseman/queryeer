@@ -324,6 +324,9 @@ class QueryPlanOutputComponent implements IQueryPlanOutputComponent
         {
             // 1 pixel per 10 factor
             int rowCount = link.getRowCount();
+            // CSOFF
+            boolean zeroRowCount = rowCount <= 0;
+            // CSON
             int thickNess = 0;
             while (rowCount > 0)
             {
@@ -341,7 +344,6 @@ class QueryPlanOutputComponent implements IQueryPlanOutputComponent
                 stroke = Constants.DARK_THEME_LIGHT_COLOR_HEX;
             }
 
-            boolean zeroRowCount = rowCount <= 0;
             return String.format("rounded=true;edgeStyle=entityRelationEdgeStyle;dashed=%s;strokeColor=%s;startArrow=block;endArrow=none;strokeWidth=%d;", zeroRowCount ? "true"
                     : "false", stroke, thickNess);
         }
