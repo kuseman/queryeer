@@ -17,12 +17,14 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.font.TextAttribute;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.EventObject;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
 import javax.swing.AbstractAction;
@@ -113,6 +115,28 @@ public class QueryeerTree extends JTree
         }
         this.model = (QueryeerTreeModel) model;
         super.setModel(model);
+    }
+
+    /** Enumerate nodes in tree. */
+    public void treeEnumeration(BiFunction<Supplier<TreePath>, RegularNode, Boolean> consumer)
+    {
+        Enumeration<javax.swing.tree.TreeNode> e = ((QueryeerTreeNode) model.getRoot()).breadthFirstEnumeration();
+        while (e.hasMoreElements())
+        {
+            if (e.nextElement() instanceof QueryeerTreeNode tn)
+            {
+                if (!consumer.apply(() -> new TreePath(tn.getPath()), tn.node))
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    /** Selects provided node */
+    public void selectNode(TreePath path)
+    {
+        setSelectionPath(path);
     }
 
     private MouseMotionAdapter mouseMotionListener = new MouseMotionAdapter()

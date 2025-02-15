@@ -10,7 +10,10 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
+import javax.swing.BoxLayout;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
@@ -21,12 +24,16 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextField;
+import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
+import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
@@ -37,6 +44,7 @@ import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.ConnectionNode;
@@ -52,10 +60,12 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
     private final JdbcConnectionsModel connectionsModel;
     private final IEventBus eventBus;
     private final CatalogCrawlService crawlService;
+    private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
 
     private final JTextField currentConnection;
     private final JComboBox<String> databases;
     private final DefaultComboBoxModel<String> databasesModel;
+    private final QueryeerTree tree;
     private boolean suppressEvents = false;
 
     //@formatter:off
@@ -66,7 +76,8 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             JdbcConnectionsModel connectionsModel,
             IEventBus eventBus,
             DatabaseProvider databaseProvider,
-            CatalogCrawlService crawlService)
+            CatalogCrawlService crawlService,
+            JdbcConnectionsTreeConfigurable connectionsTreeConfigurable)
     {
         //@formatter:on
         this.queryEngine = queryEngine;
@@ -74,6 +85,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         this.connectionsModel = connectionsModel;
         this.eventBus = eventBus;
         this.crawlService = crawlService;
+        this.connectionsTreeConfigurable = connectionsTreeConfigurable;
 
         setLayout(new GridBagLayout());
 
@@ -256,14 +268,55 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             }
         });
 
-        QueryeerTree tree = new QueryeerTree(treeModel);
+        gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 2;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0d;
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
+
+        JButton collapseAll = new JButton(icons.getIconFactory()
+                .getIcon(IIconFactory.Provider.FONTAWESOME, "WINDOW_MINIMIZE", 8));
+        collapseAll.setToolTipText("Collapse All");
+        buttonPanel.add(collapseAll);
+
+        JToggleButton syncButton = new JToggleButton(icons.getIconFactory()
+                .getIcon(IIconFactory.Provider.FONTAWESOME, "ARROWS_H", 8));
+        syncButton.setToolTipText("Sync Tree With Selected Tab");
+        syncButton.setSelected(connectionsTreeConfigurable.isSyncTree());
+        syncButton.addActionListener(l ->
+        {
+            connectionsTreeConfigurable.setSyncTree(syncButton.isSelected());
+            connectionsTreeConfigurable.saveConfig();
+        });
+        buttonPanel.add(syncButton);
+
+        JButton config = new JButton(icons.getIconFactory()
+                .getIcon(IIconFactory.Provider.FONTAWESOME, "COG", 8));
+        config.setToolTipText("Show Connections Config");
+        config.addActionListener(l -> eventBus.publish(new ShowOptionsEvent(JdbcConnectionsConfigurable.class)));
+        buttonPanel.add(config);
+
+        JButton treeConfig = new JButton(icons.getIconFactory()
+                .getIcon(IIconFactory.Provider.FONTAWESOME, "COGS", 8));
+        treeConfig.setToolTipText("Show Tree Config");
+        treeConfig.addActionListener(l -> eventBus.publish(new ShowOptionsEvent(JdbcConnectionsTreeConfigurable.class)));
+        buttonPanel.add(treeConfig);
+
+        add(buttonPanel, gbc);
+
+        tree = new QueryeerTree(treeModel);
         tree.getSelectionModel()
                 .setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setHyperLinksEnabled(true);
 
         gbc = new GridBagConstraints();
         gbc.gridx = 0;
-        gbc.gridy = 2;
+        gbc.gridy = 3;
         gbc.gridwidth = 2;
         gbc.weightx = 1.0d;
         gbc.weighty = 1.0d;
@@ -271,6 +324,14 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         gbc.fill = GridBagConstraints.BOTH;
         add(new JScrollPane(tree), gbc);
         setPreferredSize(new Dimension(240, 75));
+
+        collapseAll.addActionListener(l ->
+        {
+            for (int i = tree.getRowCount() - 1; i >= 0; i--)
+            {
+                tree.collapseRow(i);
+            }
+        });
     }
 
     private void newQuery(RegularNode node)
@@ -356,12 +417,9 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             databases.setEnabled(false);
             JdbcEngineState engineState = queryFile.getEngineState();
             ConnectionState state = engineState.connectionState;
-            if (currentConnection != null)
-            {
-                currentConnection.setText(state != null ? state.getJdbcConnection()
-                        .getName()
-                        : "");
-            }
+            currentConnection.setText(state != null ? state.getJdbcConnection()
+                    .getName()
+                    : "");
             if (state != null)
             {
                 // Force a reparse when we focus a new file
@@ -382,7 +440,10 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                     databasesModel.setSelectedItem(state.getDatabase());
                     databases.setEnabled(true);
                 }
-
+                if (connectionsTreeConfigurable.isSyncTree())
+                {
+                    selectTreeNode(state);
+                }
                 setStatus(queryFile, state);
             }
             else
@@ -393,6 +454,69 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         finally
         {
             suppressEvents = false;
+        }
+    }
+
+    private void selectTreeNode(ConnectionState state)
+    {
+        AtomicBoolean done = new AtomicBoolean(false);
+        AtomicReference<TreePath> selectPath = new AtomicReference<>();
+        while (!done.get())
+        {
+            done.set(true);
+            tree.treeEnumeration((s, n) ->
+            {
+                if (n instanceof JdbcConnectionsTreeModel.DatabaseNode dn
+                        && dn.getJdbcConnection() == state.getJdbcConnection()
+                        && StringUtils.equals(state.getDatabase(), dn.getDatabase()))
+                {
+                    selectPath.set(s.get());
+                    return false;
+                }
+                else if (n instanceof JdbcConnectionsTreeModel.DatabasesNode dn
+                        && dn.getJdbcConnection() == state.getJdbcConnection())
+                {
+                    boolean hasDatabases = !CollectionUtils.isEmpty(dn.getJdbcConnection()
+                            .getDatabases());
+                    if (hasDatabases)
+                    {
+                        // Expand databases node and restart enumeration
+                        TreePath treePath = s.get();
+                        if (tree.isCollapsed(treePath))
+                        {
+                            tree.expandPath(treePath);
+                            done.set(false);
+                            return false;
+                        }
+                    }
+                }
+                else if (n instanceof JdbcConnectionsTreeModel.ConnectionNode cn
+                        && cn.getJdbcConnection() == state.getJdbcConnection())
+                {
+                    TreePath treePath = s.get();
+
+                    // Check to see if the can expand the connection if database are loaded
+                    // If so expand the node and restart the enumeration
+                    if (tree.isCollapsed(treePath)
+                            && cn.shouldLoadChildren())
+                    {
+                        tree.expandPath(treePath);
+                        selectPath.set(null);
+                        done.set(false);
+                        return false;
+                    }
+
+                    selectPath.set(treePath);
+                }
+
+                return true;
+            });
+        }
+
+        // If we did not find a database node select the connection node
+        if (selectPath.get() != null)
+        {
+            tree.selectNode(selectPath.get());
         }
     }
 }

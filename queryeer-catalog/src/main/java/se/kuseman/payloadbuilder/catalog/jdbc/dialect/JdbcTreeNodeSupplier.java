@@ -50,14 +50,16 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     protected final QueryActionsConfigurable queryActionsConfigurable;
     protected final Icons icons;
     protected final ITemplateService templateService;
+    private ITreeConfig treeConfig;
 
-    JdbcTreeNodeSupplier(JdbcDatabase jdbcDatabase, Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService)
+    JdbcTreeNodeSupplier(JdbcDatabase jdbcDatabase, Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
         this.icons = icons;
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.jdbcDatabase = requireNonNull(jdbcDatabase);
         this.queryActionsConfigurable = requireNonNull(queryActionsConfigurable, "queryActionsConfigurable");
         this.templateService = requireNonNull(templateService, "templateService");
+        this.treeConfig = requireNonNull(treeConfig, "treeConfig");
     }
 
     @Override
@@ -273,7 +275,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         try (Connection con = sqlConnectionSupplier.get(jdbcConnection))
         {
-            List<RegularNode> result = new ArrayList<>();
+            List<RegularNode> result = new NoNullArrayList<>();
             consumeResultSet(getTablesResultSet(con, database), rs -> result.add(buildTableNode(jdbcConnection, sqlConnectionSupplier, rs, database)));
             return result;
         }
@@ -288,7 +290,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         try (Connection con = sqlConnectionSupplier.get(jdbcConnection))
         {
-            List<RegularNode> result = new ArrayList<>();
+            List<RegularNode> result = new NoNullArrayList<>();
             consumeResultSet(getViewsResultSet(con, database), rs -> result.add(buildViewNode(jdbcConnection, sqlConnectionSupplier, rs, database)));
             return result;
         }
@@ -303,7 +305,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         try (Connection con = sqlConnectionSupplier.get(jdbcConnection))
         {
-            List<RegularNode> result = new ArrayList<>();
+            List<RegularNode> result = new NoNullArrayList<>();
             consumeResultSet(getSynonymsResultSet(con, database), rs -> result.add(buildSynonymNode(jdbcConnection, sqlConnectionSupplier, rs, database)));
             return result;
         }
@@ -318,7 +320,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         try (Connection con = sqlConnectionSupplier.get(jdbcConnection))
         {
-            List<RegularNode> result = new ArrayList<>();
+            List<RegularNode> result = new NoNullArrayList<>();
             consumeResultSet(getProceduresResultSet(con, database), rs -> result.add(buildProcedureNode(jdbcConnection, sqlConnectionSupplier, rs, database)));
             return result;
         }
@@ -333,7 +335,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         try (Connection con = sqlConnectionSupplier.get(jdbcConnection))
         {
-            List<RegularNode> result = new ArrayList<>();
+            List<RegularNode> result = new NoNullArrayList<>();
             consumeResultSet(getFunctionsResultSet(con, database), rs -> result.add(buildFunctionNode(jdbcConnection, sqlConnectionSupplier, rs, database)));
             return result;
         }
@@ -406,6 +408,13 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     protected RegularNode buildTableNode(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database) throws SQLException
     {
         ObjectName tableName = getTableName(rs);
+
+        if (this.getClass() == SqlServerTreeNodeSupplier.class
+                && treeConfig.isHideSqlServerSysSchema()
+                && "sys".equalsIgnoreCase(tableName.schema))
+        {
+            return null;
+        }
 
         //@formatter:off
         Map<String, Object> model = Map.of(
@@ -609,6 +618,13 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         ObjectName viewName = getTableName(rs);
 
+        if (this.getClass() == SqlServerTreeNodeSupplier.class
+                && treeConfig.isHideSqlServerSysSchema()
+                && "sys".equalsIgnoreCase(viewName.schema))
+        {
+            return null;
+        }
+
         //@formatter:off
         Map<String, Object> model =  Map.of(
                 "catalog", Objects.toString(viewName.catalog, ""),
@@ -690,6 +706,13 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     protected RegularNode buildSynonymNode(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database) throws SQLException
     {
         ObjectName synonymName = getTableName(rs);
+
+        if (this.getClass() == SqlServerTreeNodeSupplier.class
+                && treeConfig.isHideSqlServerSysSchema()
+                && "sys".equalsIgnoreCase(synonymName.schema))
+        {
+            return null;
+        }
 
         //@formatter:off
         Map<String, Object> model =  Map.of(
@@ -793,6 +816,13 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         ObjectName procedureName = getProcedureName(rs);
 
+        if (this.getClass() == SqlServerTreeNodeSupplier.class
+                && treeConfig.isHideSqlServerSysSchema()
+                && "sys".equalsIgnoreCase(procedureName.schema))
+        {
+            return null;
+        }
+
         //@formatter:off
         Map<String, Object> model =  Map.of(
                 "catalog", Objects.toString(procedureName.catalog, ""),
@@ -850,6 +880,13 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     protected RegularNode buildFunctionNode(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database) throws SQLException
     {
         ObjectName functionName = getFunctionName(rs);
+
+        if (this.getClass() == SqlServerTreeNodeSupplier.class
+                && treeConfig.isHideSqlServerSysSchema()
+                && "sys".equalsIgnoreCase(functionName.schema))
+        {
+            return null;
+        }
 
         //@formatter:off
         Map<String, Object> model =  Map.of(
@@ -1217,4 +1254,16 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
         return new QueryeerTree.TreeNode(title.toString(), icons.keyIcon);
     }
 
+    static class NoNullArrayList<T> extends ArrayList<T>
+    {
+        @Override
+        public boolean add(T e)
+        {
+            if (e == null)
+            {
+                return false;
+            }
+            return super.add(e);
+        }
+    }
 }

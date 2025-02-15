@@ -39,9 +39,9 @@ class BaseDatabase implements JdbcDatabase
     private final CatalogCrawlService crawlService;
     private final ITemplateService templateService;
 
-    BaseDatabase(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService)
+    BaseDatabase(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
-        this.treeNodeSupplier = new JdbcTreeNodeSupplier(this, icons, eventBus, queryActionsConfigurable, templateService);
+        this.treeNodeSupplier = new JdbcTreeNodeSupplier(this, icons, eventBus, queryActionsConfigurable, templateService, treeConfig);
         this.crawlService = crawlService;
         this.eventBus = eventBus;
         this.queryActionsConfigurable = queryActionsConfigurable;
