@@ -35,6 +35,8 @@ import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.editor.ITextEditorKit;
 import com.queryeer.api.editor.TextSelection;
+import com.queryeer.api.event.ExecuteQueryEvent;
+import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.engine.QueryEngineException;
@@ -306,6 +308,12 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     public String getDefaultFileExtension()
     {
         return "plbsql";
+    }
+
+    @Override
+    public ExecuteQueryEvent getExecuteQueryEvent(String query, String newQueryName, OutputType outputType)
+    {
+        return new ExecuteQueryEvent(outputType, newQueryName, new ExecuteQueryContext(query));
     }
 
     private void initCatalogs(QuerySession querySession)
