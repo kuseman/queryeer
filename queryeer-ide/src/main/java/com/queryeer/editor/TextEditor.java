@@ -216,6 +216,7 @@ class TextEditor implements ITextEditor, SearchListener
                 super.setVisible(b);
             }
         };
+
         findDialog.setIconImages(Constants.APPLICATION_ICONS);
         replaceDialog = new ReplaceDialog((Frame) null, this)
         {
@@ -421,6 +422,13 @@ class TextEditor implements ITextEditor, SearchListener
             }
         }
         UIManager.removePropertyChangeListener(uiManagerListener);
+
+        // Close dialogs
+        findDialog.setVisible(false);
+        replaceDialog.setVisible(false);
+        gotoDialog.setVisible(false);
+        pasteSpecialDialog.setVisible(false);
+        replaceDialog.setVisible(false);
     }
 
     @Override
