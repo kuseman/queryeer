@@ -4,6 +4,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.event.ActionEvent;
 import java.util.Map;
+import java.util.Objects;
 
 import javax.swing.AbstractAction;
 
@@ -44,12 +45,9 @@ class QueryShortcutAction extends AbstractAction
     @Override
     public void actionPerformed(ActionEvent e)
     {
+        // CSOFF
         String selectedText = textEditor.getSelectedText();
-        if (isBlank(selectedText))
-        {
-            return;
-        }
-
+        // CSON
         TextEditorQueryShortcut shortcut = queryShortcutConfigurable.getQueryShortcut(shortcutIndex);
         if (shortcut == null)
         {
@@ -98,7 +96,14 @@ class QueryShortcutAction extends AbstractAction
 
         output = ObjectUtils.defaultIfNull(output, OutputType.TABLE);
 
-        String query = templateService.process("TextEditor.QueryShortcut", queryTemplate, Map.of("selectedText", selectedText));
+        // Template has a placeholder but there is no selected text, drop out
+        if (isBlank(selectedText)
+                && queryTemplate.contains("${selectedText}"))
+        {
+            return;
+        }
+
+        String query = templateService.process("TextEditor.QueryShortcut", queryTemplate, Map.of("selectedText", Objects.toString(selectedText, "")));
         ExecuteQueryEvent queryEvent = engineState.getQueryEngine()
                 .getExecuteQueryEvent(query, null, output);
         if (queryEvent != null)
