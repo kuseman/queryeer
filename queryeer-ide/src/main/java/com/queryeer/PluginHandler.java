@@ -87,10 +87,6 @@ class PluginHandler
             if (!isBlank(property))
             {
                 File pluginDir = new File(property);
-                if (!pluginDir.exists())
-                {
-                    throw new IllegalArgumentException("Plugin path: " + pluginDir + " does not exists");
-                }
                 pluginDirs.add(pluginDir);
             }
         }
@@ -147,15 +143,52 @@ class PluginHandler
         {
             return new ZIPClassLoader(dir.getAbsolutePath(), coreClassLoader, parent);
         }
-        // A folder with the plugin jars
-        URL[] urls = Arrays.stream(Optional.of(dir.listFiles())
-                .orElse(new File[0]))
-                .filter(f -> f.getName()
-                        .endsWith(".jar"))
-                .sorted()
-                .map(File::toURI)
-                .map(this::toUrl)
-                .toArray(URL[]::new);
+
+        URL[] urls;
+        // Folder with only JAR's
+        if (dir.exists()
+                && Arrays.stream(dir.listFiles())
+                        .allMatch(f -> f.getName()
+                                .toLowerCase()
+                                .endsWith(".jar")))
+        {
+            // A folder with the plugin jars
+            urls = Arrays.stream(dir.listFiles())
+                    .filter(f -> f.getName()
+                            .endsWith(".jar"))
+                    .sorted()
+                    .map(File::toURI)
+                    .map(this::toUrl)
+                    .toArray(URL[]::new);
+        }
+        // Path separated classpath (ie .Eclipse project class path reference)
+        // This is only used during development to easier build and test plugins
+        // without the need to rebuild a plugin dist
+        else if (dir.getAbsolutePath()
+                .contains(File.pathSeparator))
+        {
+            urls = Arrays.stream(dir.getAbsolutePath()
+                    .split(File.pathSeparator))
+                    // Remove test classes and api bundle
+                    // and common test bundles
+                    .filter(p -> !p.contains("test-classes")
+                            && !p.contains("queryeer-api")
+                            && !p.contains("payloadbuilder-api")
+                            && !p.contains("junit")
+                            && !p.contains("hamcrest")
+                            && !p.contains("mockito")
+                            && !p.contains("slf4j"))
+                    .distinct()
+                    .map(File::new)
+                    .map(File::toURI)
+                    .map(this::toUrl)
+                    .toArray(URL[]::new);
+        }
+        else
+        {
+            LOGGER.error("Error loading plugin for non existent dir: {}", dir);
+            return null;
+        }
 
         return new URLClassLoader(urls, parent)
         {
@@ -166,14 +199,23 @@ class PluginHandler
                 Class<?> loadedClass = findLoadedClass(name);
                 if (loadedClass == null)
                 {
-                    // API classes should be loaded by current loader
+                    // API classes should be loaded by core loader
                     if (isCoreClass(name))
                     {
                         loadedClass = coreClassLoader.loadClass(name);
                     }
                     else
                     {
-                        loadedClass = super.loadClass(name, resolve);
+                        // First try to find the class among the plugins urls
+                        try
+                        {
+                            loadedClass = findClass(name);
+                        }
+                        // ... else load it from parent
+                        catch (ClassNotFoundException e)
+                        {
+                            loadedClass = super.loadClass(name, resolve);
+                        }
                     }
                 }
 
