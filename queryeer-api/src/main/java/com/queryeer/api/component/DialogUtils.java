@@ -190,6 +190,12 @@ public final class DialogUtils
             /** Get icon of item. */
             Icon getIcon();
 
+            /** Return tooltip to show on items. */
+            default String getTooltip()
+            {
+                return "";
+            }
+
             /**
              * Get a status icon of item. This is an optional secondary icon that can show a status indication (ie. not unlocked etc.)
              */
@@ -276,7 +282,24 @@ public final class DialogUtils
                 }
             };
 
-            items = new JList<>();
+            items = new JList<>()
+            {
+                @Override
+                public String getToolTipText(MouseEvent event)
+                {
+                    int index = items.locationToIndex(event.getPoint());
+                    if (index >= 0)
+                    {
+                        T t = items.getModel()
+                                .getElementAt(index);
+                        if (!StringUtils.isBlank(t.getTooltip()))
+                        {
+                            return t.getTooltip();
+                        }
+                    }
+                    return super.getToolTipText(event);
+                }
+            };
             items.addKeyListener(closeListener);
             items.addKeyListener(new KeyAdapter()
             {
