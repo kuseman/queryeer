@@ -3,6 +3,8 @@ package com.queryeer;
 import static com.queryeer.api.action.Constants.FIND_ACTION;
 import static java.util.Objects.requireNonNull;
 
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -125,6 +127,15 @@ class DialogFactory implements IDialogFactory
                 }
             }
         }
+
+        frame.addWindowListener(new WindowAdapter()
+        {
+            @Override
+            public void windowClosing(WindowEvent e)
+            {
+                textEditor.close();
+            }
+        });
 
         frame.getContentPane()
                 .add(component);
