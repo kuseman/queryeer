@@ -75,6 +75,11 @@ class JdbcConnectionsTreeModel implements RegularNode
             return new ConnectionState(connection, jdbcDatabase);
         }
 
+        JdbcConnection getJdbcConnection()
+        {
+            return connection;
+        }
+
         @Override
         public String getTitle()
         {
@@ -134,7 +139,7 @@ class JdbcConnectionsTreeModel implements RegularNode
             }
 
             List<RegularNode> children = new ArrayList<>();
-            children.add(new DatabasesNode(connection, jdbcDatabase));
+            children.add(new DatabasesNode(this, jdbcDatabase));
             children.addAll(jdbcDatabase.getTreeNodeSupplier()
                     .getMetaDataNodes(connection, new SqlConnectionSupplier()
                     {
@@ -180,13 +185,18 @@ class JdbcConnectionsTreeModel implements RegularNode
     /** Node representing a collection of databases */
     class DatabasesNode implements RegularNode
     {
-        private final JdbcConnection connection;
+        private final ConnectionNode connectioNode;
         private final JdbcDatabase jdbcDatabase;
 
-        DatabasesNode(JdbcConnection connection, JdbcDatabase jdbcDatabase)
+        DatabasesNode(ConnectionNode connectioNode, JdbcDatabase jdbcDatabase)
         {
-            this.connection = connection;
+            this.connectioNode = connectioNode;
             this.jdbcDatabase = jdbcDatabase;
+        }
+
+        JdbcConnection getJdbcConnection()
+        {
+            return connectioNode.connection;
         }
 
         @Override
@@ -211,9 +221,9 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<RegularNode> loadChildren()
         {
-            List<String> databases = model.getDatabases(connection, true, true);
+            List<String> databases = model.getDatabases(connectioNode.connection, true, true);
             return databases.stream()
-                    .map(d -> new DatabaseNode(connection, jdbcDatabase, d))
+                    .map(d -> new DatabaseNode(connectioNode, jdbcDatabase, d))
                     .collect(toList());
         }
     }
@@ -221,22 +231,32 @@ class JdbcConnectionsTreeModel implements RegularNode
     /** Database node. (TODO: Checkbox to be able to multi query of databases). */
     class DatabaseNode implements RegularNode
     {
-        private final JdbcConnection connection;
+        private final ConnectionNode connectionNode;
         private final JdbcDatabase jdbcDatabase;
         private final String database;
         // private boolean checked;
 
-        DatabaseNode(JdbcConnection connection, JdbcDatabase jdbcDatabase, String database)
+        DatabaseNode(ConnectionNode connectionNode, JdbcDatabase jdbcDatabase, String database)
         {
-            this.connection = connection;
+            this.connectionNode = connectionNode;
             this.jdbcDatabase = jdbcDatabase;
             this.database = database;
         }
 
         ConnectionState createState()
         {
-            ConnectionState state = new ConnectionState(connection, jdbcDatabase, database);
+            ConnectionState state = new ConnectionState(connectionNode.connection, jdbcDatabase, database);
             return state;
+        }
+
+        JdbcConnection getJdbcConnection()
+        {
+            return connectionNode.connection;
+        }
+
+        String getDatabase()
+        {
+            return database;
         }
 
         @Override
@@ -255,7 +275,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         public List<RegularNode> loadChildren()
         {
             return jdbcDatabase.getTreeNodeSupplier()
-                    .getDatabaseMetaDataNodes(connection, database, new SqlConnectionSupplier()
+                    .getDatabaseMetaDataNodes(connectionNode.connection, database, new SqlConnectionSupplier()
                     {
                         @Override
                         public Connection get(JdbcConnection connection) throws SQLException

@@ -20,9 +20,9 @@ class OracleDatabase extends BaseDatabase implements JdbcDatabase
     static final String NAME = "oracle";
     private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerDatabase.class);
 
-    OracleDatabase(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService)
+    OracleDatabase(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
-        super(icons, crawlService, eventBus, queryActionsConfigurable, templateService);
+        super(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
     }
 
     @Override

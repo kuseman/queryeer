@@ -19,11 +19,11 @@ public class DatabaseProvider
     private final BaseDatabase jdbc;
 
     public DatabaseProvider(CatalogCrawlService crawlService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
-            IQueryPlanOutputExtension queryPlanOutputExtension)
+            IQueryPlanOutputExtension queryPlanOutputExtension, ITreeConfig treeConfig)
     {
-        sqlServer = new SqlServerDatabase(crawlService, eventBus, icons, queryActionsConfigurable, templateService, queryPlanOutputExtension);
-        jdbc = new BaseDatabase(icons, crawlService, eventBus, queryActionsConfigurable, templateService);
-        oracle = new OracleDatabase(icons, crawlService, eventBus, queryActionsConfigurable, templateService);
+        sqlServer = new SqlServerDatabase(crawlService, eventBus, icons, queryActionsConfigurable, templateService, queryPlanOutputExtension, treeConfig);
+        jdbc = new BaseDatabase(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
+        oracle = new OracleDatabase(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
     }
 
     /** Return a {@link JdbcDatabase} from provided {@link SqlDialect} */

@@ -60,13 +60,13 @@ class SqlServerDatabase implements JdbcDatabase
     private final IQueryPlanOutputExtension queryPlanOutputExtension;
 
     public SqlServerDatabase(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
-            IQueryPlanOutputExtension queryPlanOutputExtension)
+            IQueryPlanOutputExtension queryPlanOutputExtension, ITreeConfig treeConfig)
     {
         this.crawlerService = crawlerService;
         this.eventBus = eventBus;
         this.icons = icons;
         this.queryActionsConfigurable = queryActionsConfigurable;
-        this.treeNodeSupplier = new SqlServerTreeNodeSupplier(this, eventBus, icons, queryActionsConfigurable, templateService);
+        this.treeNodeSupplier = new SqlServerTreeNodeSupplier(this, eventBus, icons, queryActionsConfigurable, templateService, treeConfig);
         this.templateService = templateService;
         this.queryPlanOutputExtension = queryPlanOutputExtension;
     }

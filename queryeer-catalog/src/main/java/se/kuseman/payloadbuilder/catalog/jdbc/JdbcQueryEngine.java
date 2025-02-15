@@ -66,6 +66,7 @@ class JdbcQueryEngine implements IQueryEngine
     private final DatasourcesQuickSearchModel datasourcesQuickSearchModel;
     private final IQueryFileProvider queryFileProvider;
     private final DatabaseProvider databaseProvider;
+    private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
     private JdbcEngineQuickPropertiesComponent quickProperties;
 
     //@formatter:off
@@ -77,7 +78,8 @@ class JdbcQueryEngine implements IQueryEngine
             DatabaseProvider databaseProvider,
             IEventBus eventBus,
             IEditorFactory editorFactory,
-            DatasourcesQuickSearchModel datasourcesQuickSearchModel)
+            DatasourcesQuickSearchModel datasourcesQuickSearchModel,
+            JdbcConnectionsTreeConfigurable connectionsTreeConfigurable)
     {
         //@formatter:on
         this.crawlService = requireNonNull(crawlService, "crawlService");
@@ -88,6 +90,7 @@ class JdbcQueryEngine implements IQueryEngine
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
         this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
+        this.connectionsTreeConfigurable = requireNonNull(connectionsTreeConfigurable, "connectionsTreeConfigurable");
     }
 
     @Override
@@ -99,11 +102,12 @@ class JdbcQueryEngine implements IQueryEngine
             this.quickProperties = new JdbcEngineQuickPropertiesComponent(
                     this,
                     icons,
-                    requireNonNull(queryFileProvider, "queryFileProvider"),
+                    queryFileProvider,
                     connectionsModel,
                     eventBus,
-                    requireNonNull(databaseProvider, "databaseProvider"),
-                    requireNonNull(crawlService, "crawlService"));
+                    databaseProvider,
+                    crawlService,
+                    connectionsTreeConfigurable);
             //@formatter:on
         }
         return quickProperties;

@@ -44,6 +44,12 @@ public class IconFactory implements IIconFactory
         return of(provider, 16, name);
     }
 
+    @Override
+    public Icon getIcon(Provider provider, String name, int size)
+    {
+        return of(provider, size, name);
+    }
+
     /** Create icon of provider and name. */
     public static Icon of(Provider provider, int size, String name)
     {
