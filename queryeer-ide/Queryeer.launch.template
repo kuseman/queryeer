@@ -22,5 +22,5 @@
     <stringAttribute key="org.eclipse.jdt.launching.MODULE_NAME" value="queryeer-ide"/>
     <stringAttribute key="org.eclipse.jdt.launching.PROJECT_ATTR" value="queryeer-ide"/>
     <stringAttribute key="org.eclipse.jdt.launching.SOURCE_PATH_PROVIDER" value="org.eclipse.m2e.launchconfig.sourcepathProvider"/>
-    <stringAttribute key="org.eclipse.jdt.launching.VM_ARGUMENTS" value="-Dshared=&quot;${project_loc}/shared&quot;&#13;&#10;-Dplugin1=&quot;${project_loc}/../queryeer-catalog/target/queryeer-catalog-dist/queryeer-catalog&quot;&#13;&#10;-DdevEnv=true&#13;&#13;&#10;-Xmx1500m"/>
+    <stringAttribute key="org.eclipse.jdt.launching.VM_ARGUMENTS" value="-Dshared=&quot;${project_loc:queryeer-ide}/shared&quot;&#13;&#10;-Dplugin1=&quot;${project_classpath:queryeer-catalog}&quot;&#13;&#10;-DdevEnv=true&#13;&#13;&#10;-Xmx1500m"/>
 </launchConfiguration>
