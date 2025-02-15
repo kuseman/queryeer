@@ -48,6 +48,7 @@ import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
 import com.queryeer.api.action.ActionUtils;
+import com.queryeer.api.utils.OsUtils;
 
 /** Extension of a {@link JTree} that icons etc. Supports checkboxes, lazy load of children etc. */
 public class QueryeerTree extends JTree
@@ -78,15 +79,7 @@ public class QueryeerTree extends JTree
 
         contextPopup = new JPopupMenu();
         linkActionsPopup = new JPopupMenu();
-
-        String osName = System.getProperty("os.name");
-        boolean isOSX = false;
-        if (osName != null
-                && osName.contains("mac os x"))
-        {
-            isOSX = true;
-        }
-        this.linkMask = isOSX ? InputEvent.META_DOWN_MASK
+        this.linkMask = OsUtils.isMacOsx() ? InputEvent.META_DOWN_MASK
                 : InputEvent.CTRL_DOWN_MASK;
     }
 
