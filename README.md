@@ -26,6 +26,7 @@ Extensible Query IDE with support for Payloadbuilder Catalogs.
   - lib (Queryeer libraries)
   - plugins (Plugins)
   - shared (Shared libraries folder. Usefull for jdbc drviers etc. This is shared among all plugins classloaders)
+    - NOTE! When using Windows Native authentication for SQL Server don't forget to copy `mssql-jdbc_auth-<driver-version>.x64.dll` into PATH. Ie. C:\Windows\System32
 
 ## Developing
 
