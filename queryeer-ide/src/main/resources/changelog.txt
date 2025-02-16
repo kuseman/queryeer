@@ -2,6 +2,19 @@ CHANGELOG
 
 Queryeer
 
+v2.9.0
+feat: Add support for text editor short cuts in Payloadbuilder
+feat: Add support for syncing JDBC tree with the selected tab. Selectes the connection/database upon focus of file. This is configurable in a new toolbar above tree.
+feat: Add tree configurable. This configurable only contains one option atm. to hide SqlServer 'sys' schema nodes.
+feat: Add support in PluginHandler to handle a eclipse (or any other IDE) project class path as source. This enables to work with a plugin without the need to build a plugin distribution
+feat: Add support for Windows Native authentication. NOTE! Does not handle anything regarding auth dll that must be copied to PATH
+feat: Return connections with a warning icon and tooltip that wasn't connectable in Jdbc datasources quick model
+feat: Add support for text editor query shortcuts without any selected text in editor
+fix: Fix NPE when using the NONE output
+fix: Fix issue in query plan graph where all edges was counted as zero/dashed row count even if they had rows
+fix: Properly close text editor and it's dialogs from the static value dialog popup
+fix: Fix issue in QueryeerTree where osx was not detected and META/CTRL hoover links did not work correctly
+
 v2.8.0
 chore: Bump payloadbuilder
 feat: Wrap icons in a proxy that adapts to current LAF to render them as dark or light
