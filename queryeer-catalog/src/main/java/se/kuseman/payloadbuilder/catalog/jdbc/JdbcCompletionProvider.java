@@ -81,7 +81,7 @@ class JdbcCompletionProvider implements ICompletionProvider
             }
 
             @Override
-            public Connection createConnection() throws SQLException
+            public Connection createConnection(boolean setDatabase) throws SQLException
             {
                 return model.createConnection(jdbcConnection);
             }

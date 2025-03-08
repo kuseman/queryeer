@@ -152,14 +152,14 @@ class JdbcQueryEngine implements IQueryEngine
         synchronized (engineState)
         {
             ConnectionState state = engineState.connectionState;
-            JdbcDatabase jdbcDatabase;
-            String queryText;
+            JdbcDatabase jdbcDatabase = state != null ? state.getJdbcDatabase()
+                    : null;
+            String queryText = "";
             boolean temporaryState = false;
             ITextOutputComponent textOutput = queryFile.getOutputComponent(ITextOutputComponent.class);
 
-            // Internal query
-            if (query instanceof ExecuteQueryContext ctx
-                    && state != null)
+            // Event query
+            if (query instanceof ExecuteQueryContext ctx)
             {
                 queryText = ctx.getQuery();
                 if (queryText == null)
@@ -168,36 +168,32 @@ class JdbcQueryEngine implements IQueryEngine
                             .getValue(false));
                 }
 
-                // Execute the context query with a new connection etc.
+                // Execute the event query with a new connection etc.
                 if (ctx.getJdbcConnection() != null)
                 {
                     jdbcDatabase = ctx.getJdbcDatabase();
                     state = new ConnectionState(ctx.getJdbcConnection(), ctx.getJdbcDatabase(), ctx.getDatabase());
                     temporaryState = true;
                 }
-                // .. else use the current files connection etc.
-                else
-                {
-                    jdbcDatabase = state.getJdbcDatabase();
-                }
             }
             else
             {
-                if (state == null)
-                {
-                    textOutput.appendWarning(QUERY_NOT_CONNECTED_MESSAGE, TextSelection.EMPTY);
-
-                    // If no connections available, popup options dialog
-                    if (connectionsModel.getConnections()
-                            .isEmpty())
-                    {
-                        eventBus.publish(new ShowOptionsEvent(JdbcConnectionsConfigurable.class));
-                    }
-
-                    return;
-                }
                 queryText = String.valueOf(query);
-                jdbcDatabase = state.getJdbcDatabase();
+            }
+
+            // No state present, print warning
+            if (state == null)
+            {
+                textOutput.appendWarning(QUERY_NOT_CONNECTED_MESSAGE, TextSelection.EMPTY);
+
+                // If no connections available, popup options dialog
+                if (connectionsModel.getConnections()
+                        .isEmpty())
+                {
+                    eventBus.publish(new ShowOptionsEvent(JdbcConnectionsConfigurable.class));
+                }
+
+                return;
             }
 
             executeInternal(queryFile, engineState, textOutput, writer, jdbcDatabase, queryText, state, temporaryState);
@@ -280,7 +276,7 @@ class JdbcQueryEngine implements IQueryEngine
         {
             // Reset the query before execution to reset abort flag etc.
             state.reset();
-            Connection connection = state.getConnection();
+            Connection connection = state.getConnection(true);
             jdbcDatabase.beforeExecuteQuery(connection, engineState);
 
             // Only set status on regular queries
@@ -329,12 +325,6 @@ class JdbcQueryEngine implements IQueryEngine
                     }
                 }
             }
-
-            // Update properties component to reflect the database in connection
-            if (!temporaryState)
-            {
-                state.setDatabaseFromConnection(queryFile);
-            }
         }
         catch (Exception e)
         {
@@ -365,7 +355,13 @@ class JdbcQueryEngine implements IQueryEngine
 
             if (!temporaryState)
             {
-                SwingUtilities.invokeLater(() -> quickProperties.setSelectedDatabase(state));
+                state.setDatabaseFromConnection();
+                // Update properties component to reflect the database in connection
+                SwingUtilities.invokeLater(() ->
+                {
+                    quickProperties.setSelectedDatabase(state);
+                    quickProperties.setStatus(queryFile, state);
+                });
             }
             else
             {

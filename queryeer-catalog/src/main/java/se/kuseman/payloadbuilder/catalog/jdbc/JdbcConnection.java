@@ -79,7 +79,15 @@ public class JdbcConnection implements IPropertyAware
         querySession.setCatalogProperty(catalogAlias, JdbcCatalog.URL, getJdbcURL());
         querySession.setCatalogProperty(catalogAlias, JdbcCatalog.DRIVER_CLASSNAME, getJdbcDriverClassName());
         querySession.setCatalogProperty(catalogAlias, JdbcCatalog.USERNAME, username);
-        querySession.setCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD, runtimePassword);
+
+        char[] pass = runtimePassword;
+        // Add a dummy password for Windows Native auth for sql server
+        if (hasCredentials()
+                && pass == null)
+        {
+            pass = new char[] { 'd', 'u', 'm', 'm', 'y' };
+        }
+        querySession.setCatalogProperty(catalogAlias, JdbcCatalog.PASSWORD, pass);
     }
 
     @Property(

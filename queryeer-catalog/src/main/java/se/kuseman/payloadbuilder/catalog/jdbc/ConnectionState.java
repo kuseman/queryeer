@@ -37,8 +37,12 @@ class ConnectionState implements Closeable
         this.database = database;
     }
 
-    /** Returns the peristed connection in this state or creates a new one if not valid */
-    Connection getConnection() throws SQLException
+    /**
+     * Returns the peristed connection in this state or creates a new one if not valid
+     *
+     * @param setDatabase Should the states database be set on connection
+     */
+    Connection getConnection(boolean setDatabase) throws SQLException
     {
         boolean isValid;
         try
@@ -58,13 +62,16 @@ class ConnectionState implements Closeable
                     : "";
             connection = jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
             sessionId = jdbcDatabase.getSessionId(connection);
-            if (database == null)
+            if (setDatabase)
             {
-                setDatabaseFromConnection(null);
-            }
-            else
-            {
-                setDatabaseOnConnection(database, null);
+                if (database == null)
+                {
+                    setDatabaseFromConnection();
+                }
+                else
+                {
+                    setDatabaseOnConnection(database);
+                }
             }
         }
         return connection;
@@ -90,28 +97,17 @@ class ConnectionState implements Closeable
         return sessionId;
     }
 
-    void setDatabaseFromConnection(IQueryFile queryFile)
+    void setDatabaseFromConnection() throws SQLException
     {
-        try
+        if (connection == null)
         {
-            if (connection == null)
-            {
-                getConnection();
-            }
-            this.database = jdbcDatabase.usesSchemaAsDatabase() ? connection.getSchema()
-                    : connection.getCatalog();
+            return;
         }
-        catch (SQLException e)
-        {
-            if (queryFile != null)
-            {
-                queryFile.getMessagesWriter()
-                        .println(e.getMessage());
-            }
-        }
+        this.database = jdbcDatabase.usesSchemaAsDatabase() ? connection.getSchema()
+                : connection.getCatalog();
     }
 
-    void setDatabaseOnConnection(String database, IQueryFile queryFile)
+    void setDatabaseOnConnection(String database) throws SQLException
     {
         try
         {
@@ -130,11 +126,11 @@ class ConnectionState implements Closeable
         }
         catch (SQLException e)
         {
-            if (queryFile != null)
-            {
-                queryFile.getMessagesWriter()
-                        .println(e.getMessage());
-            }
+            // If we encounter problems here due to missing rights or whatever, put back the database from
+            // what the connection has
+            setDatabaseFromConnection();
+            // .. and let the original error bubble up so UI etc. is notified
+            throw e;
         }
     }
 

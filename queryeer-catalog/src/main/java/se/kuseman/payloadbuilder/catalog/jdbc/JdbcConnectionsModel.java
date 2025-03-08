@@ -271,7 +271,9 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
         JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(connection.getJdbcURL());
         try
         {
-            return jdbcDatabase.createConnection(connection.getJdbcURL(), connection.getUsername(), new String(connection.getRuntimePassword()));
+            String password = connection.getRuntimePassword() != null ? new String(connection.getRuntimePassword())
+                    : "";
+            return jdbcDatabase.createConnection(connection.getJdbcURL(), connection.getUsername(), password);
         }
         catch (Exception e)
         {

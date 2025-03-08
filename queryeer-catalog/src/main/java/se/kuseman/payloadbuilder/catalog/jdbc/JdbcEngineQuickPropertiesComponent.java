@@ -9,6 +9,7 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
+import java.sql.SQLException;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,8 +42,10 @@ import com.queryeer.api.component.AutoCompletionComboBox;
 import com.queryeer.api.component.QueryeerTree;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
 import com.queryeer.api.editor.ITextEditor;
+import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.event.ShowOptionsEvent;
+import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -116,9 +119,19 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
 
                 if (state != null)
                 {
-                    // TODO: Do not run this on EDT
-                    state.setDatabaseOnConnection((String) l.getItem(), currentFile);
-                    setStatus(currentFile, state);
+                    SwingUtilities.invokeLater(() ->
+                    {
+                        try
+                        {
+                            state.setDatabaseOnConnection((String) l.getItem());
+                        }
+                        catch (SQLException e)
+                        {
+                            currentFile.getOutputComponent(ITextOutputComponent.class)
+                                    .appendWarning(e.getMessage(), TextSelection.EMPTY);
+                        }
+                        setStatus(currentFile, state);
+                    });
                 }
 
                 engineState.resetParser();
@@ -387,7 +400,15 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
 
     void setSelectedDatabase(ConnectionState state)
     {
-        databasesModel.setSelectedItem(state.getDatabase());
+        suppressEvents = true;
+        try
+        {
+            databasesModel.setSelectedItem(state.getDatabase());
+        }
+        finally
+        {
+            suppressEvents = false;
+        }
     }
 
     void setStatus(IQueryFile file, ConnectionState state)
@@ -513,9 +534,9 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             });
         }
 
-        // If we did not find a database node select the connection node
         if (selectPath.get() != null)
         {
+            tree.scrollPathToVisible(selectPath.get());
             tree.selectNode(selectPath.get());
         }
     }

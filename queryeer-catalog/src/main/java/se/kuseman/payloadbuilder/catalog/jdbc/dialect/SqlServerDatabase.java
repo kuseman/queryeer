@@ -142,7 +142,7 @@ class SqlServerDatabase implements JdbcDatabase
     @Override
     public Catalog getCatalog(IConnectionState connectionState, String database)
     {
-        try (Connection con = connectionState.createConnection(); PreparedStatement stm = con.prepareStatement(META_DATA_QUERY))
+        try (Connection con = connectionState.createConnection(false); PreparedStatement stm = con.prepareStatement(META_DATA_QUERY))
         {
             // CSOFF
             LOGGER.info("Fetching catalog metadata for: " + database);

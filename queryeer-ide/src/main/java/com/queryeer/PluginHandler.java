@@ -177,6 +177,7 @@ class PluginHandler
                             && !p.contains("junit")
                             && !p.contains("hamcrest")
                             && !p.contains("mockito")
+                            && !p.contains("mssql-jdbc")
                             && !p.contains("slf4j"))
                     .distinct()
                     .map(File::new)
