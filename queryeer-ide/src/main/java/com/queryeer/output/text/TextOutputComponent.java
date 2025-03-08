@@ -56,7 +56,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     private final IOutputExtension extension;
 
     private Future<?> currentAppender;
-    private Queue<String> chunkQueue = new ConcurrentLinkedQueue<>();
+    private Queue<Chunk> chunkQueue = new ConcurrentLinkedQueue<>();
     private volatile boolean abortAppend;
 
     TextOutputComponent(IOutputExtension extension, IQueryFile queryFile)
@@ -115,7 +115,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         StyleConstants.setForeground(warning, Color.RED);
         warning.addAttribute(WARNING_LOCATION, textSelection);
         verifyAppenderThread();
-        appendBatch(List.of(new Chunk(text + System.lineSeparator(), warning)));
+        chunkQueue.add(new Chunk(text + System.lineSeparator(), warning));
     }
 
     private Runnable textAppender = () ->
@@ -132,11 +132,11 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                 break;
             }
 
-            String string = chunkQueue.poll();
-            if (string != null)
+            Chunk chunk = chunkQueue.poll();
+            if (chunk != null)
             {
                 lastValueStamp = System.currentTimeMillis();
-                batch.add(new Chunk(string, null));
+                batch.add(chunk);
             }
 
             long timeSinceLastValue = System.currentTimeMillis() - lastValueStamp;
@@ -165,29 +165,38 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         {
             return;
         }
-        try
+        Runnable r = () ->
         {
-            SwingUtilities.invokeAndWait(() ->
+            for (Chunk b : batch)
             {
-                for (Chunk b : batch)
+                if (abortAppend)
                 {
-                    if (abortAppend)
-                    {
-                        break;
-                    }
-                    try
-                    {
-                        document.insertString(document.getLength(), b.text, b.attributes);
-                    }
-                    catch (BadLocationException e)
-                    {
-                    }
+                    break;
                 }
-                batch.clear();
-            });
-        }
-        catch (InvocationTargetException | InterruptedException e)
+                try
+                {
+                    document.insertString(document.getLength(), b.text, b.attributes);
+                }
+                catch (BadLocationException e)
+                {
+                }
+            }
+            batch.clear();
+        };
+
+        if (SwingUtilities.isEventDispatchThread())
         {
+            r.run();
+        }
+        else
+        {
+            try
+            {
+                SwingUtilities.invokeAndWait(r);
+            }
+            catch (InvocationTargetException | InterruptedException e)
+            {
+            }
         }
     }
 
@@ -216,7 +225,7 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
             {
                 verifyAppenderThread();
                 String string = new String(cbuf, off, len);
-                chunkQueue.add(string);
+                chunkQueue.add(new Chunk(string, null));
             }
 
             @Override
