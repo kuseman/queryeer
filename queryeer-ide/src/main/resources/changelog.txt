@@ -2,6 +2,11 @@ CHANGELOG
 
 Queryeer
 
+v2.10.0
+fix: Fix issues with MSSql native authentication where password isn't present in various places
+fix: Fix issue in TextOutputComponent to handle EDT/not EDT thread problems
+fix: Handle visible status separately from Window's visible propery on QuickPropertiesWindow to know the users intent better
+
 v2.9.0
 feat: Add support for text editor short cuts in Payloadbuilder
 feat: Add support for syncing JDBC tree with the selected tab. Selectes the connection/database upon focus of file. This is configurable in a new toolbar above tree.
