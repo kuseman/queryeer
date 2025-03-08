@@ -232,7 +232,12 @@ public final class DialogUtils
         private final IQuickSearchModel<T> model;
         private SwingWorker<Void, T> currentModelWorker;
         private SwingWorker<Void, T> currentFilterWorker;
-        private boolean callingSelection;
+        private volatile boolean callingSelection;
+
+        /**
+         * Flag that shadows the dialogs visible to know the user intent since we cannot use the dialogs visible because we delay the showing.
+         */
+        private volatile boolean visible = false;
 
         public QuickSearchWindow(Window parent, IQuickSearchModel<T> model)
         {
@@ -273,6 +278,7 @@ public final class DialogUtils
                     }
                     else if (result == SelectionResult.HIDE_WINDOW)
                     {
+                        visible = false;
                         super.setVisible(false);
                     }
                 }
@@ -604,7 +610,8 @@ public final class DialogUtils
                         // Show the dialog as soon as we have the first item
                         // This to avoid having an empty dialog if the model didn't
                         // produce any items
-                        if (!isVisible())
+                        if (!isVisible()
+                                && visible)
                         {
                             QuickSearchWindow.super.setVisible(true);
                         }
@@ -619,13 +626,16 @@ public final class DialogUtils
         public void setVisible(boolean b)
         {
             // The dialog should NOT be closed during selection. Ie. the implementer
-            // shows popup while also hiding quick select window if other component
+            // shows popup while also hiding quick select window (by checking focusOwner etc.) if other component
             // gets focus so we avoid that scenario here
             if (!b
                     && callingSelection)
             {
                 return;
             }
+
+            // Store the actual visible status
+            this.visible = b;
 
             if (b)
             {
