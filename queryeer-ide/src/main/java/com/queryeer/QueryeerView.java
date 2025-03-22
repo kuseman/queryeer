@@ -1245,7 +1245,7 @@ class QueryeerView extends JFrame
                     }
                 }
             });
-            table.setSelectionMode(ListSelectionModel.SINGLE_INTERVAL_SELECTION);
+            table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
             tableModel = new FileModel();
             table.setModel(tableModel);
             table.setAutoCreateRowSorter(true);
@@ -1400,8 +1400,9 @@ class QueryeerView extends JFrame
                             .getName()
                             + (fileModel.isDirty() ? "*"
                                     : "");
-                    case 1 -> fileModel.getFile()
-                            .getParent();
+                    case 1 -> fileModel.isNew() ? ""
+                            : fileModel.getFile()
+                                    .getParent();
                     case 2 -> fileModel.getFile()
                             .length();
                     default -> throw new IllegalArgumentException("Invalid column index");
