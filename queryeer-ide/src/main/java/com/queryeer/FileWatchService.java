@@ -102,6 +102,12 @@ class FileWatchService
         Path file = isDirectory ? null
                 : path;
 
+        if (folder == null
+                || !Files.exists(folder))
+        {
+            return;
+        }
+
         map.compute(folder, (k, v) ->
         {
             WatchEntry entry = v;

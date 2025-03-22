@@ -491,6 +491,11 @@ class ProjectsView extends JPanel
 
             // Expand one level
             File[] files = file.listFiles();
+            if (files == null)
+            {
+                continue;
+            }
+
             Arrays.sort(files, (a, b) ->
             {
                 int af = a.isDirectory() ? 0
