@@ -174,11 +174,11 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     }
 
     @Override
-    public Connection createConnection(boolean setDatabase) throws SQLException
+    public Connection createConnection() throws SQLException
     {
         if (connectionState != null)
         {
-            return connectionState.getConnection(setDatabase);
+            return connectionState.createConnection();
         }
         return null;
     }

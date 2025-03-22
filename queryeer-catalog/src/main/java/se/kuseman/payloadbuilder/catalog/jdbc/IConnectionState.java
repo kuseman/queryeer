@@ -20,8 +20,8 @@ public interface IConnectionState
     /** Get connection in the state */
     JdbcConnection getJdbcConnection();
 
-    /** Create a new {@link Connection} for this state */
-    Connection createConnection(boolean setDatabase) throws SQLException;
+    /** Create a new {@link Connection} from this state. */
+    Connection createConnection() throws SQLException;
 
     /** Returns true if the query should include a query plan. */
     boolean isIncludeQueryPlan();

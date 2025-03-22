@@ -276,7 +276,7 @@ class JdbcQueryEngine implements IQueryEngine
         {
             // Reset the query before execution to reset abort flag etc.
             state.reset();
-            Connection connection = state.getConnection(true);
+            Connection connection = state.getConnection();
             jdbcDatabase.beforeExecuteQuery(connection, engineState);
 
             // Only set status on regular queries

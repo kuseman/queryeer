@@ -20,7 +20,7 @@ class ConnectionState implements Closeable
 
     private String sessionId;
     private String database;
-    private Connection connection;
+    private volatile Connection connection;
     // Current running statement
     private volatile Statement currentStatement;
     private volatile boolean abort;
@@ -37,12 +37,20 @@ class ConnectionState implements Closeable
         this.database = database;
     }
 
+    /** Create a new connection. */
+    Connection createConnection() throws SQLException
+    {
+        String password = jdbcConnection.getRuntimePassword() != null ? new String(jdbcConnection.getRuntimePassword())
+                : "";
+        return jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
+    }
+
     /**
      * Returns the peristed connection in this state or creates a new one if not valid
      *
      * @param setDatabase Should the states database be set on connection
      */
-    Connection getConnection(boolean setDatabase) throws SQLException
+    Connection getConnection() throws SQLException
     {
         boolean isValid;
         try
@@ -58,20 +66,15 @@ class ConnectionState implements Closeable
         // Create a new connection if needed
         if (!isValid)
         {
-            String password = jdbcConnection.getRuntimePassword() != null ? new String(jdbcConnection.getRuntimePassword())
-                    : "";
-            connection = jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
+            connection = createConnection();
             sessionId = jdbcDatabase.getSessionId(connection);
-            if (setDatabase)
+            if (database == null)
             {
-                if (database == null)
-                {
-                    setDatabaseFromConnection();
-                }
-                else
-                {
-                    setDatabaseOnConnection(database);
-                }
+                setDatabaseFromConnection();
+            }
+            else
+            {
+                setDatabaseOnConnection(database);
             }
         }
         return connection;
@@ -99,7 +102,7 @@ class ConnectionState implements Closeable
 
     void setDatabaseFromConnection() throws SQLException
     {
-        if (connection == null)
+        if (!jdbcDatabase.isValid(connection))
         {
             return;
         }
@@ -111,16 +114,14 @@ class ConnectionState implements Closeable
     {
         try
         {
-            if (jdbcDatabase.isValid(connection))
+            Connection connection = getConnection();
+            if (jdbcDatabase.usesSchemaAsDatabase())
             {
-                if (jdbcDatabase.usesSchemaAsDatabase())
-                {
-                    connection.setSchema(database);
-                }
-                else
-                {
-                    connection.setCatalog(database);
-                }
+                connection.setSchema(database);
+            }
+            else
+            {
+                connection.setCatalog(database);
             }
             this.database = database;
         }
@@ -130,7 +131,11 @@ class ConnectionState implements Closeable
             // what the connection has
             setDatabaseFromConnection();
             // .. and let the original error bubble up so UI etc. is notified
-            throw e;
+            // only do that for valid connections to avoid socket closed error etc. to bubble up
+            if (jdbcDatabase.isValid(connection))
+            {
+                throw e;
+            }
         }
     }
 

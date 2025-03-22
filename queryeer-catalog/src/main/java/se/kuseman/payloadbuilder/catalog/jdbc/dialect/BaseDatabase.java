@@ -72,7 +72,7 @@ class BaseDatabase implements JdbcDatabase
         // Queries meta data through plain JDBC meta data
         Catalog catalog = null;
         boolean useSchemaAsDatabase = usesSchemaAsDatabase();
-        try (Connection connection = connectionState.createConnection(false))
+        try (Connection connection = connectionState.createConnection())
         {
             LOGGER.info("Fetching catalog metadata for: " + database);
             // CSOFF
