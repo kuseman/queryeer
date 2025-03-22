@@ -24,6 +24,11 @@ import org.apache.commons.lang3.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.queryeer.api.utils.OsUtils;
+
+import io.methvin.watchservice.MacOSXListeningWatchService;
+import io.methvin.watchservice.WatchablePath;
+
 /** Watch service that wraps {@link Watchable} with a callback style api. */
 class FileWatchService
 {
@@ -45,8 +50,23 @@ class FileWatchService
         WatchService watchService = null;
         try
         {
-            watchService = FileSystems.getDefault()
-                    .newWatchService();
+            if (OsUtils.isMacOsx())
+            {
+                try
+                {
+                    watchService = new MacOSXListeningWatchService();
+                }
+                catch (Throwable t)
+                {
+                    LOGGER.error("Error creating a MacOSX Watch service, falling back to JDK default. Check library path", t);
+                }
+            }
+
+            if (watchService == null)
+            {
+                watchService = FileSystems.getDefault()
+                        .newWatchService();
+            }
         }
         catch (IOException e)
         {
@@ -208,7 +228,9 @@ class FileWatchService
         try
         {
             LOGGER.trace("Register {}", path);
-            return path.register(watchService, StandardWatchEventKinds.OVERFLOW, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
+            Watchable watchable = OsUtils.isMacOsx() ? new WatchablePath(path)
+                    : path;
+            return watchable.register(watchService, StandardWatchEventKinds.OVERFLOW, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
         }
         catch (IOException e)
         {
