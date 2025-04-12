@@ -137,6 +137,11 @@ class JdbcConnectionsTreeConfigurable implements IConfigurable, ITreeConfig
         return treeConfig.syncTree;
     }
 
+    boolean isFilterTree()
+    {
+        return treeConfig.filterTree;
+    }
+
     @Override
     public boolean isHideSqlServerSysSchema()
     {
@@ -148,10 +153,18 @@ class JdbcConnectionsTreeConfigurable implements IConfigurable, ITreeConfig
         treeConfig.syncTree = value;
     }
 
+    void setFilterTree(boolean value)
+    {
+        treeConfig.filterTree = value;
+    }
+
     private static class TreeConfig
     {
         @JsonProperty
         private boolean syncTree;
+
+        @JsonProperty
+        private boolean filterTree;
 
         @JsonProperty
         private boolean hideSqlServerSysSchema = true;

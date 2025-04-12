@@ -30,6 +30,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -473,6 +474,9 @@ class ProjectsView extends JPanel
     /** Method that builds a full tree of all files and subdirectories of provided project node. This method is executed in a NON EDT thread. */
     private void buildTree(ProjectTreeNode node)
     {
+        // CSOFF
+        long time = System.nanoTime();
+        // CSON
         Pattern pattern = node.project.getFilterRegex();
         Map<File, QueryFileModel> map = model.getFiles()
                 .stream()
@@ -531,14 +535,18 @@ class ProjectsView extends JPanel
                 }
             }
         }
+        LOGGER.debug("Time building projects tree: {}. {}ms", node.file, TimeUnit.MILLISECONDS.convert(System.nanoTime() - time, TimeUnit.NANOSECONDS));
 
         SwingUtilities.invokeLater(() ->
         {
+            long t = System.nanoTime();
+
             projectsTreeModel.nodeStructureChanged(node);
             if (node.project.expanded)
             {
                 projectsTree.expandPath(new TreePath(node.getPath()));
             }
+            LOGGER.debug("Time render projects tree: {}. {}ms", node.file, TimeUnit.MILLISECONDS.convert(System.nanoTime() - t, TimeUnit.NANOSECONDS));
         });
     }
 

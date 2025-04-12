@@ -17,6 +17,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
 import java.awt.font.TextAttribute;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.EventObject;
 import java.util.List;
@@ -45,6 +46,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.ExpandVetoException;
+import javax.swing.tree.MutableTreeNode;
 import javax.swing.tree.TreeCellEditor;
 import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
@@ -70,6 +72,7 @@ public class QueryeerTree extends JTree
     {
         super(model);
         this.model = model;
+        this.model.tree = this;
         setCellRenderer(new CheckBoxNodeRenderer());
         setCellEditor(new CheckBoxNodeEditor(this));
         setShowsRootHandles(true);
@@ -288,7 +291,10 @@ public class QueryeerTree extends JTree
         }
     };
 
-    /** Base node in the tree */
+    /**
+     * Base node in the tree.
+     * NOTE! Important to implement {@link #equals(Object)} if tree filtering should work optimally.
+     */
     public interface RegularNode
     {
         /** Return title of node */
@@ -370,6 +376,8 @@ public class QueryeerTree extends JTree
                 throw new ExpandVetoException(event);
             }
 
+            treeNode.isExpanded = true;
+
             // Node already has children loaded
             if (treeNode.childrenLoaded)
             {
@@ -387,8 +395,9 @@ public class QueryeerTree extends JTree
                     treeNode.removeAllChildren();
                     for (RegularNode child : children)
                     {
-                        treeNode.add(new QueryeerTreeNode(child));
+                        treeNode.add(new QueryeerTreeNode(model, child));
                     }
+
                     treeNode.childrenLoaded = true;
                     SwingUtilities.invokeLater(() -> model.fireTreeStructureChanged(event.getSource(), event.getPath()
                             .getPath(), null, null));
@@ -413,6 +422,9 @@ public class QueryeerTree extends JTree
         @Override
         public void treeWillCollapse(TreeExpansionEvent event) throws ExpandVetoException
         {
+            QueryeerTreeNode treeNode = (QueryeerTreeNode) event.getPath()
+                    .getLastPathComponent();
+            treeNode.isExpanded = false;
         }
     }
 
@@ -566,16 +578,40 @@ public class QueryeerTree extends JTree
         }
     }
 
+    /**
+     * Path that is used when filtering the tree.
+     * Only nodes matching the provided path will be visible.
+     *
+     * @param nodePath Path to filter
+     * @param allowChildren Should children be allowed below the node path
+     */
+    public record FilterPath(RegularNode[] nodePath, boolean allowChildren)
+    {
+        @Override
+        public final boolean equals(Object obj)
+        {
+            if (obj instanceof FilterPath that)
+            {
+                return Arrays.equals(nodePath, that.nodePath)
+                        && allowChildren == that.allowChildren;
+            }
+            return false;
+        }
+    }
+
     /** Tree model used with {@link QueryeerTree} */
     public static class QueryeerTreeModel extends DefaultTreeModel
     {
+        private JTree tree;
+        private List<FilterPath> filterPaths;
+
         /**
          * Construct a tree model with provided root node. NOTE! {#link {@link RegularNode#loadChildren()} will be called in constructor to populate.
          */
         public QueryeerTreeModel(RegularNode root)
         {
             super(null);
-            setRoot(new QueryeerTreeNode(root));
+            setRoot(new QueryeerTreeNode(this, root));
             loadRoot();
         }
 
@@ -588,14 +624,83 @@ public class QueryeerTree extends JTree
             reload();
         }
 
+        /** Filter the tree and only show provided node among the children. */
+        public void setFilterPaths(List<FilterPath> filterPaths)
+        {
+            if (filterPaths != null
+                    && filterPaths.isEmpty())
+            {
+                filterPaths = null;
+            }
+            if (!Objects.equals(this.filterPaths, filterPaths))
+            {
+                this.filterPaths = filterPaths;
+                reload();
+
+                // Expand nodes that was previously expanded
+                Enumeration<javax.swing.tree.TreeNode> e = ((QueryeerTreeNode) getRoot()).breadthFirstEnumeration();
+                while (e.hasMoreElements())
+                {
+                    QueryeerTreeNode n = (QueryeerTreeNode) e.nextElement();
+                    if (n.isExpanded)
+                    {
+                        tree.expandPath(new TreePath(n.getPath()));
+                    }
+                }
+            }
+        }
+
         private void loadRoot()
         {
             QueryeerTreeNode rootNode = (QueryeerTreeNode) root;
             RegularNode rootObj = rootNode.node;
             rootObj.loadChildren()
                     .stream()
-                    .map(QueryeerTreeNode::new)
+                    .map(c -> new QueryeerTreeNode(this, c))
                     .forEach(n -> rootNode.add(n));
+        }
+
+        private boolean show(QueryeerTreeNode child)
+        {
+            if (filterPaths == null)
+            {
+                return true;
+            }
+
+            javax.swing.tree.TreeNode[] childPath = child.getPath();
+            // Exclude ROOT
+            int length = childPath.length - 1;
+
+            // Check the input child's path so that is contained in one or more of the filter paths configured
+            for (FilterPath filterPath : filterPaths)
+            {
+                RegularNode[] nodePath = filterPath.nodePath;
+
+                boolean match = true;
+                for (int i = 1; i <= length; i++)
+                {
+                    if (i - 1 >= nodePath.length)
+                    {
+                        match = filterPath.allowChildren;
+                        break;
+                    }
+
+                    RegularNode filterNode = nodePath[i - 1];
+                    RegularNode childNode = ((QueryeerTreeNode) childPath[i]).node;
+
+                    if (!Objects.equals(filterNode, childNode))
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         @Override
@@ -613,21 +718,82 @@ public class QueryeerTree extends JTree
 
     private static class QueryeerTreeNode extends DefaultMutableTreeNode
     {
+        private final QueryeerTreeModel model;
         private final RegularNode node;
         private boolean childrenLoaded = false;
         private boolean underline;
         private volatile boolean loading = false;
+        private boolean isExpanded = false;
 
-        QueryeerTreeNode(RegularNode node)
+        QueryeerTreeNode(QueryeerTreeModel model, RegularNode node)
         {
             super(requireNonNull(node));
             this.node = node;
+            this.model = model;
         }
 
         @Override
         public boolean isLeaf()
         {
             return node.isLeaf();
+        }
+
+        @Override
+        public int getChildCount()
+        {
+            if (model.filterPaths == null)
+            {
+                return super.getChildCount();
+            }
+            int childCount = super.getChildCount();
+            int count = 0;
+            for (int i = 0; i < childCount; i++)
+            {
+                QueryeerTreeNode child = (QueryeerTreeNode) super.getChildAt(i);
+                if (model.show(child))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        @Override
+        public javax.swing.tree.TreeNode getChildAt(int index)
+        {
+            if (model.filterPaths == null)
+            {
+                return super.getChildAt(index);
+            }
+            int childCount = super.getChildCount();
+            int filteredIndex = 0;
+            for (int i = 0; i < childCount; i++)
+            {
+                QueryeerTreeNode child = (QueryeerTreeNode) super.getChildAt(i);
+                if (model.show(child))
+                {
+                    if (index == filteredIndex)
+                    {
+                        return child;
+                    }
+
+                    filteredIndex++;
+                }
+            }
+
+            throw new IllegalArgumentException("Invalid index: " + index);
+        }
+
+        @Override
+        public void removeAllChildren()
+        {
+            for (int i = super.getChildCount() - 1; i >= 0; i--)
+            {
+                MutableTreeNode child = (MutableTreeNode) super.getChildAt(i);
+                children.removeElementAt(i);
+                child.setParent(null);
+            }
         }
     }
 

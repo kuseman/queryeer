@@ -32,7 +32,8 @@ class FileWatchService
     private final Map<Path, WatchEntry> map = new ConcurrentHashMap<>();
 
     private final Thread thread;
-    private final WatchService watchService;
+    private volatile boolean close;
+    private WatchService watchService;
 
     FileWatchService()
     {
@@ -56,15 +57,28 @@ class FileWatchService
 
     void close()
     {
+        close = true;
         thread.interrupt();
-        try
-        {
-            watchService.close();
-        }
-        catch (IOException e)
-        {
-            LOGGER.error("Error closing watchservice", e);
-        }
+
+        // NOTE! When having large amount of listeners/folders
+        // This takes long time to do so commenting out this
+        // Unregister all entires upon close
+        // for (WatchEntry entry : map.values())
+        // {
+        // entry.watchKey.cancel();
+        // }
+        // try
+        // {
+        // if (watchService != null)
+        // {
+        // LOGGER.debug("Closing watch service");
+        // watchService.close();
+        // }
+        // }
+        // catch (IOException e)
+        // {
+        // LOGGER.error("Error closing watchservice", e);
+        // }
     }
 
     private static class WatchEntry
@@ -90,7 +104,8 @@ class FileWatchService
      */
     void register(Path path, FileWatchListener listener)
     {
-        if (watchService == null)
+        if (watchService == null
+                || close)
         {
             return;
         }
@@ -173,7 +188,7 @@ class FileWatchService
                         && MapUtils.isEmpty(watchEntry.fileListeners)
                         && watchEntry.watchKey != null)
                 {
-                    LOGGER.debug("Removed watch key for {}", entry.getKey());
+                    LOGGER.trace("Removed watch key for {}", entry.getKey());
                     watchEntry.watchKey.cancel();
                     it.remove();
                 }
@@ -184,14 +199,15 @@ class FileWatchService
     private WatchKey registerPath(Path path)
     {
         // Watch service not created, nothing to do
-        if (watchService == null)
+        if (watchService == null
+                || close)
         {
             return null;
         }
 
         try
         {
-            LOGGER.debug("Register {}", path);
+            LOGGER.trace("Register {}", path);
             return path.register(watchService, StandardWatchEventKinds.OVERFLOW, StandardWatchEventKinds.ENTRY_CREATE, StandardWatchEventKinds.ENTRY_DELETE, StandardWatchEventKinds.ENTRY_MODIFY);
         }
         catch (IOException e)
@@ -206,7 +222,7 @@ class FileWatchService
         long threshold = 500;
         long lastProcessing = -1;
 
-        while (!Thread.interrupted())
+        while (!close)
         {
             // Sleep a while if there was very few events
             if (lastProcessing > 0
@@ -218,6 +234,11 @@ class FileWatchService
 
             for (WatchEntry entry : map.values())
             {
+                if (close)
+                {
+                    break;
+                }
+
                 try
                 {
                     // Try to register
@@ -247,7 +268,7 @@ class FileWatchService
                             path = entry.folder.resolve(path);
                         }
 
-                        LOGGER.debug("Event: parent:'{}' path:'{}' kind: '{}' time: '{}'", entry.folder, path, event.kind(), System.currentTimeMillis());
+                        LOGGER.trace("Event: parent:'{}' path:'{}' kind: '{}' time: '{}'", entry.folder, path, event.kind(), System.currentTimeMillis());
                         // Call folder listeners
                         if (entry.listeners != null)
                         {
