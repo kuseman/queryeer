@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
@@ -139,7 +140,7 @@ class JdbcConnectionsTreeModel implements RegularNode
             }
 
             List<RegularNode> children = new ArrayList<>();
-            children.add(new DatabasesNode(this, jdbcDatabase));
+            children.add(new DatabasesNode(this));
             children.addAll(jdbcDatabase.getTreeNodeSupplier()
                     .getMetaDataNodes(connection, new SqlConnectionSupplier()
                     {
@@ -172,6 +173,22 @@ class JdbcConnectionsTreeModel implements RegularNode
             return asList(newQuery);
         }
 
+        @Override
+        public int hashCode()
+        {
+            return connection.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj)
+        {
+            if (obj instanceof ConnectionNode that)
+            {
+                return connection == that.connection;
+            }
+            return false;
+        }
+
         private Action newQuery = new AbstractAction("New Query")
         {
             @Override
@@ -185,18 +202,18 @@ class JdbcConnectionsTreeModel implements RegularNode
     /** Node representing a collection of databases */
     class DatabasesNode implements RegularNode
     {
-        private final ConnectionNode connectioNode;
+        private final ConnectionNode connectionNode;
         private final JdbcDatabase jdbcDatabase;
 
-        DatabasesNode(ConnectionNode connectioNode, JdbcDatabase jdbcDatabase)
+        DatabasesNode(ConnectionNode connectionNode)
         {
-            this.connectioNode = connectioNode;
-            this.jdbcDatabase = jdbcDatabase;
+            this.connectionNode = connectionNode;
+            this.jdbcDatabase = connectionNode.jdbcDatabase;
         }
 
         JdbcConnection getJdbcConnection()
         {
-            return connectioNode.connection;
+            return connectionNode.connection;
         }
 
         @Override
@@ -221,10 +238,26 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<RegularNode> loadChildren()
         {
-            List<String> databases = model.getDatabases(connectioNode.connection, true, true);
+            List<String> databases = model.getDatabases(connectionNode.connection, true, true);
             return databases.stream()
-                    .map(d -> new DatabaseNode(connectioNode, jdbcDatabase, d))
+                    .map(d -> new DatabaseNode(connectionNode, d))
                     .collect(toList());
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return connectionNode.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj)
+        {
+            if (obj instanceof DatabasesNode that)
+            {
+                return connectionNode.equals(that.connectionNode);
+            }
+            return false;
         }
     }
 
@@ -236,10 +269,10 @@ class JdbcConnectionsTreeModel implements RegularNode
         private final String database;
         // private boolean checked;
 
-        DatabaseNode(ConnectionNode connectionNode, JdbcDatabase jdbcDatabase, String database)
+        DatabaseNode(ConnectionNode connectionNode, String database)
         {
             this.connectionNode = connectionNode;
-            this.jdbcDatabase = jdbcDatabase;
+            this.jdbcDatabase = connectionNode.jdbcDatabase;
             this.database = database;
         }
 
@@ -313,6 +346,23 @@ class JdbcConnectionsTreeModel implements RegularNode
         public List<Action> getLinkActions()
         {
             return asList(newQuery);
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return Objects.hash(connectionNode, database);
+        }
+
+        @Override
+        public boolean equals(Object obj)
+        {
+            if (obj instanceof DatabaseNode that)
+            {
+                return connectionNode.equals(that.connectionNode)
+                        && database.equals(that.database);
+            }
+            return false;
         }
 
         private Action newQuery = new AbstractAction("New Query")

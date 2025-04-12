@@ -10,6 +10,7 @@ import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Window;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -40,6 +41,7 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
 import com.queryeer.api.component.AutoCompletionComboBox;
 import com.queryeer.api.component.QueryeerTree;
+import com.queryeer.api.component.QueryeerTree.FilterPath;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
 import com.queryeer.api.editor.ITextEditor;
 import com.queryeer.api.editor.TextSelection;
@@ -52,6 +54,7 @@ import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.ConnectionNode;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabaseNode;
+import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabasesNode;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
 
@@ -64,11 +67,13 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
     private final IEventBus eventBus;
     private final CatalogCrawlService crawlService;
     private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
-
     private final JTextField currentConnection;
     private final JComboBox<String> databases;
     private final DefaultComboBoxModel<String> databasesModel;
     private final QueryeerTree tree;
+    private final JdbcConnectionsTreeModel connectionsTreeModel;
+    private final QueryeerTree.QueryeerTreeModel treeModel;
+
     private boolean suppressEvents = false;
 
     //@formatter:off
@@ -116,7 +121,6 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             {
                 JdbcEngineState engineState = currentFile.getEngineState();
                 ConnectionState state = engineState.connectionState;
-
                 if (state != null)
                 {
                     SwingUtilities.invokeLater(() ->
@@ -124,6 +128,10 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                         try
                         {
                             state.setDatabaseOnConnection((String) l.getItem());
+                            if (connectionsTreeConfigurable.isFilterTree())
+                            {
+                                filterTree(state);
+                            }
                         }
                         catch (SQLException e)
                         {
@@ -259,8 +267,8 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             }
         });
 
-        JdbcConnectionsTreeModel connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, databaseProvider, node -> newQuery(node));
-        QueryeerTree.QueryeerTreeModel treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
+        connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, databaseProvider, node -> newQuery(node));
+        treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
         connectionsModel.addListDataListener(new ListDataListener()
         {
             @Override
@@ -307,6 +315,28 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             connectionsTreeConfigurable.saveConfig();
         });
         buttonPanel.add(syncButton);
+
+        JToggleButton filterTreeButton = new JToggleButton(icons.getIconFactory()
+                .getIcon(IIconFactory.Provider.FONTAWESOME, "FILTER", 8));
+        filterTreeButton.setToolTipText("Filter Tree To Only Show The Tabs Connection");
+        filterTreeButton.setSelected(connectionsTreeConfigurable.isFilterTree());
+        filterTreeButton.addActionListener(l ->
+        {
+            ConnectionState state = null;
+            IQueryFile currentFile = queryFileProvider.getCurrentFile();
+            if (currentFile != null)
+            {
+                JdbcEngineState engineState = currentFile.getEngineState();
+                state = engineState.connectionState;
+            }
+
+            // Always filter the tree when toggle the button
+            filterTree(filterTreeButton.isSelected() ? state
+                    : null);
+            connectionsTreeConfigurable.setFilterTree(filterTreeButton.isSelected());
+            connectionsTreeConfigurable.saveConfig();
+        });
+        buttonPanel.add(filterTreeButton);
 
         JButton config = new JButton(icons.getIconFactory()
                 .getIcon(IIconFactory.Provider.FONTAWESOME, "COG", 8));
@@ -461,7 +491,8 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                     databasesModel.setSelectedItem(state.getDatabase());
                     databases.setEnabled(true);
                 }
-                if (connectionsTreeConfigurable.isSyncTree())
+                if (!connectionsTreeConfigurable.isFilterTree()
+                        && connectionsTreeConfigurable.isSyncTree())
                 {
                     selectTreeNode(state);
                 }
@@ -471,10 +502,40 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             {
                 queryFile.setMetaData(new QueryFileMetaData("<html><font color=\"#000000\"><b>Not connected</b></font></html>", ""));
             }
+
+            if (connectionsTreeConfigurable.isFilterTree())
+            {
+                filterTree(state);
+            }
         }
         finally
         {
             suppressEvents = false;
+        }
+    }
+
+    private void filterTree(ConnectionState state)
+    {
+        if (state == null)
+        {
+            treeModel.setFilterPaths(null);
+        }
+        else
+        {
+            ConnectionNode connectionsNode = connectionsTreeModel.new ConnectionNode(state.getJdbcConnection());
+            // Filter connection only
+            if (isBlank(state.getDatabase()))
+            {
+                treeModel.setFilterPaths(List.of(new FilterPath(new RegularNode[] { connectionsNode }, true)));
+            }
+            // .. or filter connection and database
+            else
+            {
+                DatabasesNode databasesNode = connectionsTreeModel.new DatabasesNode(connectionsNode);
+                DatabaseNode databaseNode = connectionsTreeModel.new DatabaseNode(connectionsNode, state.getDatabase());
+
+                treeModel.setFilterPaths(List.of(new FilterPath(new RegularNode[] { connectionsNode, databasesNode, databaseNode }, true)));
+            }
         }
     }
 
