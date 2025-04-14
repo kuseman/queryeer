@@ -1319,7 +1319,7 @@ class TableActionsConfigurable implements IConfigurable
         searchObjects.templateTarget = TemplateTarget.EXECUTE;
         searchObjects.templateQuery = """
                 SELECT `
-                  SELECT CONCAT('SELECT * FROM ', s.name, '.', o.name, ' WHERE ', c.name, ' = ''${REPLACE(@tableRow.cell.value, '''', '''''''''')}''')
+                  SELECT CONCAT('SELECT * FROM ', s.name, '.', o.name, ' WHERE [', c.name, '] = ''${REPLACE(@tableRow.cell.value, '''', '''''''''')}''')
                   FROM sys.columns c
                   INNER join sys.objects o
                     ON o.object_id = c.object_id
