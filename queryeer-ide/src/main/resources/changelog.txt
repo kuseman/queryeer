@@ -2,6 +2,15 @@ CHANGELOG
 
 Queryeer
 
+v2.11.0
+feat: Use io.methvin directory watcher on OSX to avoid high CPU usage that exists in default JDK poller
+fix: Quote column name in TableActionsConfigurable template query: 'Search objects'
+feat: Add support for filtering the JDBC tree to only show the current connection/database
+chore: Bump payloadbuilder
+fix(JdbcEngine): Don't use the current states connection for background tasks lite catalog crawling etc.
+fix: Don't show paths for new files in opened Windows-dialog. Also enable multi selection
+fix: Guard aginst broken project's that doesn't exists
+
 v2.10.0
 fix: Fix issues with MSSql native authentication where password isn't present in various places
 fix: Fix issue in TextOutputComponent to handle EDT/not EDT thread problems
@@ -176,6 +185,11 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.9.3
+fix: Fixes an issue in hash match where we returned an empty tuple vector in left Join mode where all outer rows got a hit.
+This in turn trigged another issue when an upstream hash match was executing in index mode, then we tried to fetch inner rows by an empty outer tuple vector that threw an exception
+(since it's now allowed to use an empty tuple vector as seek index vector).
 
 v1.9.2
 fix: Add proper URL encoding of endpoints in HttpCatalog
