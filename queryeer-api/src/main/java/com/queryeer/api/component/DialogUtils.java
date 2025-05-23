@@ -207,8 +207,7 @@ public final class DialogUtils
             /** Returns true if this item matches search text. */
             default boolean matches(String searchText)
             {
-                return getTitle().toLowerCase()
-                        .contains(searchText);
+                return StringUtils.findStringsInString(searchText, getTitle());
             }
         }
 
