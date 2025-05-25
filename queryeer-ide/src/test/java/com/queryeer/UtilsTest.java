@@ -2,8 +2,6 @@ package com.queryeer;
 
 import static java.util.Arrays.asList;
 
-import com.queryeer.api.utils.StringUtils;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -11,6 +9,8 @@ import java.util.Random;
 
 import org.junit.Assert;
 import org.junit.Test;
+
+import com.queryeer.api.utils.StringUtils;
 
 /** Test of {@link PluginHandler} */
 public class UtilsTest extends Assert
