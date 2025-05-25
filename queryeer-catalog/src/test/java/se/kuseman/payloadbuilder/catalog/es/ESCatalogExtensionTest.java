@@ -49,7 +49,7 @@ public class ESCatalogExtensionTest extends Assert
             @Override
             protected Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername)
             {
-                return new Credentials(username.getValue(), password.getValue());
+                return new Credentials(username.get(), password.get());
             }
         };
         ESCompletionProvider completionProvider = new ESCompletionProvider(model);
@@ -70,9 +70,9 @@ public class ESCatalogExtensionTest extends Assert
         assertEquals(ICatalogExtension.ExceptionAction.RERUN, extension.handleException(session, new CredentialsException("es", "wrong password")));
 
         Mockito.verify(session)
-                .setCatalogProperty("es", ESCatalog.AUTH_USERNAME_KEY, username.getValue());
+                .setCatalogProperty("es", ESCatalog.AUTH_USERNAME_KEY, username.get());
         Mockito.verify(session)
-                .setCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY, password.getValue());
+                .setCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY, password.get());
 
         Mockito.reset(session);
 
@@ -91,7 +91,7 @@ public class ESCatalogExtensionTest extends Assert
         assertEquals(ICatalogExtension.ExceptionAction.RERUN, extension.handleException(session, new CredentialsException("es", "wrong password")));
 
         // Assert connection and session has got updated values
-        assertArrayEquals(password.getValue(), connection.getRuntimeAuthPassword());
+        assertArrayEquals(password.get(), connection.getRuntimeAuthPassword());
         // The username of the connection should not be overwritten
         assertEquals("prefilled_username", connection.getAuthUsername());
 
@@ -111,7 +111,7 @@ public class ESCatalogExtensionTest extends Assert
         Mockito.verify(session)
                 .setCatalogProperty("es", ESCatalog.AUTH_USERNAME_KEY, "prefilled_username");
         Mockito.verify(session)
-                .setCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY, password.getValue());
+                .setCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY, password.get());
 
         Mockito.reset(session);
 
@@ -122,14 +122,14 @@ public class ESCatalogExtensionTest extends Assert
         assertEquals(ICatalogExtension.ExceptionAction.RERUN, extension.handleException(session, new CredentialsException("es", "wrong password")));
 
         // Assert connection and session has got updated values
-        assertArrayEquals(password.getValue(), connection.getRuntimeAuthPassword());
+        assertArrayEquals(password.get(), connection.getRuntimeAuthPassword());
         // The username of the connection should not be overwritten
         assertEquals("prefilled_username", connection.getAuthUsername());
 
         Mockito.verify(session)
-                .setCatalogProperty("es", ESCatalog.AUTH_USERNAME_KEY, username.getValue());
+                .setCatalogProperty("es", ESCatalog.AUTH_USERNAME_KEY, username.get());
         Mockito.verify(session)
-                .setCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY, password.getValue());
+                .setCatalogProperty("es", ESCatalog.AUTH_PASSWORD_KEY, password.get());
 
         Mockito.reset(session);
 
@@ -215,7 +215,7 @@ public class ESCatalogExtensionTest extends Assert
             @Override
             protected Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readyOnlyUsername)
             {
-                return new Credentials(username.getValue(), password.getValue());
+                return new Credentials(username.get(), password.get());
             }
         };
         ESCompletionProvider completionProvider = new ESCompletionProvider(model);
@@ -288,7 +288,7 @@ public class ESCatalogExtensionTest extends Assert
             @Override
             protected Credentials getCredentials(String connectionDescription, String prefilledUsername, boolean readOnlyUsername)
             {
-                return new Credentials(username.getValue(), password.getValue());
+                return new Credentials(username.get(), password.get());
             }
         };
         ESCompletionProvider completionProvider = new ESCompletionProvider(model);

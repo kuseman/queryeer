@@ -1,6 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Component;
 import java.awt.Dimension;
@@ -35,7 +36,6 @@ import javax.swing.tree.TreeSelectionModel;
 
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
@@ -550,7 +550,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             {
                 if (n instanceof JdbcConnectionsTreeModel.DatabaseNode dn
                         && dn.getJdbcConnection() == state.getJdbcConnection()
-                        && StringUtils.equals(state.getDatabase(), dn.getDatabase()))
+                        && CI.equals(state.getDatabase(), dn.getDatabase()))
                 {
                     selectPath.set(s.get());
                     return false;

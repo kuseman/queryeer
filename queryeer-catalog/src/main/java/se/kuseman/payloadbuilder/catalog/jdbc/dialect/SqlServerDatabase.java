@@ -2,6 +2,7 @@ package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
 import static java.util.Collections.emptyList;
 import static org.apache.commons.collections4.CollectionUtils.isEmpty;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -12,7 +13,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -288,7 +288,7 @@ class SqlServerDatabase implements JdbcDatabase
                 || connectionState.isEstimateQueryPlan())
                 && rs.getMetaData()
                         .getColumnCount() == 1
-                && StringUtils.containsIgnoreCase(rs.getMetaData()
+                && CI.contains(rs.getMetaData()
                         .getColumnLabel(1), "Showplan")
                 && SqlServerQueryPlanActionFactory.isSqlServerQueryPlan(rs.getString(1)))
         {

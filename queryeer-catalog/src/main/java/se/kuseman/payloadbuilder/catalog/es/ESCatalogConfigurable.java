@@ -3,7 +3,7 @@ package se.kuseman.payloadbuilder.catalog.es;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonMap;
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
+import static org.apache.commons.lang3.ObjectUtils.getIfNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.util.ArrayList;
@@ -175,7 +175,7 @@ class ESCatalogConfigurable implements IConfigurable
     private void loadSettings()
     {
         Map<String, Object> settings = config.loadExtensionConfig(NAME);
-        List<Connection> connections = ESDatasource.MAPPER.convertValue(defaultIfNull(settings.get(CONNECTIONS), emptyList()), new TypeReference<List<Connection>>()
+        List<Connection> connections = ESDatasource.MAPPER.convertValue(getIfNull(settings.get(CONNECTIONS), emptyList()), new TypeReference<List<Connection>>()
         {
         });
         if (connections == null)

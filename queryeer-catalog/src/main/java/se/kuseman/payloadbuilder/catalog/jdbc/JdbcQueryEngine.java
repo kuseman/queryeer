@@ -3,6 +3,7 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Component;
 import java.io.IOException;
@@ -21,7 +22,6 @@ import javax.swing.Icon;
 import javax.swing.SwingUtilities;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.time.DurationFormatUtils;
@@ -54,7 +54,8 @@ class JdbcQueryEngine implements IQueryEngine
     private static final Logger LOGGER = LoggerFactory.getLogger(JdbcQueryEngine.class);
     private static final String QUERY_NOT_CONNECTED_MESSAGE = "Query file is not connected to any data source. Right click or CTRL/META-hoover + left click on a connection or database in tree.";
     static final String TEXT_SQL = "text/sql";
-    static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+    static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
+            .daemon(true)
             .namingPattern("JdbcQueryEngine#-%d")
             .build());
 
@@ -459,7 +460,7 @@ class JdbcQueryEngine implements IQueryEngine
             String line = lines[i];
 
             // Batch delimiter found, add previous batch to result and start over
-            if (StringUtils.startsWithIgnoreCase(line, delimiter))
+            if (CI.startsWith(line, delimiter))
             {
                 if (sb.length() > 0)
                 {

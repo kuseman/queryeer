@@ -21,7 +21,8 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 public class CatalogCrawlService
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(CatalogCrawlService.class);
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
+            .daemon(true)
             .namingPattern("CatalogCrawlService-#%d")
             .build());
 

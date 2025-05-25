@@ -3,8 +3,8 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
-import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Window;
 import java.sql.ResultSet;
@@ -112,7 +112,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
         for (int i = 0; i < size; i++)
         {
             JdbcConnection connection = getElementAt(i);
-            if (equalsIgnoreCase(connection.getJdbcURL(), url))
+            if (CI.equals(connection.getJdbcURL(), url))
             {
                 return connection;
             }
