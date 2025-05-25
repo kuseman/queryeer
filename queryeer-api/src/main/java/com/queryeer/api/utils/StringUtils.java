@@ -27,7 +27,7 @@ public class StringUtils
 
     /**
      * Finds needle in haystack, regardless of case and order of characters. At least two
-     * characters in a row must be found in the same order as in needle.s
+     * characters in a row must be found in the same order as in needle.
      *
      * @param needle the string to find
      * @param haystack the string to search in
