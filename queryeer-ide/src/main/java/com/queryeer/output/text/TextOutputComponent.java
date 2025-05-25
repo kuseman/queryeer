@@ -4,6 +4,7 @@ import static java.util.Objects.requireNonNull;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -49,6 +50,8 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
             .namingPattern("TextOutputComponentAppender-%d")
             .build());
     private static final String WARNING_LOCATION = "warningLocation";
+    private static final String LINK_ACTION = "linkAction";
+    private static final Color HYPERLINK = new Color(0, 0, 238);
     private final IQueryFile queryFile;
     private final JTextPane text;
     private final Document document;
@@ -67,7 +70,9 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         this.text = (JTextPane) getViewport().getComponent(0);
         this.document = this.text.getDocument();
         this.text.setFont(new Font("Consolas", Font.PLAIN, 13));
-        this.text.addMouseListener(new TextMouseListener());
+        TextMouseListener textMouseListener = new TextMouseListener();
+        this.text.addMouseListener(textMouseListener);
+        this.text.addMouseMotionListener(textMouseListener);
         this.printWriter = createPrintWriter();
     }
 
@@ -116,6 +121,17 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         warning.addAttribute(WARNING_LOCATION, textSelection);
         verifyAppenderThread();
         chunkQueue.add(new Chunk(text + System.lineSeparator(), warning));
+    }
+
+    @Override
+    public void appendLink(String message, Runnable action)
+    {
+        SimpleAttributeSet link = new SimpleAttributeSet();
+        StyleConstants.setForeground(link, HYPERLINK);
+        StyleConstants.setUnderline(link, true);
+        link.addAttribute(LINK_ACTION, action);
+        verifyAppenderThread();
+        chunkQueue.add(new Chunk(message + System.lineSeparator(), link));
     }
 
     private Runnable textAppender = () ->
@@ -274,6 +290,35 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                         }
                     }
                 }
+            }
+            else if (SwingUtilities.isLeftMouseButton(e)
+                    && e.getClickCount() == 1)
+            {
+                int character = text.viewToModel2D(e.getPoint());
+                if (character >= 0)
+                {
+                    Element element = ((StyledDocument) text.getDocument()).getCharacterElement(character);
+                    Runnable action = (Runnable) element.getAttributes()
+                            .getAttribute(LINK_ACTION);
+                    if (action != null)
+                    {
+                        action.run();
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void mouseMoved(MouseEvent e)
+        {
+            int character = text.viewToModel2D(e.getPoint());
+            if (character >= 0)
+            {
+                Element element = ((StyledDocument) text.getDocument()).getCharacterElement(character);
+                Runnable action = (Runnable) element.getAttributes()
+                        .getAttribute(LINK_ACTION);
+                text.setCursor(action != null ? Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                        : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             }
         }
     }
