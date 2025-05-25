@@ -45,7 +45,7 @@ public class StringUtils
             return true;
         }
 
-        String lowerNeedle = needle.toLowerCase();
+        String lowerNeedle = needle.toLowerCase().replace(" ", "");
         String lowerHaystack = haystack.toLowerCase();
 
         if (lowerHaystack.contains(lowerNeedle))
@@ -62,11 +62,13 @@ public class StringUtils
         while (haystackIndex < lowerHaystackUnique.length
                 && needleIndex < lowerNeedleUnique.length)
         {
-            while (haystackIndex < lowerHaystackUnique.length
-                    && needleIndex < lowerNeedleUnique.length
-                    && lowerHaystackUnique[haystackIndex] == lowerNeedleUnique[needleIndex]
-                    && (charsInRow > 0
-                            || lowerHaystackUnique[haystackIndex + 1] == lowerNeedleUnique[needleIndex + 1]))
+            while (haystackIndex < lowerHaystackUnique.length && needleIndex < lowerNeedleUnique.length // didnt reach end of either string
+                    && lowerHaystackUnique[haystackIndex] == lowerNeedleUnique[needleIndex] // this char matches
+                    && (charsInRow > 0 // already more than one char in a row
+                                || needleIndex >= lowerNeedleUnique.length - 1 // Only one char left of needle
+                                || (haystackIndex + 1 < lowerHaystackUnique.length // next char also matches
+                                && needleIndex + 1 < lowerNeedleUnique.length
+                                && lowerHaystackUnique[haystackIndex + 1] == lowerNeedleUnique[needleIndex + 1])))
             {
                 charsInRow++;
                 lowerHaystackUnique[haystackIndex] = '*';

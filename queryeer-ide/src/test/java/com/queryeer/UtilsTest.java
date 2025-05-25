@@ -2,6 +2,8 @@ package com.queryeer;
 
 import static java.util.Arrays.asList;
 
+import com.queryeer.api.utils.StringUtils;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -9,8 +11,6 @@ import java.util.Random;
 
 import org.junit.Assert;
 import org.junit.Test;
-
-import com.queryeer.api.utils.StringUtils;
 
 /** Test of {@link PluginHandler} */
 public class UtilsTest extends Assert
@@ -44,6 +44,13 @@ public class UtilsTest extends Assert
     @Test
     public void test_when_needle_is_in_haystack_then_return_true()
     {
+        assertTrue(StringUtils.findStringsInString("cud", "EComCustomerMasterProd"));
+        assertTrue(StringUtils.findStringsInString("cust pr t", "EComCustomerMasterProd"));
+        assertTrue(StringUtils.findStringsInString("cust pr maste d", "EComCustomerMasterProd"));
+        assertTrue(StringUtils.findStringsInString("cust prod mast", "EComCustomerMasterProd"));
+        assertTrue(StringUtils.findStringsInString("custprodmast", "EComCustomerMasterProd"));
+        assertTrue(StringUtils.findStringsInString("custprod", "EComCustomerMasterProd"));
+
         assertTrue(StringUtils.findStringsInString("efgbcd", "abcdefghijklmnop"));
         assertTrue(StringUtils.findStringsInString("custprodmast", "EComCustomerMasterProd"));
         assertTrue(StringUtils.findStringsInString("custprod", "EComCustomerMasterProd"));
