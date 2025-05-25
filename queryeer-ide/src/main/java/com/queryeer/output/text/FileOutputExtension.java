@@ -4,6 +4,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Desktop;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.InputEvent;
@@ -34,6 +35,7 @@ import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
+import com.queryeer.api.utils.OsUtils;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
@@ -41,6 +43,7 @@ import se.kuseman.payloadbuilder.api.OutputWriter;
 class FileOutputExtension implements IOutputExtension
 {
     private static final int FILE_WRITER_BUFFER_SIZE = 4096;
+    private static final String EXPLORER_EXE = "explorer.exe";
 
     @Override
     public String getTitle()
@@ -88,6 +91,7 @@ class FileOutputExtension implements IOutputExtension
             return null;
         }
 
+        ITextOutputComponent textOutput = file.getOutputComponent(ITextOutputComponent.class);
         try
         {
             File outputFile = new File(filename);
@@ -122,6 +126,22 @@ class FileOutputExtension implements IOutputExtension
                     long bytes = getByteCount();
                     file.getMessagesWriter()
                             .println(FileUtils.byteCountToDisplaySize(bytes) + " written to " + filename + System.lineSeparator());
+                    if (Desktop.isDesktopSupported())
+                    {
+                        textOutput.appendLink("Open Folder", () -> browseFileDirectory(textOutput, outputFile));
+                        textOutput.appendLink("Open File", () ->
+                        {
+                            try
+                            {
+                                Desktop.getDesktop()
+                                        .open(outputFile);
+                            }
+                            catch (IOException e)
+                            {
+                                textOutput.appendWarning("Error opening file: " + e.getMessage(), TextSelection.EMPTY);
+                            }
+                        });
+                    }
                 }
             };
             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8), FILE_WRITER_BUFFER_SIZE);
@@ -216,5 +236,41 @@ class FileOutputExtension implements IOutputExtension
         }
 
         return null;
+    }
+
+    private static void browseFileDirectory(ITextOutputComponent textOutput, File file)
+    {
+        // Desktop#browseFileDirectory is not supported on Windows10 at least so instead fire up explorer.exe
+        if (OsUtils.isWindows())
+        {
+            final String command = EXPLORER_EXE + " /SELECT,\"" + file.getAbsolutePath() + "\"";
+            try
+            {
+                Runtime.getRuntime()
+                        .exec(command);
+            }
+            catch (IOException e)
+            {
+                textOutput.appendWarning("Error browsing file directory: " + e.getMessage(), TextSelection.EMPTY);
+            }
+        }
+        // Desktop#browseFileDirectory is not supported on Linux (not no gnome ubuntu 24 least) so instead open the parent
+        else if (OsUtils.isLinux())
+        {
+            try
+            {
+                Desktop.getDesktop()
+                        .open(new File(file.getParent()));
+            }
+            catch (IOException e)
+            {
+                textOutput.appendWarning("Error browsing file directory: " + e.getMessage(), TextSelection.EMPTY);
+            }
+        }
+        else
+        {
+            Desktop.getDesktop()
+                    .browseFileDirectory(file);
+        }
     }
 }
