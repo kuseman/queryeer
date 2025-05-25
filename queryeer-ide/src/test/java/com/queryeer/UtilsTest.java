@@ -73,7 +73,7 @@ public class UtilsTest extends Assert
         {
             needle = (needle + (char) (r.nextInt(26) + 'a')).substring(0, 10);
             haystack = (haystack + (char) (r.nextInt(26) + 'a')).substring(0, 20);
-            boolean found = StringUtils.findStringsInString(needle, haystack);
+            StringUtils.findStringsInString(needle, haystack);
         }
         long duration = (System.currentTimeMillis() - startTime);
         assertFalse("Performance test took too long: " + duration + "ms", duration > 1000);
