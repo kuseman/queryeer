@@ -2,8 +2,8 @@ package se.kuseman.payloadbuilder.catalog.es;
 
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
-import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
+import static org.apache.commons.lang3.ObjectUtils.getIfNull;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Component;
 import java.awt.Dimension;
@@ -244,10 +244,10 @@ class ESCatalogExtension implements ICatalogExtension
         Index indexToSet = null;
         if (connectionToSet != null)
         {
-            List<Index> indices = defaultIfNull(connectionsModel.getIndices(connectionToSet, false), emptyList());
+            List<Index> indices = getIfNull(connectionsModel.getIndices(connectionToSet, false), emptyList());
             for (Index idx : indices)
             {
-                if (equalsIgnoreCase(index, idx.name))
+                if (CI.equals(index, idx.name))
                 {
                     indexToSet = idx;
                     break;
@@ -449,7 +449,7 @@ class ESCatalogExtension implements ICatalogExtension
             {
                 try
                 {
-                    final List<Index> indices = defaultIfNull(connectionsModel.getIndices(connection, forceReload), emptyList());
+                    final List<Index> indices = getIfNull(connectionsModel.getIndices(connection, forceReload), emptyList());
                     SwingUtilities.invokeLater(() ->
                     {
                         suppressSetupIndex = true;

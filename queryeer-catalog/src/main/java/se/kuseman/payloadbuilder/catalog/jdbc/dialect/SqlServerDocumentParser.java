@@ -3,8 +3,8 @@ package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toList;
-import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Color;
 import java.util.ArrayList;
@@ -253,11 +253,11 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                 for (TableSource ts : catalog.getTableSources())
                 {
                     if (!isBlank(schema)
-                            && !equalsIgnoreCase(schema, ts.getSchema()))
+                            && !CI.equals(schema, ts.getSchema()))
                     {
                         continue;
                     }
-                    else if (!equalsIgnoreCase(name, ts.getName()))
+                    else if (!CI.equals(name, ts.getName()))
                     {
                         continue;
                     }

@@ -1,8 +1,8 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Component;
 import java.awt.Dimension;
@@ -256,7 +256,7 @@ class JdbcCatalogExtension implements ICatalogExtension
         {
             JdbcConnection connection = connectionsModel.getElementAt(i);
 
-            if (!equalsIgnoreCase(url, connection.getJdbcURL()))
+            if (!CI.equals(url, connection.getJdbcURL()))
             {
                 continue;
             }
@@ -274,8 +274,8 @@ class JdbcCatalogExtension implements ICatalogExtension
                 String connectionDatabase = connection.getDatabases()
                         .get(j);
 
-                if (equalsIgnoreCase(database, connectionDatabase)
-                        || equalsIgnoreCase(schema, connectionDatabase))
+                if (CI.equals(database, connectionDatabase)
+                        || CI.equals(schema, connectionDatabase))
                 {
                     databaseToSelect.setValue(connectionDatabase);
                     break;
@@ -284,7 +284,7 @@ class JdbcCatalogExtension implements ICatalogExtension
             break;
         }
 
-        if (connectionToSelect.getValue() == null
+        if (connectionToSelect.get() == null
                 && connectionsModel.getSize() > 0)
         {
             connectionToSelect.setValue(connectionsModel.getElementAt(0));
@@ -295,9 +295,9 @@ class JdbcCatalogExtension implements ICatalogExtension
             propertiesComponent.suppressEvents = true;
             try
             {
-                propertiesComponent.connections.setSelectedItem(connectionToSelect.getValue());
-                propertiesComponent.populateDatabases(connectionToSelect.getValue());
-                propertiesComponent.databases.setSelectedItem(databaseToSelect.getValue());
+                propertiesComponent.connections.setSelectedItem(connectionToSelect.get());
+                propertiesComponent.populateDatabases(connectionToSelect.get());
+                propertiesComponent.databases.setSelectedItem(databaseToSelect.get());
             }
             finally
             {

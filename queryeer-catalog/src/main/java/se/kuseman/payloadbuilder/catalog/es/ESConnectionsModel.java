@@ -3,9 +3,9 @@ package se.kuseman.payloadbuilder.catalog.es;
 import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
-import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
-import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
+import static org.apache.commons.lang3.ObjectUtils.getIfNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -110,7 +110,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
         for (int i = 0; i < size; i++)
         {
             Connection connection = getElementAt(i);
-            if (equalsIgnoreCase(connection.endpoint, endpoint))
+            if (CI.equals(connection.endpoint, endpoint))
             {
                 return connection;
             }
@@ -193,7 +193,7 @@ class ESConnectionsModel extends AbstractListModel<ESConnectionsModel.Connection
                         || (!forceReload
                                 && !connection.hasCredentials()))
                 {
-                    return defaultIfNull(indices, emptyList());
+                    return getIfNull(indices, emptyList());
                 }
 
                 if (!forceReload

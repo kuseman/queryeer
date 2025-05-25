@@ -1,7 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.model;
 
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.StringUtils.containsAnyIgnoreCase;
+import static org.apache.commons.lang3.Strings.CI;
 
 /** Column */
 public class Column
@@ -70,13 +70,13 @@ public class Column
     public static String getDefinition(String type, int maxLength, int precision, int scale, boolean nullable)
     {
         String typeStr = type;
-        if (containsAnyIgnoreCase(type, "char"))
+        if (CI.contains(type, "char"))
         {
             typeStr = "%s (%s)".formatted(type, maxLength < 0 ? "max"
                     : maxLength);
         }
-        else if (containsAnyIgnoreCase(type, "date")
-                || containsAnyIgnoreCase(type, "time")
+        else if (CI.contains(type, "date")
+                || CI.contains(type, "time")
                 || "int".equalsIgnoreCase(type))
         {
             typeStr = type;

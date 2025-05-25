@@ -1,6 +1,6 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
-import org.apache.commons.lang3.StringUtils;
+import static org.apache.commons.lang3.Strings.CI;
 
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputExtension;
@@ -29,11 +29,11 @@ public class DatabaseProvider
     /** Return a {@link JdbcDatabase} from provided {@link SqlDialect} */
     public JdbcDatabase getDatabase(String url)
     {
-        if (StringUtils.containsAnyIgnoreCase(url, "oracle"))
+        if (CI.contains(url, "oracle"))
         {
             return oracle;
         }
-        else if (StringUtils.containsAnyIgnoreCase(url, "sqlserver"))
+        else if (CI.contains(url, "sqlserver"))
         {
             return sqlServer;
         }

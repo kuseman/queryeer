@@ -1,6 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
 import static java.util.Objects.requireNonNull;
+import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.event.ActionEvent;
 import java.util.List;
@@ -8,8 +9,6 @@ import java.util.List;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.SwingUtilities;
-
-import org.apache.commons.lang3.StringUtils;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.queryplan.IQueryPlanOutputComponent;
@@ -76,7 +75,7 @@ class SqlServerQueryPlanActionFactory implements ITableContextMenuActionFactory
 
     static boolean isSqlServerQueryPlan(String value)
     {
-        return StringUtils.startsWithIgnoreCase(value, "<ShowPlanXML");
+        return CI.startsWith(value, "<ShowPlanXML");
     }
 
     static void parseAndShowQueryPlan(IQueryFile queryFile, IQueryPlanOutputExtension queryPlanOutputExtension, String xml, boolean switchToQueryPlanOutput)
