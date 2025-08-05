@@ -6,10 +6,8 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import javax.swing.Icon;
@@ -21,64 +19,163 @@ import javax.swing.table.TableModel;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
+import org.apache.commons.lang3.tuple.Pair;
 
-import com.queryeer.output.table.TableOutputWriter.RowList;
+import com.queryeer.output.table.TableOutputWriter.Row;
+
+import se.kuseman.payloadbuilder.api.catalog.Column.Type;
+import se.kuseman.payloadbuilder.api.catalog.ResolvedType;
+import se.kuseman.payloadbuilder.api.execution.Decimal;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
+import se.kuseman.payloadbuilder.api.execution.UTF8String;
+import se.kuseman.payloadbuilder.api.execution.vector.MutableValueVector;
+import se.kuseman.payloadbuilder.core.execution.vector.BufferAllocator;
+import se.kuseman.payloadbuilder.core.execution.vector.VectorFactory;
 
 /** Resulting model of a query */
 class Model implements TableModel
 {
     private static final String NO_COLUMN_NAME = "(No column name)";
     private static final String IMAGE_PREFIX = "__queryeerimage__";
-    private final List<RowList> rows = new ArrayList<>(50);
+    private static final int INIT_ROW_SIZE = 50;
+    private final VectorFactory vectorFactory;
     private List<String> columns = emptyList();
     private Set<Integer> imageColumnIndices = new HashSet<>();
     private int lastNotifyRowIndex = 0;
     private EventListenerList listenerList = new EventListenerList();
 
+    private int rowCount = 0;
     private List<Class<?>> columnTypes = new ArrayList<>();
+    private List<MutableValueVector> columnVectors = new ArrayList<>();
 
-    Map<Object, Object> internCache = new HashMap<>();
+    Model()
+    {
+        vectorFactory = new VectorFactory(new BufferAllocator());
+    }
 
     /** Add row */
-    void addRow(RowList row)
+    void addRow(Row row)
     {
         int size = row.size();
         int diff = Math.max(size, columnTypes.size()) - columnTypes.size();
+        // Make sure the lists are in par size wise with the appending row
         if (diff > 0)
         {
             columnTypes.addAll(Collections.nCopies(diff, null));
+            columnVectors.addAll(Collections.nCopies(diff, null));
         }
-
+        diff = Math.max(size, columns.size()) - columns.size();
+        if (diff > 0)
+        {
+            columns.addAll(Collections.nCopies(diff, null));
+        }
+        boolean columnsChanged = false;
         for (int i = 0; i < size; i++)
         {
-            Object value = row.get(i);
-            // Intern values to minimize heap allocations
-            row.set(i, internCache.computeIfAbsent(value, k -> value));
+            Pair<String, Object> pair = row.get(i);
+            String column = pair.getKey();
+            Object value = pair.getValue();
 
-            // Try to determine types of columns
-            Class<?> clazz = value == null ? null
-                    : value.getClass();
-            if (clazz != null
-                    && clazz != Boolean.class)
+            // First row is integer row number
+            if (i == 0)
             {
-                Class<?> columnType = columnTypes.get(i);
-
-                // No class set, set the values class
-                if (columnType == null)
+                if (columnTypes.get(i) == null)
                 {
-                    columnTypes.set(i, clazz);
+                    columnTypes.set(0, Integer.class);
                 }
-                // .. the class differs from previous values => set to Object.class which is the default in a swing table
-                else if (columnType != Object.class
-                        && columnType != clazz)
+
+                MutableValueVector vector = columnVectors.get(0);
+                if (vector == null)
                 {
-                    columnTypes.set(i, Object.class);
+                    vector = vectorFactory.getMutableVector(ResolvedType.of(Type.Int), INIT_ROW_SIZE);
+                    columnVectors.set(0, vector);
+                }
+                vector.setInt(rowCount, rowCount + 1);
+            }
+            // All other columns are objects
+            else
+            {
+                int vectorOrdinal = -1;
+                MutableValueVector vector = null;
+                // Find the column index for the current row column
+                // Start to search from current rows column index, this to adapt to multiple
+                // columns with the same name on the same row
+                int columnSize = columns.size();
+                for (int j = i; j < columnSize; j++)
+                {
+                    // Find the first matching column and put the value there
+                    if (column.equalsIgnoreCase(columns.get(j)))
+                    {
+                        vector = columnVectors.get(j);
+                        if (vector == null)
+                        {
+                            vector = vectorFactory.getMutableVector(ResolvedType.ANY, INIT_ROW_SIZE);
+                            columnVectors.set(j, vector);
+                        }
+                        vectorOrdinal = j;
+                        break;
+                    }
+                }
+                // No column found, append the column last (at current index)
+                if (vector == null)
+                {
+                    vector = vectorFactory.getMutableVector(ResolvedType.ANY, INIT_ROW_SIZE);
+                    columnVectors.set(i, vector);
+                    columns.set(i, column);
+                    vectorOrdinal = i;
+                    columnsChanged = true;
+
+                    if (Strings.CI.startsWith(column, IMAGE_PREFIX))
+                    {
+                        imageColumnIndices.add(i);
+                    }
+                }
+
+                vector.setAny(rowCount, value);
+
+                // Try to determine types of columns
+                Class<?> clazz = value == null ? null
+                        : value.getClass();
+                if (clazz != null
+                        && clazz != Boolean.class)
+                {
+                    Class<?> columnType = columnTypes.get(vectorOrdinal);
+
+                    // No class set, set the values class
+                    if (columnType == null)
+                    {
+                        columnTypes.set(vectorOrdinal, clazz);
+                    }
+                    // .. the class differs from previous values => set to Object.class which is the default in a swing table
+                    else if (columnType != Object.class
+                            && columnType != clazz)
+                    {
+                        columnTypes.set(vectorOrdinal, Object.class);
+                    }
                 }
             }
         }
 
-        rows.add(row);
-        if (rows.size() >= TableOutputComponent.COLUMN_ADJUST_ROW_LIMIT)
+        // Normalize all vectors and append null to the ones that didn't get a value
+        size = columnVectors.size();
+        for (int i = 0; i < size; i++)
+        {
+            MutableValueVector vector = columnVectors.get(i);
+            if (vector != null
+                    && vector.size() != rowCount + 1)
+            {
+                vector.setNull(rowCount);
+            }
+        }
+
+        if (columnsChanged)
+        {
+            SwingUtilities.invokeLater(() -> fireTableChanged(new TableModelEvent(this, TableModelEvent.HEADER_ROW)));
+        }
+
+        rowCount++;
+        if (rowCount >= TableOutputComponent.COLUMN_ADJUST_ROW_LIMIT)
         {
             notifyChanges(false);
         }
@@ -110,7 +207,7 @@ class Model implements TableModel
     @Override
     public int getRowCount()
     {
-        return rows.size();
+        return rowCount;
     }
 
     @Override
@@ -139,25 +236,44 @@ class Model implements TableModel
     @Override
     public Object getValueAt(int rowIndex, int columnIndex)
     {
-        if (rowIndex >= rows.size())
+        if (rowIndex >= rowCount)
         {
             return null;
         }
 
-        RowList row = rows.get(rowIndex);
-        if (columnIndex >= row.size())
+        MutableValueVector vector = columnVectors.get(columnIndex);
+
+        if (vector == null)
         {
             return null;
         }
 
-        Object value = row.get(columnIndex);
+        Object value = vector.valueAsObject(rowIndex);
 
         if (value != null
                 && imageColumnIndices.contains(columnIndex)
                 && !(value instanceof QueryeerImage))
         {
             value = new QueryeerImage(value);
-            row.set(columnIndex, value);
+            vector.setAny(rowIndex, value);
+        }
+
+        // Unwrap PLB objects here to avoid problems in actions etc. that checks for string values etc.
+        if (value instanceof UTF8String str)
+        {
+            value = str.toString();
+        }
+        else if (value instanceof Decimal d)
+        {
+            value = d.asBigDecimal();
+        }
+        else if (value instanceof EpochDateTime d)
+        {
+            value = d.getLocalDateTime();
+        }
+        else if (value instanceof EpochDateTimeOffset d)
+        {
+            value = d.getZonedDateTime();
         }
 
         return value;
@@ -198,7 +314,7 @@ class Model implements TableModel
     /** Notifies changes since last notify */
     void notifyChanges(boolean force)
     {
-        int size = rows.size() - 1;
+        int size = rowCount - 1;
         if (size >= lastNotifyRowIndex
                 || force)
         {

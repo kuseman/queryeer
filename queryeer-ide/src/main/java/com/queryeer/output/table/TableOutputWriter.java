@@ -7,45 +7,47 @@ import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 import javax.swing.SwingUtilities;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.tuple.Pair;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 
+import se.kuseman.payloadbuilder.api.execution.UTF8String;
+
 /** Writer that writes object structure from a projection. */
 class TableOutputWriter implements QueryeerOutputWriter
 {
+    private final TableOutputComponent tableOutputComponent;
+    private final IQueryFile queryFile;
     /** Current model */
     private Model model;
-    private IQueryFile queryFile;
 
     TableOutputWriter(IQueryFile queryFile)
     {
         this.queryFile = Objects.requireNonNull(queryFile, "queryFile");
+        this.tableOutputComponent = queryFile.getOutputComponent(TableOutputComponent.class);
     }
 
     private final Deque<Object> parent = new ArrayDeque<>();
     private final Deque<String> currentField = new ArrayDeque<>();
+    private final Row row = new Row();
+    private int nestLevel = 0;
 
     @Override
     public void initResult(String[] columns, Map<String, Object> resultMetaData)
     {
-        // Print previous model row count
-        if (model != null)
-        {
-            model.internCache.clear();
-            model.internCache = null;
-        }
-
         this.model = new Model();
 
         List<String> allColumns = new ArrayList<>(asList(columns));
@@ -57,7 +59,7 @@ class TableOutputWriter implements QueryeerOutputWriter
         // Need a sync call here else we will have races on fast queries where we append wrong models
         try
         {
-            SwingUtilities.invokeAndWait(() -> getTablesOutputComponent().addResult(model, resultMetaData));
+            SwingUtilities.invokeAndWait(() -> tableOutputComponent.addResult(model, resultMetaData));
         }
         catch (InvocationTargetException | InterruptedException e)
         {
@@ -68,12 +70,9 @@ class TableOutputWriter implements QueryeerOutputWriter
     @Override
     public void close()
     {
-        if (model != null)
-        {
-            model.internCache.clear();
-            model.internCache = null;
-        }
-        SwingUtilities.invokeLater(() -> getTablesOutputComponent().resizeLastTablesColumns());
+        tableOutputComponent.internCache.clear();
+        row.clear();
+        SwingUtilities.invokeLater(() -> tableOutputComponent.resizeLastTablesColumns());
     }
 
     @Override
@@ -86,17 +85,21 @@ class TableOutputWriter implements QueryeerOutputWriter
     }
 
     @Override
+    public void startRow()
+    {
+        nestLevel = -1;
+        row.clear();
+        // Add the row number entry
+        // NOTE! We set a constant here, the actual row number value is
+        // set in Model later on
+        row.add("", 0);
+    }
+
+    @Override
     public void endRow()
     {
         queryFile.incrementTotalRowCount();
-
-        if (parent.isEmpty())
-        {
-            return;
-        }
-
-        RowList rowList = getValue(model.getRowCount() + 1);
-        ColumnsMerger.merge(model, rowList);
+        model.addRow(row);
     }
 
     @Override
@@ -109,10 +112,8 @@ class TableOutputWriter implements QueryeerOutputWriter
     public void writeValue(Object input)
     {
         Object value = input;
-        if (value instanceof Iterator)
+        if (value instanceof Iterator it)
         {
-            @SuppressWarnings("unchecked")
-            Iterator<Object> it = (Iterator<Object>) value;
             startArray();
             while (it.hasNext())
             {
@@ -121,9 +122,9 @@ class TableOutputWriter implements QueryeerOutputWriter
             endArray();
             return;
         }
-        else if (value instanceof Reader)
+        else if (value instanceof Reader r)
         {
-            try (Reader reader = (Reader) value)
+            try (Reader reader = r)
             {
                 value = IOUtils.toString(reader);
             }
@@ -139,116 +140,91 @@ class TableOutputWriter implements QueryeerOutputWriter
     @Override
     public void startObject()
     {
-        // Root object should not be a map
-        // since we might have duplicate column names
-        if (parent.size() == 0)
+        nestLevel++;
+        // Root level, don't do anything since we add stuff to Row instance
+        if (nestLevel == 0)
         {
-            // CSOFF
-            parent.addFirst(new RowList(model.getRowCount() + 1, 10));
-            // CSON
+            return;
         }
-        else
-        {
-            parent.addFirst(new LinkedHashMap<>());
-        }
+        parent.addFirst(new LinkedHashMap<>());
     }
 
     @Override
     public void endObject()
     {
-        putValue(parent.removeFirst());
+        boolean nested = nestLevel > 0;
+        nestLevel--;
+        // Only put non root values
+        if (nested)
+        {
+            putValue(parent.removeFirst());
+        }
     }
 
     @Override
     public void startArray()
     {
+        nestLevel++;
         parent.addFirst(new ArrayList<>());
     }
 
     @Override
     public void endArray()
     {
+        nestLevel--;
         putValue(parent.removeFirst());
     }
 
     @SuppressWarnings("unchecked")
-    private void putValue(Object value)
+    private void putValue(Object v)
     {
-        // Top of stack put value back
-        if (parent.isEmpty())
+        // Intern the value
+        Object value = internValue(v);
+        Object p = nestLevel == 0 ? row
+                : parent.peekFirst();
+
+        if (p instanceof Row row)
         {
-            parent.addFirst(value);
-            return;
+            row.add(currentField.removeFirst(), value);
         }
-
-        Object p = parent.peekFirst();
-
-        if (p instanceof RowList)
+        else if (p instanceof Map map)
         {
-            // Find out where to put this entry
-            RowList list = (RowList) p;
-            String column = currentField.removeFirst();
-            int columnIndex = list.size();
+            map.put(currentField.removeFirst(), value);
+        }
+        else if (p instanceof List list)
+        {
+            list.add(value);
+        }
+    }
 
-            // Flag that the list is not matching model columns
-            // model needs to adjust later on
-            if (list.matchesModelColumns
-                    && (columnIndex >= model.getColumnCount()
-                            || !column.equalsIgnoreCase(model.getColumns()
-                                    .get(columnIndex))))
+    private Object internValue(Object value)
+    {
+        if (value == null)
+        {
+            return value;
+        }
+        if (!(value instanceof Map
+                || value instanceof Collection
+                || value.getClass()
+                        .isArray()))
+        {
+            // MutableObjectVector turns all String's into UTF8String so we miss the interning of these
+            // so instead do this transformation here.
+            if (value instanceof String str)
             {
-                list.matchesModelColumns = false;
+                value = UTF8String.from(str);
             }
-
-            list.add(column, value);
+            return tableOutputComponent.internCache.computeIfAbsent(value, Function.identity());
         }
-        else if (p instanceof Map)
-        {
-            ((Map<String, Object>) p).put(currentField.removeFirst(), value);
-        }
-        else if (p instanceof List)
-        {
-            ((List<Object>) p).add(value);
-        }
+        return value;
     }
 
-    private TableOutputComponent getTablesOutputComponent()
+    /** Root structure for rows */
+    static class Row extends ArrayList<Pair<String, Object>>
     {
-        return queryFile.getOutputComponent(TableOutputComponent.class);
-    }
-
-    /** Returns written value and clears state. */
-    private RowList getValue(int rowNumber)
-    {
-        currentField.clear();
-        Object v = parent.removeFirst();
-        if (!(v instanceof RowList))
-        {
-            throw new RuntimeException("Expected a RowList but got " + v);
-        }
-
-        RowList result = (RowList) v;
-        return result;
-    }
-
-    /** Pair list. */
-    static class RowList extends ArrayList<Object>
-    {
-        List<String> columns;
-        boolean matchesModelColumns = true;
-
-        RowList(int rowId, int capacity)
-        {
-            super(capacity);
-            columns = new ArrayList<>(capacity);
-            // Add first row id column
-            add("", rowId);
-        }
-
         void add(String column, Object value)
         {
-            columns.add(column);
-            add(value);
+            super.add(Pair.of(column, value));
         }
     }
 }
