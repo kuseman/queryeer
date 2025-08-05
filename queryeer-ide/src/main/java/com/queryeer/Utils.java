@@ -26,9 +26,17 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.core.util.DefaultIndenter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.core.util.DefaultPrettyPrinter.Indenter;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+
+import se.kuseman.payloadbuilder.api.execution.Decimal;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
+import se.kuseman.payloadbuilder.api.execution.UTF8String;
 
 /** Variuos utils used by Queryeer */
 final class Utils
@@ -66,7 +74,31 @@ final class Utils
             }
         });
 
+        JsonSerializer<Object> toStringSerializer = new JsonSerializer<>()
+        {
+            @Override
+            public void serialize(Object value, JsonGenerator gen, SerializerProvider serializers) throws IOException
+            {
+                if (value == null)
+                {
+                    gen.writeNull();
+                }
+                else
+                {
+                    gen.writeString(value.toString());
+                }
+            }
+        };
+
+        // Add serializers for PLB data types
+        SimpleModule plbMpdule = new SimpleModule("Plb");
+        plbMpdule.addSerializer(UTF8String.class, toStringSerializer);
+        plbMpdule.addSerializer(Decimal.class, toStringSerializer);
+        plbMpdule.addSerializer(EpochDateTime.class, toStringSerializer);
+        plbMpdule.addSerializer(EpochDateTimeOffset.class, toStringSerializer);
+
         ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(plbMpdule);
         WRITER = mapper.writer(printer);
         READER = mapper.readerFor(Object.class);
     }
