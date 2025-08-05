@@ -292,8 +292,7 @@ public class QueryeerTree extends JTree
     };
 
     /**
-     * Base node in the tree.
-     * NOTE! Important to implement {@link #equals(Object)} if tree filtering should work optimally.
+     * Base node in the tree. NOTE! Important to implement {@link #equals(Object)} if tree filtering should work optimally.
      */
     public interface RegularNode
     {
@@ -579,8 +578,7 @@ public class QueryeerTree extends JTree
     }
 
     /**
-     * Path that is used when filtering the tree.
-     * Only nodes matching the provided path will be visible.
+     * Path that is used when filtering the tree. Only nodes matching the provided path will be visible.
      *
      * @param nodePath Path to filter
      * @param allowChildren Should children be allowed below the node path
