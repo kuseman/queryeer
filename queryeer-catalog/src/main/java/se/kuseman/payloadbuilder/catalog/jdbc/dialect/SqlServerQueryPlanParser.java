@@ -71,6 +71,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.Sor
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.SortType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.SpillOccurredType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.SpillToTempDbType;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.SpoolType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.StatsInfoType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.StmtCondType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.sqlserver.showplan2019.StmtSimpleType;
@@ -602,6 +603,17 @@ class SqlServerQueryPlanParser
         return parent;
     };
 
+    private static NodeHandler<SpoolType> SpoolType_Handler = (Context ctx, SpoolType o, Node parent) ->
+    {
+        parent.properties()
+                .add(new NodeProperty("PrimaryNodeId", o.getPrimaryNodeId()));
+        parent.properties()
+                .add(new NodeProperty("Stack", o.isStack()));
+
+        handle(ctx, o.getRelOp(), parent);
+        return parent;
+    };
+
     private static NodeHandler<AdaptiveJoinType> AdaptiveJoinType_Handler = (Context ctx, AdaptiveJoinType o, Node parent) ->
     {
         parent.properties()
@@ -690,8 +702,8 @@ class SqlServerQueryPlanParser
 
         //@formatter:off
         String label = !StringUtils.equalsIgnoreCase(logicalOp, physicalOp) 
-                ? "%s<br/>(%s)".formatted("<html><b>" + physicalOp + "</b>", logicalOp)
-                : "%s%s".formatted("<html><b>" + logicalOp + "</b>", !isBlank(objectLabel) ? "<br/>" + objectLabel : "");
+                ? "%s<br/>(%s)".formatted("<html><b>" + physicalOp + "</b> (" + o.getNodeId() + ")", logicalOp)
+                : "%s%s".formatted("<html><b>" + logicalOp + "</b> (" + o.getNodeId() + ")", !isBlank(objectLabel) ? "<br/>" + objectLabel : "");
         //@formatter:on
 
         if (ctx.rootEstimatedTotalSubtreeCost != 0)
@@ -957,6 +969,10 @@ class SqlServerQueryPlanParser
         {
             handle(ctx, o.getTopSort(), node);
         }
+        else if (o.getSpool() != null)
+        {
+            handle(ctx, o.getSpool(), node);
+        }
         // TODO: add handlers for ops below, for now we just proceed to the child RelOpType(s)
         else if (o.getUpdate() != null)
         {
@@ -993,11 +1009,6 @@ class SqlServerQueryPlanParser
         else if (o.getBitmap() != null)
         {
             handle(ctx, o.getBitmap()
-                    .getRelOp(), node);
-        }
-        else if (o.getSpool() != null)
-        {
-            handle(ctx, o.getSpool()
                     .getRelOp(), node);
         }
         else if (o.getStreamAggregate() != null)
@@ -1475,6 +1486,7 @@ class SqlServerQueryPlanParser
         HANDLERS.put(TableValuedFunctionType.class, TableValuedFunctionType_Handler);
         HANDLERS.put(SortType.class, SortType_Handler);
         HANDLERS.put(TopSortType.class, SortType_Handler);
+        HANDLERS.put(SpoolType.class, SpoolType_Handler);
     }
 
     private static NodeProperty getScalarExpressionProperty(String label, ScalarExpressionType expression)
