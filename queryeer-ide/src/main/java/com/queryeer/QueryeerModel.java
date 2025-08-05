@@ -195,7 +195,10 @@ class QueryeerModel implements IQueryFileProvider
     {
         if (!Objects.equals(selectedFile, file))
         {
-            file.bumpActivity();
+            if (file != null)
+            {
+                file.bumpActivity();
+            }
             QueryFileModel old = selectedFile;
             previousSelectedFile = selectedFile;
             selectedFile = file;
