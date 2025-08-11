@@ -22,6 +22,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -88,6 +89,8 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private int lastClickedTableRow;
     private int lastClickedTableColumn;
     private IDialogFactory dialogFactory;
+
+    Map<Object, Object> internCache = new HashMap<>();
 
     class TableComponent extends JPanel
     {
@@ -346,6 +349,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             model.removeTableModelListener(tc.table);
         }
 
+        internCache.clear();
         tables.clear();
         removeAll();
         repaint();
