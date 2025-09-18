@@ -1,9 +1,12 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
+import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
+import org.apache.commons.io.IOUtils;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
@@ -115,5 +118,23 @@ public interface JdbcDatabase
     default boolean supportsIncludeQueryPlanAction()
     {
         return false;
+    }
+
+    /**
+     * Returns a value for a result set ordinal.
+     */
+    default Object getJdbcValue(ResultSet rs, int ordinal, int jdbcType) throws Exception
+    {
+        if (jdbcType == java.sql.Types.CLOB)
+        {
+            Reader reader = rs.getCharacterStream(ordinal);
+            if (rs.wasNull())
+            {
+                return null;
+            }
+            return IOUtils.toString(reader);
+        }
+
+        return rs.getObject(ordinal);
     }
 }
