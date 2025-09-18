@@ -19,22 +19,22 @@ import javax.swing.Icon;
 
 import com.queryeer.api.component.QueryeerTree.RegularNode;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Tree model for jdbc query engine showing connections and child nodes like databases etc. */
 class JdbcConnectionsTreeModel implements RegularNode
 {
     private final JdbcConnectionsModel model;
     private final Icons icons;
-    private final DatabaseProvider databaseProvider;
+    private final DialectProvider dialectProvider;
     private final Consumer<RegularNode> newQueryConsumer;
 
-    JdbcConnectionsTreeModel(JdbcConnectionsModel model, Icons icons, DatabaseProvider databaseProvider, Consumer<RegularNode> newQueryConsumer)
+    JdbcConnectionsTreeModel(JdbcConnectionsModel model, Icons icons, DialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer)
     {
         this.model = requireNonNull(model, "model");
         this.icons = requireNonNull(icons, "icons");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
         this.newQueryConsumer = requireNonNull(newQueryConsumer, "newQueryConsumer");
     }
 
@@ -63,17 +63,17 @@ class JdbcConnectionsTreeModel implements RegularNode
     class ConnectionNode implements RegularNode
     {
         private final JdbcConnection connection;
-        private final JdbcDatabase jdbcDatabase;
+        private final JdbcDialect jdbcDialect;
 
         ConnectionNode(JdbcConnection connection)
         {
             this.connection = connection;
-            this.jdbcDatabase = databaseProvider.getDatabase(connection.getJdbcURL());
+            this.jdbcDialect = dialectProvider.getDialect(connection.getJdbcURL());
         }
 
         ConnectionState createState()
         {
-            return new ConnectionState(connection, jdbcDatabase);
+            return new ConnectionState(connection, jdbcDialect);
         }
 
         JdbcConnection getJdbcConnection()
@@ -141,7 +141,7 @@ class JdbcConnectionsTreeModel implements RegularNode
 
             List<RegularNode> children = new ArrayList<>();
             children.add(new DatabasesNode(this));
-            children.addAll(jdbcDatabase.getTreeNodeSupplier()
+            children.addAll(jdbcDialect.getTreeNodeSupplier()
                     .getMetaDataNodes(connection, new SqlConnectionSupplier()
                     {
                         @Override
@@ -203,12 +203,12 @@ class JdbcConnectionsTreeModel implements RegularNode
     class DatabasesNode implements RegularNode
     {
         private final ConnectionNode connectionNode;
-        private final JdbcDatabase jdbcDatabase;
+        private final JdbcDialect jdbcDialect;
 
         DatabasesNode(ConnectionNode connectionNode)
         {
             this.connectionNode = connectionNode;
-            this.jdbcDatabase = connectionNode.jdbcDatabase;
+            this.jdbcDialect = connectionNode.jdbcDialect;
         }
 
         JdbcConnection getJdbcConnection()
@@ -219,7 +219,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public String getTitle()
         {
-            return jdbcDatabase.usesSchemaAsDatabase() ? "Schemas"
+            return jdbcDialect.usesSchemaAsDatabase() ? "Schemas"
                     : "Databases";
         }
 
@@ -265,20 +265,20 @@ class JdbcConnectionsTreeModel implements RegularNode
     class DatabaseNode implements RegularNode
     {
         private final ConnectionNode connectionNode;
-        private final JdbcDatabase jdbcDatabase;
+        private final JdbcDialect jdbcDialect;
         private final String database;
         // private boolean checked;
 
         DatabaseNode(ConnectionNode connectionNode, String database)
         {
             this.connectionNode = connectionNode;
-            this.jdbcDatabase = connectionNode.jdbcDatabase;
+            this.jdbcDialect = connectionNode.jdbcDialect;
             this.database = database;
         }
 
         ConnectionState createState()
         {
-            ConnectionState state = new ConnectionState(connectionNode.connection, jdbcDatabase, database);
+            ConnectionState state = new ConnectionState(connectionNode.connection, jdbcDialect, database);
             return state;
         }
 
@@ -307,7 +307,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<RegularNode> loadChildren()
         {
-            return jdbcDatabase.getTreeNodeSupplier()
+            return jdbcDialect.getTreeNodeSupplier()
                     .getDatabaseMetaDataNodes(connectionNode.connection, database, new SqlConnectionSupplier()
                     {
                         @Override

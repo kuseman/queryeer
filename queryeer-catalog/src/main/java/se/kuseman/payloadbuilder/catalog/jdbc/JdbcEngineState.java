@@ -14,7 +14,7 @@ import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.engine.IQueryEngine.IState;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 class JdbcEngineState implements IQueryEngine.IState, IConnectionState
 {
@@ -71,7 +71,7 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
         // Switch parser if we switched state
         if (connectionState != null)
         {
-            documentParser.currentParser = connectionState.getJdbcDatabase()
+            documentParser.currentParser = connectionState.getjdbcDialect()
                     .getParser(this);
 
         }
@@ -154,11 +154,11 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     }
 
     @Override
-    public JdbcDatabase getJdbcDatabase()
+    public JdbcDialect getJdbcDialect()
     {
         if (connectionState != null)
         {
-            return connectionState.getJdbcDatabase();
+            return connectionState.getjdbcDialect();
         }
         return null;
     }

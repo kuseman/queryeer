@@ -22,8 +22,8 @@ import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.IQueryFileProvider;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Model for handling quick search of datasources. */
 @Inject
@@ -33,15 +33,15 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasourcesQuickSearchModel.class);
     private final JdbcConnectionsModel connectionsModel;
     private final IQueryFileProvider queryFileProvider;
-    private final DatabaseProvider databaseProvider;
+    private final DialectProvider dialectProvider;
     private final Map<JdbcConnection, JdbcConnectionLoadInfo> infoMap = new WeakHashMap<>();
     private final Icons icons;
 
-    DatasourcesQuickSearchModel(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, DatabaseProvider databaseProvider, Icons icons)
+    DatasourcesQuickSearchModel(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, DialectProvider dialectProvider, Icons icons)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
         this.icons = requireNonNull(icons, "icons");
     }
 
@@ -67,8 +67,8 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
         EXECUTOR.execute(() -> IOUtils.closeQuietly(state));
 
         // Get the dialect from the connection URL
-        JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(item.connection.getJdbcURL());
-        ConnectionState newState = new ConnectionState(item.connection, jdbcDatabase, item.database);
+        JdbcDialect jdbcDialect = dialectProvider.getDialect(item.connection.getJdbcURL());
+        ConnectionState newState = new ConnectionState(item.connection, jdbcDialect, item.database);
         state.setConnectionState(newState);
         state.getQueryEngine()
                 .focus(file);

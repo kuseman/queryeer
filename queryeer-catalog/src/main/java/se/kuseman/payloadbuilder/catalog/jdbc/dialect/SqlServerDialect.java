@@ -46,12 +46,12 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource.Type;
 
 /** Dialect for Microsoft SQL Server */
-class SqlServerDatabase implements JdbcDatabase
+class SqlServerDialect implements JdbcDialect
 {
     private static final String META_DATA_QUERY = Common.readResource("/se/kuseman/payloadbuilder/catalog/jdbc/dialect/SQL_SERVER_CATALOG_QUERY.sql");
 
     static final String NAME = "sqlserver";
-    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerDatabase.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerDialect.class);
     private final CatalogCrawlService crawlerService;
     private final IEventBus eventBus;
     private final QueryActionsConfigurable queryActionsConfigurable;
@@ -60,7 +60,7 @@ class SqlServerDatabase implements JdbcDatabase
     private final ITemplateService templateService;
     private final IQueryPlanOutputExtension queryPlanOutputExtension;
 
-    public SqlServerDatabase(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
+    public SqlServerDialect(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
             IQueryPlanOutputExtension queryPlanOutputExtension, ITreeConfig treeConfig)
     {
         this.crawlerService = crawlerService;
@@ -290,7 +290,7 @@ class SqlServerDatabase implements JdbcDatabase
         {
             return rs.getObject(ordinal, OffsetDateTime.class);
         }
-        return JdbcDatabase.super.getJdbcValue(rs, ordinal, jdbcType);
+        return JdbcDialect.super.getJdbcValue(rs, ordinal, jdbcType);
     }
 
     @Override

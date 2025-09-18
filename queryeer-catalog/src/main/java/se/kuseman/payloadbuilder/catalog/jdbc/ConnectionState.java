@@ -10,13 +10,13 @@ import java.sql.Statement;
 
 import com.queryeer.api.IQueryFile;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Connection state of a {@link IQueryFile}. Contains an open connection a selected database etc. */
 class ConnectionState implements Closeable
 {
     private final JdbcConnection jdbcConnection;
-    private final JdbcDatabase jdbcDatabase;
+    private final JdbcDialect jdbcDialect;
 
     private String sessionId;
     private String database;
@@ -25,14 +25,14 @@ class ConnectionState implements Closeable
     private volatile Statement currentStatement;
     private volatile boolean abort;
 
-    ConnectionState(JdbcConnection jdbcConnection, JdbcDatabase jdbcDatabase)
+    ConnectionState(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect)
     {
-        this(jdbcConnection, jdbcDatabase, null);
+        this(jdbcConnection, jdbcDialect, null);
     }
 
-    ConnectionState(JdbcConnection jdbcConnection, JdbcDatabase jdbcDatabase, String database)
+    ConnectionState(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect, String database)
     {
-        this.jdbcDatabase = requireNonNull(jdbcDatabase);
+        this.jdbcDialect = requireNonNull(jdbcDialect);
         this.jdbcConnection = requireNonNull(jdbcConnection);
         this.database = database;
     }
@@ -42,7 +42,7 @@ class ConnectionState implements Closeable
     {
         String password = jdbcConnection.getRuntimePassword() != null ? new String(jdbcConnection.getRuntimePassword())
                 : "";
-        return jdbcDatabase.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
+        return jdbcDialect.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
     }
 
     /**
@@ -55,7 +55,7 @@ class ConnectionState implements Closeable
         boolean isValid;
         try
         {
-            isValid = jdbcDatabase.isValid(connection);
+            isValid = jdbcDialect.isValid(connection);
         }
         catch (Exception e)
         {
@@ -67,7 +67,7 @@ class ConnectionState implements Closeable
         if (!isValid)
         {
             connection = createConnection();
-            sessionId = jdbcDatabase.getSessionId(connection);
+            sessionId = jdbcDialect.getSessionId(connection);
             if (database == null)
             {
                 setDatabaseFromConnection();
@@ -85,9 +85,9 @@ class ConnectionState implements Closeable
         return jdbcConnection;
     }
 
-    JdbcDatabase getJdbcDatabase()
+    JdbcDialect getjdbcDialect()
     {
-        return jdbcDatabase;
+        return jdbcDialect;
     }
 
     void setCurrentStatement(Statement statement)
@@ -102,11 +102,11 @@ class ConnectionState implements Closeable
 
     void setDatabaseFromConnection() throws SQLException
     {
-        if (!jdbcDatabase.isValid(connection))
+        if (!jdbcDialect.isValid(connection))
         {
             return;
         }
-        this.database = jdbcDatabase.usesSchemaAsDatabase() ? connection.getSchema()
+        this.database = jdbcDialect.usesSchemaAsDatabase() ? connection.getSchema()
                 : connection.getCatalog();
     }
 
@@ -115,7 +115,7 @@ class ConnectionState implements Closeable
         try
         {
             Connection connection = getConnection();
-            if (jdbcDatabase.usesSchemaAsDatabase())
+            if (jdbcDialect.usesSchemaAsDatabase())
             {
                 connection.setSchema(database);
             }
@@ -132,7 +132,7 @@ class ConnectionState implements Closeable
             setDatabaseFromConnection();
             // .. and let the original error bubble up so UI etc. is notified
             // only do that for valid connections to avoid socket closed error etc. to bubble up
-            if (jdbcDatabase.isValid(connection))
+            if (jdbcDialect.isValid(connection))
             {
                 throw e;
             }
@@ -171,6 +171,6 @@ class ConnectionState implements Closeable
 
     ConnectionState cloneState()
     {
-        return new ConnectionState(jdbcConnection, jdbcDatabase, database);
+        return new ConnectionState(jdbcConnection, jdbcDialect, database);
     }
 }

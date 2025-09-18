@@ -6,16 +6,16 @@ import java.util.List;
 
 import com.queryeer.api.extensions.engine.IQueryEngine.IState.MetaParameter;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Definition of the state of a connection (query tab) */
 public interface IConnectionState
 {
-    /** Get seleted database */
+    /** Get selected database */
     String getDatabase();
 
-    /** Return the jdbc database instance for this state */
-    JdbcDatabase getJdbcDatabase();
+    /** Return the jdbc dialect instance for this state */
+    JdbcDialect getJdbcDialect();
 
     /** Get connection in the state */
     JdbcConnection getJdbcConnection();

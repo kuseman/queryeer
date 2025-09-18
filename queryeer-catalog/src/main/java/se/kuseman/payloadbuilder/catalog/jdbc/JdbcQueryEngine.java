@@ -44,8 +44,8 @@ import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.api.utils.MapUtils;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** JdbcQuery engine */
 class JdbcQueryEngine implements IQueryEngine
@@ -65,7 +65,7 @@ class JdbcQueryEngine implements IQueryEngine
     private final IEditorFactory editorFactory;
     private final DatasourcesQuickSearchModel datasourcesQuickSearchModel;
     private final IQueryFileProvider queryFileProvider;
-    private final DatabaseProvider databaseProvider;
+    private final DialectProvider dialectProvider;
     private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
     private JdbcEngineQuickPropertiesComponent quickProperties;
 
@@ -75,7 +75,7 @@ class JdbcQueryEngine implements IQueryEngine
             IQueryFileProvider queryFileProvider,
             Icons icons,
             JdbcConnectionsModel connectionsModel,
-            DatabaseProvider databaseProvider,
+            DialectProvider dialectProvider,
             IEventBus eventBus,
             IEditorFactory editorFactory,
             DatasourcesQuickSearchModel datasourcesQuickSearchModel,
@@ -86,7 +86,7 @@ class JdbcQueryEngine implements IQueryEngine
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.icons = requireNonNull(icons, "icons");
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
         this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
@@ -105,7 +105,7 @@ class JdbcQueryEngine implements IQueryEngine
                     queryFileProvider,
                     connectionsModel,
                     eventBus,
-                    databaseProvider,
+                    dialectProvider,
                     crawlService,
                     connectionsTreeConfigurable);
             //@formatter:on
@@ -152,7 +152,7 @@ class JdbcQueryEngine implements IQueryEngine
         synchronized (engineState)
         {
             ConnectionState state = engineState.connectionState;
-            JdbcDatabase jdbcDatabase = state != null ? state.getJdbcDatabase()
+            JdbcDialect jdbcDialect = state != null ? state.getjdbcDialect()
                     : null;
             String queryText = "";
             boolean temporaryState = false;
@@ -171,8 +171,8 @@ class JdbcQueryEngine implements IQueryEngine
                 // Execute the event query with a new connection etc.
                 if (ctx.getJdbcConnection() != null)
                 {
-                    jdbcDatabase = ctx.getJdbcDatabase();
-                    state = new ConnectionState(ctx.getJdbcConnection(), ctx.getJdbcDatabase(), ctx.getDatabase());
+                    jdbcDialect = ctx.getJdbcDialect();
+                    state = new ConnectionState(ctx.getJdbcConnection(), ctx.getJdbcDialect(), ctx.getDatabase());
                     temporaryState = true;
                 }
             }
@@ -196,7 +196,7 @@ class JdbcQueryEngine implements IQueryEngine
                 return;
             }
 
-            executeInternal(queryFile, engineState, textOutput, writer, jdbcDatabase, queryText, state, temporaryState);
+            executeInternal(queryFile, engineState, textOutput, writer, jdbcDialect, queryText, state, temporaryState);
         }
     }
 
@@ -263,7 +263,7 @@ class JdbcQueryEngine implements IQueryEngine
             JdbcEngineState engineState,
             ITextOutputComponent textOutput,
             OutputWriter writer,
-            JdbcDatabase jdbcDatabase,
+            JdbcDialect jdbcDialect,
             String queryText,
             ConnectionState state,
             boolean temporaryState) throws Exception
@@ -271,13 +271,13 @@ class JdbcQueryEngine implements IQueryEngine
         //@formatter:on
 
         MutableBoolean sqlError = new MutableBoolean(false);
-        List<String> batches = getBatches(jdbcDatabase, queryText);
+        List<String> batches = getBatches(jdbcDialect, queryText);
         try
         {
             // Reset the query before execution to reset abort flag etc.
             state.reset();
             Connection connection = state.getConnection();
-            jdbcDatabase.beforeExecuteQuery(connection, engineState);
+            jdbcDialect.beforeExecuteQuery(connection, engineState);
 
             // Only set status on regular queries
             if (!temporaryState)
@@ -297,7 +297,7 @@ class JdbcQueryEngine implements IQueryEngine
                         try (ResultSet rs = JdbcUtils.getNextResultSet(e ->
                         {
                             sqlError.setTrue();
-                            if (!jdbcDatabase.handleSQLException(queryFile, textOutput, e))
+                            if (!jdbcDialect.handleSQLException(queryFile, textOutput, e))
                             {
                                 textOutput.appendWarning(e.getMessage(), TextSelection.EMPTY);
                             }
@@ -337,7 +337,7 @@ class JdbcQueryEngine implements IQueryEngine
             if (e instanceof SQLException sqle)
             {
                 sqlError.setTrue();
-                if (jdbcDatabase.handleSQLException(queryFile, textOutput, sqle))
+                if (jdbcDialect.handleSQLException(queryFile, textOutput, sqle))
                 {
                     return;
                 }
@@ -383,14 +383,14 @@ class JdbcQueryEngine implements IQueryEngine
         int[] sqlTypes = pair.getKey();
         String[] columns = pair.getValue();
 
-        JdbcDatabase jdbcDatabase = state.getJdbcDatabase();
+        JdbcDialect jdbcDialect = state.getjdbcDialect();
 
         if (writer instanceof QueryeerOutputWriter qwriter)
         {
             //@formatter:off
             Map<String, Object> metaData = MapUtils.ofEntries(true,
                     MapUtils.entry("Connection", state.getJdbcConnection().getName()),
-                    MapUtils.entry("Database", state.getJdbcDatabase().usesSchemaAsDatabase() ? connection.getSchema()
+                    MapUtils.entry("Database", state.getjdbcDialect().usesSchemaAsDatabase() ? connection.getSchema()
                             : connection.getCatalog())
                     );
             //@formatter:on
@@ -415,9 +415,9 @@ class JdbcQueryEngine implements IQueryEngine
 
             if (first)
             {
-                if (!jdbcDatabase.processResultSet(queryFile, engineState, rs))
+                if (!jdbcDialect.processResultSet(queryFile, engineState, rs))
                 {
-                    LOGGER.debug("Aborting query due to JdbcDatabase#processResultSet returned false");
+                    LOGGER.debug("Aborting query due to jdbcDialect#processResultSet returned false");
                     return 0;
                 }
                 first = false;
@@ -429,7 +429,7 @@ class JdbcQueryEngine implements IQueryEngine
             for (int i = 0; i < count; i++)
             {
                 writer.writeFieldName(columns[i]);
-                writer.writeValue(jdbcDatabase.getJdbcValue(rs, i + 1, sqlTypes[i]));
+                writer.writeValue(jdbcDialect.getJdbcValue(rs, i + 1, sqlTypes[i]));
             }
             writer.endObject();
 
@@ -443,9 +443,9 @@ class JdbcQueryEngine implements IQueryEngine
         return rowCount;
     }
 
-    private List<String> getBatches(JdbcDatabase database, String query)
+    private List<String> getBatches(JdbcDialect dialect, String query)
     {
-        String delimiter = database.getBatchDelimiter();
+        String delimiter = dialect.getBatchDelimiter();
         if (isBlank(delimiter))
         {
             return singletonList(query);

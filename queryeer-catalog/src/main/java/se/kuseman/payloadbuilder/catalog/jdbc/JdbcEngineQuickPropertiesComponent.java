@@ -55,8 +55,8 @@ import com.queryeer.api.service.IQueryFileProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.ConnectionNode;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabaseNode;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabasesNode;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Quick properties for JdbcEngine. */
 class JdbcEngineQuickPropertiesComponent extends JPanel
@@ -83,7 +83,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             IQueryFileProvider queryFileProvider,
             JdbcConnectionsModel connectionsModel,
             IEventBus eventBus,
-            DatabaseProvider databaseProvider,
+            DialectProvider dialectProvider,
             CatalogCrawlService crawlService,
             JdbcConnectionsTreeConfigurable connectionsTreeConfigurable)
     {
@@ -248,7 +248,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                     && connectionsModel.prepare(result, false))
             {
 
-                JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(result.getJdbcURL());
+                JdbcDialect jdbcDialect = dialectProvider.getDialect(result.getJdbcURL());
                 JdbcEngineState engineState = currentFile.getEngineState();
                 ConnectionState state = engineState.connectionState;
 
@@ -259,7 +259,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                 }
 
                 // Create new state
-                ConnectionState newState = new ConnectionState(result, jdbcDatabase);
+                ConnectionState newState = new ConnectionState(result, jdbcDialect);
                 engineState.setConnectionState(newState);
                 queryEngine.focus(currentFile);
                 // Lazy load databases
@@ -267,7 +267,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             }
         });
 
-        connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, databaseProvider, node -> newQuery(node));
+        connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, dialectProvider, node -> newQuery(node));
         treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
         connectionsModel.addListDataListener(new ListDataListener()
         {
@@ -444,7 +444,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
     void setStatus(IQueryFile file, ConnectionState state)
     {
         String connectionInfo = "<html><font color=\"%s\"><b>%s: %s / %s%s / %s</b></font>".formatted(Objects.toString(state.getJdbcConnection()
-                .getColor(), "#000000"), state.getJdbcDatabase()
+                .getColor(), "#000000"), state.getjdbcDialect()
                         .getSessionKeyword(),
                 isBlank(state.getSessionId()) ? "Not connected"
                         : state.getSessionId(),
