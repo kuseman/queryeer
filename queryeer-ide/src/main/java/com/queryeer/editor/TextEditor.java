@@ -68,6 +68,7 @@ import javax.swing.text.JTextComponent;
 import javax.swing.text.Segment;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.fife.io.UnicodeWriter;
@@ -136,7 +137,8 @@ class TextEditor implements ITextEditor, SearchListener
 
     static
     {
-        ThreadPoolExecutor tp = new ThreadPoolExecutor(5, 20, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new BasicThreadFactory.Builder().namingPattern("TextEditor-Parser#-%d")
+        ThreadPoolExecutor tp = new ThreadPoolExecutor(5, 20, 60, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), BasicThreadFactory.builder()
+                .namingPattern("TextEditor-Parser#-%d")
                 .daemon(true)
                 .build());
         tp.allowCoreThreadTimeOut(true);
@@ -737,24 +739,24 @@ class TextEditor implements ITextEditor, SearchListener
                     if (addComments)
                     {
                         textEditor.getDocument()
-                                .insertString(startOffset.getValue() + modifier, "--", null);
+                                .insertString(startOffset.intValue() + modifier, "--", null);
                     }
                     else
                     {
                         textEditor.getDocument()
-                                .remove(startOffset.getValue() + modifier, 2);
+                                .remove(startOffset.intValue() + modifier, 2);
                     }
-                    startOffset.setValue(Math.max(startOffset.getValue() + modifier, 0));
+                    startOffset.setValue(Math.max(startOffset.intValue() + modifier, 0));
                     modifier += addComments ? 2
                             : -2;
                 }
 
                 selStart = startOffsets.get(0)
-                        .getValue();
+                        .intValue();
                 if (!caretSelection)
                 {
                     selEnd = startOffsets.get(startOffsets.size() - 1)
-                            .getValue();
+                            .intValue();
                 }
                 else
                 {
@@ -1288,7 +1290,7 @@ class TextEditor implements ITextEditor, SearchListener
 
                 // No match on parts, try to match the replacement text
                 if (!anyPartMatch
-                        && StringUtils.startsWithIgnoreCase(item.getReplacementText(), inputText))
+                        && Strings.CI.startsWith(item.getReplacementText(), inputText))
                 {
                     if (result == null)
                     {

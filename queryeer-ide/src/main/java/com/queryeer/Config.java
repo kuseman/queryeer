@@ -21,7 +21,7 @@ import javax.swing.UIManager;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -352,7 +352,7 @@ class Config implements IConfig
                 continue;
             }
 
-            if (StringUtils.equalsAnyIgnoreCase(extension, ass.extension))
+            if (Strings.CI.equals(extension, ass.extension))
             {
                 return ass.engine;
             }

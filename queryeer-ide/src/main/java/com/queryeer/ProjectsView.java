@@ -60,7 +60,7 @@ import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
@@ -78,7 +78,8 @@ import com.queryeer.api.service.IEventBus;
 class ProjectsView extends JPanel
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectsView.class);
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
+            .daemon(true)
             .namingPattern("ProjectsFileMangagement-%d")
             .build());
     private static final String NAME = "queryeer.projects";
@@ -509,7 +510,7 @@ class ProjectsView extends JPanel
                 int c = af - bf;
                 if (c == 0)
                 {
-                    return StringUtils.compareIgnoreCase(a.getName(), b.getName());
+                    return Strings.CI.compare(a.getName(), b.getName());
                 }
                 return c;
             });
@@ -626,7 +627,7 @@ class ProjectsView extends JPanel
                     {
                         if (e.nextElement() instanceof ProjectFileTreeNode fileTreeNode
                                 && !fileTreeNode.file.isDirectory()
-                                && StringUtils.containsAnyIgnoreCase(fileTreeNode.file.getName(), searchText))
+                                && Strings.CI.contains(fileTreeNode.file.getName(), searchText))
                         {
                             hasMatch = true;
                             break;
@@ -639,7 +640,7 @@ class ProjectsView extends JPanel
                     }
                 }
             }
-            else if (StringUtils.containsAnyIgnoreCase(originalChild.file.getName(), searchText))
+            else if (Strings.CI.contains(originalChild.file.getName(), searchText))
             {
                 ProjectFileTreeNode node = new ProjectFileTreeNode(originalChild.file);
                 node.fileModel = map.get(node.file);
@@ -1008,7 +1009,7 @@ class ProjectsView extends JPanel
                     break;
                 }
 
-                int c = StringUtils.compareIgnoreCase(child.file.getName(), file.getName());
+                int c = Strings.CI.compare(child.file.getName(), file.getName());
 
                 // New node should be placed here
                 if (c > 0)

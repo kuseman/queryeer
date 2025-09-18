@@ -72,7 +72,7 @@ import javax.swing.table.AbstractTableModel;
 
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.BooleanUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.slf4j.Logger;
@@ -352,16 +352,16 @@ class QueryeerView extends JFrame
 
         //@formatter:off
         List<Pair<String, Comparator<QueryFileModel>>> comparators = List.of(
-                Pair.of("Name ASC", (a, b) -> StringUtils.compareIgnoreCase(a.getFile().getName(), b.getFile().getName())),
-                Pair.of("Name DESC", (a, b) -> -StringUtils.compareIgnoreCase(a.getFile().getName(), b.getFile().getName())),
-                Pair.of("Path ASC", (a, b) -> StringUtils.compareIgnoreCase(FilenameUtils.getPath(a.getFile().getAbsolutePath()), FilenameUtils.getPath(b.getFile().getAbsolutePath()))),
-                Pair.of("Path DESC", (a, b) -> -StringUtils.compareIgnoreCase(FilenameUtils.getPath(a.getFile().getAbsolutePath()), FilenameUtils.getPath(b.getFile().getAbsolutePath()))),
+                Pair.of("Name ASC", (a, b) -> Strings.CI.compare(a.getFile().getName(), b.getFile().getName())),
+                Pair.of("Name DESC", (a, b) -> -Strings.CI.compare(a.getFile().getName(), b.getFile().getName())),
+                Pair.of("Path ASC", (a, b) -> Strings.CI.compare(FilenameUtils.getPath(a.getFile().getAbsolutePath()), FilenameUtils.getPath(b.getFile().getAbsolutePath()))),
+                Pair.of("Path DESC", (a, b) -> -Strings.CI.compare(FilenameUtils.getPath(a.getFile().getAbsolutePath()), FilenameUtils.getPath(b.getFile().getAbsolutePath()))),
                 Pair.of("Activity ASC", (a, b) -> -Long.compare(a.getLastActivity(), b.getLastActivity())),
                 Pair.of("Activity DESC", (a, b) -> Long.compare(a.getLastActivity(), b.getLastActivity())),
                 Pair.of("Modification ASC", (a, b) -> -Long.compare(a.getLastModified(), b.getLastModified())),
                 Pair.of("Modification DESC", (a, b) -> Long.compare(a.getLastModified(), b.getLastModified())),
-                Pair.of("Type ASC", (a, b) -> StringUtils.compareIgnoreCase(FilenameUtils.getExtension(a.getFile().getName()), FilenameUtils.getExtension(a.getFile().getName()))),
-                Pair.of("Type DESC", (a, b) -> -StringUtils.compareIgnoreCase(FilenameUtils.getExtension(a.getFile().getName()), FilenameUtils.getExtension(a.getFile().getName())))
+                Pair.of("Type ASC", (a, b) -> Strings.CI.compare(FilenameUtils.getExtension(a.getFile().getName()), FilenameUtils.getExtension(a.getFile().getName()))),
+                Pair.of("Type DESC", (a, b) -> -Strings.CI.compare(FilenameUtils.getExtension(a.getFile().getName()), FilenameUtils.getExtension(a.getFile().getName())))
                 );
         //@formatter:on
 
@@ -1597,10 +1597,10 @@ class QueryeerView extends JFrame
                 }
                 return switch (type)
                 {
-                    case ProjectFile -> StringUtils.containsIgnoreCase(file.getAbsolutePath(), searchText);
-                    case QueryFile -> StringUtils.containsIgnoreCase(queryFile.getFile()
+                    case ProjectFile -> Strings.CI.contains(file.getAbsolutePath(), searchText);
+                    case QueryFile -> Strings.CI.contains(queryFile.getFile()
                             .getAbsolutePath(), searchText);
-                    case RecentFile -> StringUtils.containsIgnoreCase(file.getAbsolutePath(), searchText);
+                    case RecentFile -> Strings.CI.contains(file.getAbsolutePath(), searchText);
                 };
             }
 

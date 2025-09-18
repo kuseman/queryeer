@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -183,7 +183,7 @@ public class ColumnsMergerTest extends Assert
             if (i >= 1
                     && i < model.getColumns()
                             .size()
-                    && !StringUtils.equalsIgnoreCase(columns[i - i], model.getColumns()
+                    && !Strings.CI.equals(columns[i - i], model.getColumns()
                             .get(i)))
             {
                 row.matchesModelColumns = false;

@@ -30,7 +30,7 @@ public class CryptoServiceTest
         @Override
         protected char[] getMasterPassword(String passwordLabel, String title, String message)
         {
-            return password.getValue();
+            return password.get();
         };
 
         @Override
@@ -50,7 +50,7 @@ public class CryptoServiceTest
         // Null master password => null decrypt string
         assertNull(cryptoService.decryptString(CryptoService.PREFIX + "somevalue" + CryptoService.SUFFIX));
 
-        when(password.getValue()).thenReturn("password".toCharArray());
+        when(password.get()).thenReturn("password".toCharArray());
 
         String encrypted = cryptoService.encryptString("value");
 
@@ -68,7 +68,7 @@ public class CryptoServiceTest
         // Null master password => null encrypt string
         assertNull(cryptoService.encryptString("non-encrypted-string"));
 
-        when(password.getValue()).thenReturn("password".toCharArray());
+        when(password.get()).thenReturn("password".toCharArray());
 
         String actual = cryptoService.encryptString("value");
 
@@ -82,13 +82,13 @@ public class CryptoServiceTest
     public void test_changeMasterPassword_success()
     {
         // Set up service
-        when(password.getValue()).thenReturn("dummy".toCharArray());
+        when(password.get()).thenReturn("dummy".toCharArray());
         cryptoService.encryptString("dummy");
 
         Mockito.reset(password);
 
         // New master password
-        when(password.getValue()).thenReturn("new-master".toCharArray());
+        when(password.get()).thenReturn("new-master".toCharArray());
 
         IConfigurable config1 = mock(IConfigurable.class);
 
@@ -112,7 +112,7 @@ public class CryptoServiceTest
         cryptoService.changeMasterPassword(asList(config1, config2));
 
         // Verify that we can decrypt with new master password
-        assertEquals(expected, cryptoService.decryptString(expectedEncrypted.getValue()));
+        assertEquals(expected, cryptoService.decryptString(expectedEncrypted.get()));
     }
 
     @SuppressWarnings("unchecked")
@@ -120,7 +120,7 @@ public class CryptoServiceTest
     public void test_that_master_password_is_changed_even_if_no_configurables_changed()
     {
         // Set up service
-        when(password.getValue()).thenReturn("dummy".toCharArray());
+        when(password.get()).thenReturn("dummy".toCharArray());
         cryptoService.encryptString("dummy");
 
         String oldEncryptedValue = cryptoService.encryptString("message");
@@ -128,7 +128,7 @@ public class CryptoServiceTest
         Mockito.reset(password);
 
         // New master password
-        when(password.getValue()).thenReturn("new-master".toCharArray());
+        when(password.get()).thenReturn("new-master".toCharArray());
 
         IConfigurable config1 = mock(IConfigurable.class);
         when(config1.reEncryptSecrets(Mockito.any(ICryptoService.class))).thenReturn(IConfigurable.EncryptionResult.SUCCESS);
@@ -158,7 +158,7 @@ public class CryptoServiceTest
     public void test_that_master_password_is_NOT_changed_if_one_configurable_aborts()
     {
         // Set up service
-        when(password.getValue()).thenReturn("dummy".toCharArray());
+        when(password.get()).thenReturn("dummy".toCharArray());
         cryptoService.encryptString("dummy");
 
         String oldEncryptedValue = cryptoService.encryptString("message");
@@ -166,7 +166,7 @@ public class CryptoServiceTest
         Mockito.reset(password);
 
         // New master password
-        when(password.getValue()).thenReturn("new-master".toCharArray());
+        when(password.get()).thenReturn("new-master".toCharArray());
 
         IConfigurable config1 = mock(IConfigurable.class);
         when(config1.reEncryptSecrets(Mockito.any(ICryptoService.class))).thenReturn(IConfigurable.EncryptionResult.SUCCESS);
@@ -195,7 +195,7 @@ public class CryptoServiceTest
     public void test_that_master_password_is_NOT_changed_if_one_configurable_throws()
     {
         // Set up service
-        when(password.getValue()).thenReturn("dummy".toCharArray());
+        when(password.get()).thenReturn("dummy".toCharArray());
         cryptoService.encryptString("dummy");
 
         String oldEncryptedValue = cryptoService.encryptString("message");
@@ -203,7 +203,7 @@ public class CryptoServiceTest
         Mockito.reset(password);
 
         // New master password
-        when(password.getValue()).thenReturn("new-master".toCharArray());
+        when(password.get()).thenReturn("new-master".toCharArray());
 
         IConfigurable config1 = mock(IConfigurable.class);
         when(config1.reEncryptSecrets(Mockito.any(ICryptoService.class))).thenReturn(IConfigurable.EncryptionResult.SUCCESS);
