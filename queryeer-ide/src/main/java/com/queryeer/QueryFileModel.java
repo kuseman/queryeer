@@ -479,7 +479,8 @@ class QueryFileModel implements IQueryFile
     /**
      * Executor for query file dispose. This can be time consuming if connections etc. are slow to close. NOTE! Non daemon to let all dispose calls finish
      */
-    static final ExecutorService DISPOSE_EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(false)
+    static final ExecutorService DISPOSE_EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
+            .daemon(false)
             .namingPattern("QueryFileDisposer#%d")
             .build());
 

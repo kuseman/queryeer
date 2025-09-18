@@ -37,6 +37,7 @@ import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -213,7 +214,7 @@ class PLBDocumentParser implements ITextEditorDocumentParser
                         noticeText = "Always false";
                     }
                     // Same expression on both sides
-                    else if (StringUtils.equalsAnyIgnoreCase(left, right))
+                    else if (Strings.CI.equals(left, right))
                     {
                         noticeText = "Same expression on both sides";
                     }
@@ -341,7 +342,7 @@ class PLBDocumentParser implements ITextEditorDocumentParser
                         }
 
                         String name = PayloadBuilderQueryLexer.VOCABULARY.getSymbolicName(e.getKey());
-                        if (StringUtils.startsWithIgnoreCase(name, textToMatch))
+                        if (Strings.CI.startsWith(name, textToMatch))
                         {
                             // Put all keyword suggestions on top
                             result.add(new CompletionItem(name.toLowerCase(), Integer.MAX_VALUE));

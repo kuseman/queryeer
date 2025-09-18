@@ -20,6 +20,7 @@ import javax.swing.event.TableModelListener;
 import javax.swing.table.TableModel;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 
 import com.queryeer.output.table.TableOutputWriter.RowList;
 
@@ -92,7 +93,7 @@ class Model implements TableModel
             int size = columns.size();
             for (int i = 0; i < size; i++)
             {
-                if (StringUtils.startsWithIgnoreCase(columns.get(i), IMAGE_PREFIX))
+                if (Strings.CI.startsWith(columns.get(i), IMAGE_PREFIX))
                 {
                     imageColumnIndices.add(i);
                 }

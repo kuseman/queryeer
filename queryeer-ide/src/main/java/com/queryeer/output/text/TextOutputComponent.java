@@ -46,7 +46,8 @@ import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 /** Text output component */
 class TextOutputComponent extends JScrollPane implements ITextOutputComponent
 {
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
+            .daemon(true)
             .namingPattern("TextOutputComponentAppender-%d")
             .build());
     private static final String WARNING_LOCATION = "warningLocation";

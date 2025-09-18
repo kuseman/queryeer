@@ -54,7 +54,7 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TableModelEvent;
 
 import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.fife.rsta.ui.search.FindDialog;
 import org.fife.rsta.ui.search.SearchEvent;
 import org.fife.rsta.ui.search.SearchListener;
@@ -397,7 +397,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             return value.contains(context.getSearchFor());
         }
 
-        return StringUtils.containsIgnoreCase(value, context.getSearchFor());
+        return Strings.CI.contains(value, context.getSearchFor());
     }
 
     private ITableContextMenuAction getAction(Object value)
@@ -624,7 +624,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                                 {
                                     return entry.getValue(col) == null;
                                 }
-                                return StringUtils.equalsIgnoreCase(entry.getStringValue(col), String.valueOf(value));
+                                return Strings.CI.equals(entry.getStringValue(col), String.valueOf(value));
                             }
                         };
                         ((DefaultRowSorter<Model, Integer>) table.getRowSorter()).setRowFilter(rowFilter);
@@ -646,7 +646,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                                 {
                                     return entry.getValue(col) != null;
                                 }
-                                return !StringUtils.equalsIgnoreCase(entry.getStringValue(col), String.valueOf(value));
+                                return !Strings.CI.equals(entry.getStringValue(col), String.valueOf(value));
                             }
                         };
                         ((DefaultRowSorter<Model, Integer>) table.getRowSorter()).setRowFilter(rowFilter);

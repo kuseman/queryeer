@@ -25,6 +25,7 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,7 +73,7 @@ class PluginHandler
                 throw new IllegalArgumentException("Plugins directory: " + pluginsDir + " does not exists");
             }
             File[] result = pluginsDir.listFiles(f -> f.isDirectory()
-                    || StringUtils.endsWithIgnoreCase(f.getName(), ".zip"));
+                    || Strings.CI.endsWith(f.getName(), ".zip"));
             // Sort folders to get the newest version first in case of double versions
             Arrays.sort(result, (a, b) -> Utils.compareVersions(a.getName(), b.getName()));
             return result;
@@ -139,7 +140,7 @@ class PluginHandler
         }
 
         // A zipped plugin distribution
-        if (StringUtils.endsWithIgnoreCase(dir.getAbsolutePath(), "zip"))
+        if (Strings.CI.endsWith(dir.getAbsolutePath(), "zip"))
         {
             return new ZIPClassLoader(dir.getAbsolutePath(), coreClassLoader, parent);
         }

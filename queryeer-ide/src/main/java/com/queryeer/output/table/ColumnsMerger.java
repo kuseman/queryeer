@@ -3,7 +3,7 @@ package com.queryeer.output.table;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 
 import com.queryeer.output.table.TableOutputWriter.RowList;
 
@@ -37,7 +37,7 @@ class ColumnsMerger
                 {
                     break;
                 }
-                else if (StringUtils.equalsIgnoreCase(listColumn, modelColumn))
+                else if (Strings.CI.equals(listColumn, modelColumn))
                 {
                     continue;
                 }

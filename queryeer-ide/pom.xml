@@ -23,7 +23,7 @@
         <jasypt.version>1.9.3</jasypt.version>
         <jfreechart.version>1.5.5</jfreechart.version>
         <freemarker.version> 2.3.32</freemarker.version>
-        <commons-lang3.version>3.14.0</commons-lang3.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
         <jgraphx.version> 3.4.1.3</jgraphx.version>
         <l2fprod-properties-editor.version>1.3.0</l2fprod-properties-editor.version>
         <flatlaf.version>3.5.4</flatlaf.version>

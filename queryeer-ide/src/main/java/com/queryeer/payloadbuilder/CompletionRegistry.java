@@ -4,7 +4,6 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
-import static org.apache.commons.lang3.StringUtils.equalsIgnoreCase;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.event.ActionEvent;
@@ -20,7 +19,7 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
@@ -183,7 +182,7 @@ class CompletionRegistry
                 // Filter out non interesting catalogs
                 if (!isBlank(e.getValue()
                         .catalogAlias())
-                        && !equalsIgnoreCase(pair.getKey(), e.getValue()
+                        && !Strings.CI.equals(pair.getKey(), e.getValue()
                                 .catalogAlias()))
                 {
                     continue;
@@ -416,7 +415,7 @@ class CompletionRegistry
             String otherPart = other.getParts()
                     .get(otherIndex);
 
-            if (!StringUtils.equalsIgnoreCase(namePart, otherPart))
+            if (!Strings.CI.equals(namePart, otherPart))
             {
                 return false;
             }

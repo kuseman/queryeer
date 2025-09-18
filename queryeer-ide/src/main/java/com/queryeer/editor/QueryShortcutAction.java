@@ -9,7 +9,7 @@ import java.util.Objects;
 import javax.swing.AbstractAction;
 
 import org.apache.commons.lang3.ObjectUtils;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
@@ -66,7 +66,7 @@ class QueryShortcutAction extends AbstractAction
             for (TextEditorQueryShortcutOverride override : shortcut.getOverrides())
             {
                 if (isBlank(override.getQueryEngineClassName())
-                        || !StringUtils.equalsIgnoreCase(queryEngineClass, override.getQueryEngineClassName()))
+                        || !Strings.CI.equals(queryEngineClass, override.getQueryEngineClassName()))
                 {
                     continue;
                 }
@@ -74,14 +74,14 @@ class QueryShortcutAction extends AbstractAction
                 if (rule == null)
                 {
                     queryTemplate = override.getQuery();
-                    output = ObjectUtils.defaultIfNull(override.getOutput(), output);
+                    output = ObjectUtils.getIfNull(override.getOutput(), output);
                 }
                 else
                 {
                     if (expressionEvaluator.evaluatePredicate(rule, engineState.getMetaParameters(false)))
                     {
                         queryTemplate = override.getQuery();
-                        output = ObjectUtils.defaultIfNull(override.getOutput(), output);
+                        output = ObjectUtils.getIfNull(override.getOutput(), output);
                         break;
                     }
 
@@ -94,7 +94,7 @@ class QueryShortcutAction extends AbstractAction
             return;
         }
 
-        output = ObjectUtils.defaultIfNull(output, OutputType.TABLE);
+        output = ObjectUtils.getIfNull(output, OutputType.TABLE);
 
         // Template has a placeholder but there is no selected text, drop out
         if (isBlank(selectedText)

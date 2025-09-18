@@ -13,7 +13,7 @@ import java.util.Map;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 
 import com.queryeer.Constants;
@@ -216,8 +216,8 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         {
             if (value instanceof String str)
             {
-                return StringUtils.startsWithIgnoreCase(str, "http://")
-                        || StringUtils.startsWithIgnoreCase(str, "https://");
+                return Strings.CI.startsWith(str, "http://")
+                        || Strings.CI.startsWith(str, "https://");
             }
             else if (value instanceof QueryeerImage)
             {

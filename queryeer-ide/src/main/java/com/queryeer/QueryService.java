@@ -22,7 +22,8 @@ import se.kuseman.payloadbuilder.api.OutputWriter;
 class QueryService
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(QueryService.class);
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(new BasicThreadFactory.Builder().daemon(true)
+    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
+            .daemon(true)
             .namingPattern("QueryExecutor-#%d")
             .build());
 
