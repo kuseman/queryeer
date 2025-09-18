@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
@@ -279,6 +280,17 @@ class SqlServerDatabase implements JdbcDatabase
                     && connectionState.isIncludeQueryPlan() ? "ON"
                             : "OFF"));
         }
+    }
+
+    @Override
+    public Object getJdbcValue(ResultSet rs, int ordinal, int jdbcType) throws Exception
+    {
+        // Special handling for MSSQL DateTimeOffset type
+        if (jdbcType == microsoft.sql.Types.DATETIMEOFFSET)
+        {
+            return rs.getObject(ordinal, OffsetDateTime.class);
+        }
+        return JdbcDatabase.super.getJdbcValue(rs, ordinal, jdbcType);
     }
 
     @Override

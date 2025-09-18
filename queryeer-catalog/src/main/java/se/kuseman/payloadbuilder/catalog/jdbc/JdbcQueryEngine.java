@@ -6,7 +6,6 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Component;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -377,12 +376,14 @@ class JdbcQueryEngine implements IQueryEngine
         }
     }
 
-    private int writeResultSet(IQueryFile queryFile, Connection connection, JdbcEngineState engineState, ConnectionState state, ResultSet rs, OutputWriter writer) throws SQLException, IOException
+    private int writeResultSet(IQueryFile queryFile, Connection connection, JdbcEngineState engineState, ConnectionState state, ResultSet rs, OutputWriter writer) throws Exception
     {
         int rowCount = 0;
         Pair<int[], String[]> pair = getColumnsMeta(rs);
         int[] sqlTypes = pair.getKey();
         String[] columns = pair.getValue();
+
+        JdbcDatabase jdbcDatabase = state.getJdbcDatabase();
 
         if (writer instanceof QueryeerOutputWriter qwriter)
         {
@@ -414,8 +415,7 @@ class JdbcQueryEngine implements IQueryEngine
 
             if (first)
             {
-                if (!state.getJdbcDatabase()
-                        .processResultSet(queryFile, engineState, rs))
+                if (!jdbcDatabase.processResultSet(queryFile, engineState, rs))
                 {
                     LOGGER.debug("Aborting query due to JdbcDatabase#processResultSet returned false");
                     return 0;
@@ -429,7 +429,7 @@ class JdbcQueryEngine implements IQueryEngine
             for (int i = 0; i < count; i++)
             {
                 writer.writeFieldName(columns[i]);
-                writer.writeValue(JdbcUtils.getAndConvertValue(rs, i + 1, sqlTypes[i]));
+                writer.writeValue(jdbcDatabase.getJdbcValue(rs, i + 1, sqlTypes[i]));
             }
             writer.endObject();
 
