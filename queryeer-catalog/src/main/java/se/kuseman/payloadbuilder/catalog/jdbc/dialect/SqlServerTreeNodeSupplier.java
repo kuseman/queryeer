@@ -16,7 +16,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.SqlConnectionSupplier;
 /** Tree node supplier for Microsoft SQL Server. Adds some new nodes and context actions etc. */
 class SqlServerTreeNodeSupplier extends JdbcTreeNodeSupplier
 {
-    SqlServerTreeNodeSupplier(JdbcDatabase queryeerDatabase, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
+    SqlServerTreeNodeSupplier(JdbcDialect queryeerDatabase, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
             ITreeConfig treeConfig)
     {
         super(queryeerDatabase, icons, eventBus, queryActionsConfigurable, templateService, treeConfig);

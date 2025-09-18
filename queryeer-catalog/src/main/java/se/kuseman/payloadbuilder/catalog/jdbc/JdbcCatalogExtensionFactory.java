@@ -10,7 +10,7 @@ import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionFactory;
 import com.queryeer.api.service.IQueryFileProvider;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 
 /** Factory for {@link JdbcCatalogExtension}. */
 class JdbcCatalogExtensionFactory implements ICatalogExtensionFactory
@@ -19,7 +19,7 @@ class JdbcCatalogExtensionFactory implements ICatalogExtensionFactory
     private final IQueryFileProvider queryFileProvider;
     private final Icons icons;
     private final CatalogCrawlService crawlService;
-    private final DatabaseProvider databaseProvider;
+    private final DialectProvider dialectProvider;
 
     static
     {
@@ -40,19 +40,19 @@ class JdbcCatalogExtensionFactory implements ICatalogExtensionFactory
         }
     }
 
-    public JdbcCatalogExtensionFactory(IQueryFileProvider queryFileProvider, JdbcConnectionsModel connectionsModel, Icons icons, CatalogCrawlService crawlService, DatabaseProvider databaseProvider)
+    public JdbcCatalogExtensionFactory(IQueryFileProvider queryFileProvider, JdbcConnectionsModel connectionsModel, Icons icons, CatalogCrawlService crawlService, DialectProvider dialectProvider)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.icons = requireNonNull(icons, "icons");
         this.crawlService = requireNonNull(crawlService, "crawlService");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
     }
 
     @Override
     public ICatalogExtension create(String catalogAlias)
     {
-        return new JdbcCatalogExtension(connectionsModel, queryFileProvider, crawlService, icons, databaseProvider, catalogAlias);
+        return new JdbcCatalogExtension(connectionsModel, queryFileProvider, crawlService, icons, dialectProvider, catalogAlias);
     }
 
     @Override

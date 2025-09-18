@@ -27,11 +27,11 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 
-/** Base database when database type is unkown */
-class BaseDatabase implements JdbcDatabase
+/** Base dialect when database type is unkown */
+class BaseDialect implements JdbcDialect
 {
     private static final String[] TABLE_TYPES = new String[] { "TABLE", "VIEW", "SYNONYM" };
-    private static final Logger LOGGER = LoggerFactory.getLogger(BaseDatabase.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseDialect.class);
     static final String NAME = "jdbc";
     private final TreeNodeSupplier treeNodeSupplier;
     private final IEventBus eventBus;
@@ -39,7 +39,7 @@ class BaseDatabase implements JdbcDatabase
     private final CatalogCrawlService crawlService;
     private final ITemplateService templateService;
 
-    BaseDatabase(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
+    BaseDialect(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
         this.treeNodeSupplier = new JdbcTreeNodeSupplier(this, icons, eventBus, queryActionsConfigurable, templateService, treeConfig);
         this.crawlService = crawlService;

@@ -14,13 +14,13 @@ import com.queryeer.api.service.ITemplateService;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 
-/** Database support for Oracle */
-class OracleDatabase extends BaseDatabase implements JdbcDatabase
+/** Dialect support for Oracle */
+class OracleDialect extends BaseDialect implements JdbcDialect
 {
     static final String NAME = "oracle";
-    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerDatabase.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OracleDialect.class);
 
-    OracleDatabase(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
+    OracleDialect(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
         super(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
     }

@@ -15,8 +15,8 @@ import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 
-/** Definition of a JDBC database. This is the glue that is missing from plain JDBC to do quirks and specials for different RDBMS:es */
-public interface JdbcDatabase
+/** Definition of a JDBC dialect. This is the glue that is missing from plain JDBC to do quirks and specials for different RDBMS:es */
+public interface JdbcDialect
 {
     /** Name of this database. Used in configurations etc. */
     String name();
@@ -88,7 +88,7 @@ public interface JdbcDatabase
         return null;
     }
 
-    /** Called before query execution to let jdbcdatabases perform init. operations like include query plans etc. */
+    /** Called before query execution to let dialect perform init. operations like include query plans etc. */
     default void beforeExecuteQuery(Connection connection, IConnectionState state) throws SQLException
     {
         return;

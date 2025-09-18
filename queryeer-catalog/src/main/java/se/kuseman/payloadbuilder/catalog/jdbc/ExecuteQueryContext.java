@@ -5,13 +5,13 @@ import static java.util.Objects.requireNonNull;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Context when executing queries internally */
 public class ExecuteQueryContext
 {
     private final JdbcConnection jdbcConnection;
-    private final JdbcDatabase jdbcDatabase;
+    private final JdbcDialect jdbcDialect;
     private final String database;
     private final String query;
 
@@ -19,16 +19,16 @@ public class ExecuteQueryContext
     public ExecuteQueryContext(String query)
     {
         this.jdbcConnection = null;
-        this.jdbcDatabase = null;
+        this.jdbcDialect = null;
         this.database = null;
         this.query = query;
     }
 
     /** Context used when a query should be executed for a new connection/database/query combination */
-    public ExecuteQueryContext(JdbcConnection jdbcConnection, JdbcDatabase jdbcDatabase, String database, String query)
+    public ExecuteQueryContext(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect, String database, String query)
     {
         this.jdbcConnection = requireNonNull(jdbcConnection);
-        this.jdbcDatabase = requireNonNull(jdbcDatabase);
+        this.jdbcDialect = requireNonNull(jdbcDialect);
         this.database = requireNonNull(database);
         this.query = requireNonNull(query);
     }
@@ -38,9 +38,9 @@ public class ExecuteQueryContext
         return jdbcConnection;
     }
 
-    JdbcDatabase getJdbcDatabase()
+    JdbcDialect getJdbcDialect()
     {
-        return jdbcDatabase;
+        return jdbcDialect;
     }
 
     String getDatabase()

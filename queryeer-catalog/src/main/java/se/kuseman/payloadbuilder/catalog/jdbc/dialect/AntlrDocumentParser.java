@@ -455,7 +455,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
             // ""),
             // "name", Objects.toString(procedureFunction.getValue()
             // .getName(), ""));
-            // queryActions = queryActionsConfigurable.getQueryActions(jdbcDatabase, ActionTarget.TEXT_EDITOR)
+            // queryActions = queryActionsConfigurable.getQueryActions(jdbcDialect, ActionTarget.TEXT_EDITOR)
             // .stream()
             // .filter(qa -> qa.containsUserDefinedFunctionProcedure());
             // }

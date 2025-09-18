@@ -10,8 +10,8 @@ import java.util.List;
 import com.queryeer.api.extensions.payloadbuilder.ICompletionProvider;
 
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 
 /** Completion provider for JDBC payloadbuilder */
@@ -19,13 +19,13 @@ class JdbcCompletionProvider implements ICompletionProvider
 {
     private final JdbcConnectionsModel model;
     private final CatalogCrawlService crawlService;
-    private final DatabaseProvider databaseProvider;
+    private final DialectProvider dialectProvider;
 
-    JdbcCompletionProvider(JdbcConnectionsModel model, CatalogCrawlService crawlService, DatabaseProvider databaseProvider)
+    JdbcCompletionProvider(JdbcConnectionsModel model, CatalogCrawlService crawlService, DialectProvider dialectProvider)
     {
         this.model = requireNonNull(model, "model");
         this.crawlService = requireNonNull(crawlService, "crawlService");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
     }
 
     @Override
@@ -55,7 +55,7 @@ class JdbcCompletionProvider implements ICompletionProvider
     public List<TableMeta> getTableCompletionMeta(IQuerySession querySession, String catalogAlias)
     {
         JdbcConnection jdbcConnection = model.findConnection(querySession, catalogAlias);
-        JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(jdbcConnection.getJdbcURL());
+        JdbcDialect jdbcDialect = dialectProvider.getDialect(jdbcConnection.getJdbcURL());
 
         String database = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
@@ -63,9 +63,9 @@ class JdbcCompletionProvider implements ICompletionProvider
         IConnectionState state = new IConnectionState()
         {
             @Override
-            public JdbcDatabase getJdbcDatabase()
+            public JdbcDialect getJdbcDialect()
             {
-                return jdbcDatabase;
+                return jdbcDialect;
             }
 
             @Override

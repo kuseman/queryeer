@@ -27,8 +27,8 @@ import com.queryeer.api.utils.CredentialUtils.Credentials;
 import com.queryeer.api.utils.CredentialUtils.ValidationHandler;
 
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDatabase;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /**
  * Model for {@link JdbcCatalogExtension}'s connections
@@ -46,13 +46,13 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
     private final List<JButton> reloadButtons = new ArrayList<>();
     private final ICryptoService cryptoService;
     private final IQueryFileProvider queryFileProvider;
-    private final DatabaseProvider databaseProvider;
+    private final DialectProvider dialectProvider;
 
-    JdbcConnectionsModel(ICryptoService cryptoService, IQueryFileProvider queryFileProvider, DatabaseProvider databaseProvider)
+    JdbcConnectionsModel(ICryptoService cryptoService, IQueryFileProvider queryFileProvider, DialectProvider dialectProvider)
     {
         this.cryptoService = requireNonNull(cryptoService, "cryptoService");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
-        this.databaseProvider = requireNonNull(databaseProvider, "databaseProvider");
+        this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
         if (instance != null)
         {
             throw new IllegalArgumentException("JdbcConnectionsModel should only be instantiated once");
@@ -268,12 +268,12 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 
     java.sql.Connection createConnection(JdbcConnection connection) throws SQLException
     {
-        JdbcDatabase jdbcDatabase = databaseProvider.getDatabase(connection.getJdbcURL());
+        JdbcDialect jdbcDialect = dialectProvider.getDialect(connection.getJdbcURL());
         try
         {
             String password = connection.getRuntimePassword() != null ? new String(connection.getRuntimePassword())
                     : "";
-            return jdbcDatabase.createConnection(connection.getJdbcURL(), connection.getUsername(), password);
+            return jdbcDialect.createConnection(connection.getJdbcURL(), connection.getUsername(), password);
         }
         catch (Exception e)
         {
@@ -315,12 +315,12 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 
             String password = runtimePassword == null ? ""
                     : new String(runtimePassword);
-            JdbcDatabase database = databaseProvider.getDatabase(connection.getJdbcURL());
+            JdbcDialect dialect = dialectProvider.getDialect(connection.getJdbcURL());
             setEnableRealod(false);
-            try (java.sql.Connection sqlConnection = database.createConnection(connection.getJdbcURL(), connection.getUsername(), password))
+            try (java.sql.Connection sqlConnection = dialect.createConnection(connection.getJdbcURL(), connection.getUsername(), password))
             {
                 List<String> loadedDatabases = new ArrayList<>();
-                if (database.usesSchemaAsDatabase())
+                if (dialect.usesSchemaAsDatabase())
                 {
                     try (ResultSet rs = sqlConnection.getMetaData()
                             .getSchemas())

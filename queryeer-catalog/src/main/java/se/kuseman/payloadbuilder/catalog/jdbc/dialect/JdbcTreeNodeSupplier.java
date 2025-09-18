@@ -34,7 +34,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.ExecuteQueryContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnection;
 import se.kuseman.payloadbuilder.catalog.jdbc.SqlConnectionSupplier;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.BaseDatabase.ResultSetConsumer;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.BaseDialect.ResultSetConsumer;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionTarget;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.QueryActionResult;
@@ -45,18 +45,18 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectType;
  */
 class JdbcTreeNodeSupplier implements TreeNodeSupplier
 {
-    protected final JdbcDatabase jdbcDatabase;
+    protected final JdbcDialect jdbcDialect;
     protected final IEventBus eventBus;
     protected final QueryActionsConfigurable queryActionsConfigurable;
     protected final Icons icons;
     protected final ITemplateService templateService;
     private ITreeConfig treeConfig;
 
-    JdbcTreeNodeSupplier(JdbcDatabase jdbcDatabase, Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
+    JdbcTreeNodeSupplier(JdbcDialect jdbcDialect, Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
         this.icons = icons;
         this.eventBus = requireNonNull(eventBus, "eventBus");
-        this.jdbcDatabase = requireNonNull(jdbcDatabase);
+        this.jdbcDialect = requireNonNull(jdbcDialect);
         this.queryActionsConfigurable = requireNonNull(queryActionsConfigurable, "queryActionsConfigurable");
         this.templateService = requireNonNull(templateService, "templateService");
         this.treeConfig = requireNonNull(treeConfig, "treeConfig");
@@ -139,7 +139,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
 
     protected ResultSet getTablesResultSet(Connection connection, String database) throws SQLException
     {
-        boolean usesSchema = jdbcDatabase.usesSchemaAsDatabase();
+        boolean usesSchema = jdbcDialect.usesSchemaAsDatabase();
         return connection.getMetaData()
                 .getTables(usesSchema ? null
                         : database,
@@ -150,7 +150,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
 
     protected ResultSet getViewsResultSet(Connection connection, String database) throws SQLException
     {
-        boolean usesSchema = jdbcDatabase.usesSchemaAsDatabase();
+        boolean usesSchema = jdbcDialect.usesSchemaAsDatabase();
         return connection.getMetaData()
                 .getTables(usesSchema ? null
                         : database,
@@ -161,7 +161,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
 
     protected ResultSet getSynonymsResultSet(Connection connection, String database) throws SQLException
     {
-        boolean usesSchema = jdbcDatabase.usesSchemaAsDatabase();
+        boolean usesSchema = jdbcDialect.usesSchemaAsDatabase();
         return connection.getMetaData()
                 .getTables(usesSchema ? null
                         : database,
@@ -172,7 +172,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
 
     protected ResultSet getProceduresResultSet(Connection connection, String database) throws SQLException
     {
-        boolean usesSchema = jdbcDatabase.usesSchemaAsDatabase();
+        boolean usesSchema = jdbcDialect.usesSchemaAsDatabase();
         return connection.getMetaData()
                 .getProcedures(usesSchema ? null
                         : database,
@@ -183,7 +183,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
 
     protected ResultSet getFunctionsResultSet(Connection connection, String database) throws SQLException
     {
-        boolean usesSchema = jdbcDatabase.usesSchemaAsDatabase();
+        boolean usesSchema = jdbcDialect.usesSchemaAsDatabase();
         return connection.getMetaData()
                 .getFunctions(usesSchema ? null
                         : database,
@@ -372,7 +372,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
                 public void actionPerformed(ActionEvent e)
                 {
                     eventBus.publish(
-                            new ExecuteQueryEvent(queryAction.output(), new ExecuteQueryContext(jdbcConnection, jdbcDatabase, database, templateService.process(queryAction.title(), query, model))));
+                            new ExecuteQueryEvent(queryAction.output(), new ExecuteQueryContext(jdbcConnection, jdbcDialect, database, templateService.process(queryAction.title(), query, model))));
                 }
             };
         }
@@ -453,7 +453,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
         String schem = rs.getString("TABLE_SCHEM");
         String name = rs.getString("TABLE_NAME");
 
-        String title = (jdbcDatabase.usesSchemaAsDatabase() ? (!isBlank(schem) ? (schem + ".")
+        String title = (jdbcDialect.usesSchemaAsDatabase() ? (!isBlank(schem) ? (schem + ".")
                 : "")
                 : (!isBlank(cat) ? (cat + ".")
                         : ""))
@@ -471,24 +471,6 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     {
         return emptyList();
     }
-
-    // protected List<Action> getTableLinkActions(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database) throws SQLException
-    // {
-    // String tableName = getTableName(rs);
-    // return asList(new AbstractAction("Top 500")
-    // {
-    // @Override
-    // public void actionPerformed(ActionEvent e)
-    // {
-    // eventBus.publish(new ExecuteQueryEvent(ITableOutputComponent.class, new ExecuteQueryContext(jdbcConnection, jdbcDatabase, database, jdbcDatabase.getTopXQuery(500, tableName))));
-    // }
-    // });
-    // }
-
-    // protected List<Action> getTableContextMenuActions(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database)
-    // {
-    // return emptyList();
-    // }
 
     /** Builds nodes below a 'Table' node */
     protected List<RegularNode> buildTableChildNodes(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, String database, ObjectName tableName)
@@ -788,24 +770,6 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
         return emptyList();
     }
 
-    // protected List<Action> getSynonymLinkActions(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database) throws SQLException
-    // {
-    // String getSynonymName = getSynonymName(rs);
-    // return asList(new AbstractAction("Top 500")
-    // {
-    // @Override
-    // public void actionPerformed(ActionEvent e)
-    // {
-    // eventBus.publish(new ExecuteQueryEvent(ITableOutputComponent.class, new ExecuteQueryContext(jdbcConnection, jdbcDatabase, database, jdbcDatabase.getTopXQuery(500, getSynonymName))));
-    // }
-    // });
-    // }
-    //
-    // protected List<Action> getSynonymContextMenuActions(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, ResultSet rs, String database) throws SQLException
-    // {
-    // return emptyList();
-    // }
-
     protected List<RegularNode> buildTriggerChildNodes(JdbcConnection jdbcConnection, SqlConnectionSupplier sqlConnectionSupplier, String database, String trigger)
     {
         return emptyList();
@@ -857,7 +821,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
         String schem = rs.getString("PROCEDURE_SCHEM");
         String name = rs.getString("PROCEDURE_NAME");
 
-        String title = (jdbcDatabase.usesSchemaAsDatabase() ? (!isBlank(schem) ? (schem + ".")
+        String title = (jdbcDialect.usesSchemaAsDatabase() ? (!isBlank(schem) ? (schem + ".")
                 : "")
                 : (!isBlank(cat) ? (cat + ".")
                         : ""))
@@ -922,7 +886,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
         String schem = rs.getString("FUNCTION_SCHEM");
         String name = rs.getString("FUNCTION_NAME");
 
-        String title = (jdbcDatabase.usesSchemaAsDatabase() ? (!isBlank(schem) ? (schem + ".")
+        String title = (jdbcDialect.usesSchemaAsDatabase() ? (!isBlank(schem) ? (schem + ".")
                 : "")
                 : (!isBlank(cat) ? (cat + ".")
                         : ""))

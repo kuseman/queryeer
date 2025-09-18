@@ -41,7 +41,7 @@ import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.CredentialsException;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DatabaseProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 
 /** Queryeer extension for {@link JdbcCatalog}. */
 class JdbcCatalogExtension implements ICatalogExtension
@@ -54,11 +54,11 @@ class JdbcCatalogExtension implements ICatalogExtension
     private final Icons icons;
     private PropertiesComponent propertiesComponent;
 
-    JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, CatalogCrawlService crawlService, Icons icons, DatabaseProvider databaseProvider,
+    JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, CatalogCrawlService crawlService, Icons icons, DialectProvider dialectProvider,
             String catalogAlias)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
-        this.completionProvider = new JdbcCompletionProvider(connectionsModel, requireNonNull(crawlService, "crawlService"), requireNonNull(databaseProvider, "databaseProvider"));
+        this.completionProvider = new JdbcCompletionProvider(connectionsModel, requireNonNull(crawlService, "crawlService"), requireNonNull(dialectProvider, "dialectProvider"));
         this.icons = requireNonNull(icons, "icons");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
         this.catalogAlias = catalogAlias;

@@ -67,7 +67,7 @@ public class CatalogCrawlService
                 {
                     try
                     {
-                        entry.catalog = connectionState.getJdbcDatabase()
+                        entry.catalog = connectionState.getJdbcDialect()
                                 .getCatalog(connectionState, database);
                         entry.expireTime = System.currentTimeMillis() + Duration.ofMinutes(10)
                                 .toMillis();
