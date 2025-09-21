@@ -12,18 +12,18 @@ import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 
 /** Provider for returning a {@link JdbcDialect} */
 @Inject
-public class DialectProvider
+public class JdbcDialectProvider
 {
-    private final SqlServerDialect sqlServer;
-    private final OracleDialect oracle;
+    private final SqlServerJdbcDialect sqlServer;
+    private final OracleJdbcDialect oracle;
     private final BaseDialect jdbc;
 
-    public DialectProvider(CatalogCrawlService crawlService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
+    public JdbcDialectProvider(CatalogCrawlService crawlService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
             IQueryPlanOutputExtension queryPlanOutputExtension, ITreeConfig treeConfig)
     {
-        sqlServer = new SqlServerDialect(crawlService, eventBus, icons, queryActionsConfigurable, templateService, queryPlanOutputExtension, treeConfig);
+        sqlServer = new SqlServerJdbcDialect(crawlService, eventBus, icons, queryActionsConfigurable, templateService, queryPlanOutputExtension, treeConfig);
         jdbc = new BaseDialect(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
-        oracle = new OracleDialect(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
+        oracle = new OracleJdbcDialect(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
     }
 
     /** Return a {@link JdbcDialect} from provided {@link SqlDialect} */

@@ -42,7 +42,7 @@ class ConnectionState implements Closeable
     {
         String password = jdbcConnection.getRuntimePassword() != null ? new String(jdbcConnection.getRuntimePassword())
                 : "";
-        return jdbcDialect.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password);
+        return jdbcDialect.createConnection(jdbcConnection.getJdbcURL(), jdbcConnection.getUsername(), password, false);
     }
 
     /**

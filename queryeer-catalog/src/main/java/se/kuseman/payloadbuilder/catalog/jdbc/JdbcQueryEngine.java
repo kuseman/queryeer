@@ -40,12 +40,13 @@ import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.IPayloadbuilderService;
 import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.api.utils.MapUtils;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /** JdbcQuery engine */
 class JdbcQueryEngine implements IQueryEngine
@@ -65,9 +66,10 @@ class JdbcQueryEngine implements IQueryEngine
     private final IEditorFactory editorFactory;
     private final DatasourcesQuickSearchModel datasourcesQuickSearchModel;
     private final IQueryFileProvider queryFileProvider;
-    private final DialectProvider dialectProvider;
+    private final JdbcDialectProvider dialectProvider;
     private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
     private JdbcEngineQuickPropertiesComponent quickProperties;
+    private IPayloadbuilderService payloadbuilderService;
 
     //@formatter:off
     JdbcQueryEngine(
@@ -75,11 +77,12 @@ class JdbcQueryEngine implements IQueryEngine
             IQueryFileProvider queryFileProvider,
             Icons icons,
             JdbcConnectionsModel connectionsModel,
-            DialectProvider dialectProvider,
+            JdbcDialectProvider dialectProvider,
             IEventBus eventBus,
             IEditorFactory editorFactory,
             DatasourcesQuickSearchModel datasourcesQuickSearchModel,
-            JdbcConnectionsTreeConfigurable connectionsTreeConfigurable)
+            JdbcConnectionsTreeConfigurable connectionsTreeConfigurable,
+            IPayloadbuilderService payloadbuilderService)
     {
         //@formatter:on
         this.crawlService = requireNonNull(crawlService, "crawlService");
@@ -91,6 +94,7 @@ class JdbcQueryEngine implements IQueryEngine
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
         this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
         this.connectionsTreeConfigurable = requireNonNull(connectionsTreeConfigurable, "connectionsTreeConfigurable");
+        this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
     }
 
     @Override
@@ -107,7 +111,8 @@ class JdbcQueryEngine implements IQueryEngine
                     eventBus,
                     dialectProvider,
                     crawlService,
-                    connectionsTreeConfigurable);
+                    connectionsTreeConfigurable,
+                    payloadbuilderService);
             //@formatter:on
         }
         return quickProperties;

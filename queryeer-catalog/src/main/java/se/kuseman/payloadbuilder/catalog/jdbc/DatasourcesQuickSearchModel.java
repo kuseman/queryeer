@@ -22,8 +22,8 @@ import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.IQueryFileProvider;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /** Model for handling quick search of datasources. */
 @Inject
@@ -33,11 +33,11 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
     private static final Logger LOGGER = LoggerFactory.getLogger(DatasourcesQuickSearchModel.class);
     private final JdbcConnectionsModel connectionsModel;
     private final IQueryFileProvider queryFileProvider;
-    private final DialectProvider dialectProvider;
+    private final JdbcDialectProvider dialectProvider;
     private final Map<JdbcConnection, JdbcConnectionLoadInfo> infoMap = new WeakHashMap<>();
     private final Icons icons;
 
-    DatasourcesQuickSearchModel(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, DialectProvider dialectProvider, Icons icons)
+    DatasourcesQuickSearchModel(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, JdbcDialectProvider dialectProvider, Icons icons)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");

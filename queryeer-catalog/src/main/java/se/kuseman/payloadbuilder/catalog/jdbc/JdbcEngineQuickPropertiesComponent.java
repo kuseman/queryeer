@@ -50,13 +50,14 @@ import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IIconFactory;
+import com.queryeer.api.service.IPayloadbuilderService;
 import com.queryeer.api.service.IQueryFileProvider;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.ConnectionNode;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabaseNode;
 import se.kuseman.payloadbuilder.catalog.jdbc.JdbcConnectionsTreeModel.DatabasesNode;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /** Quick properties for JdbcEngine. */
 class JdbcEngineQuickPropertiesComponent extends JPanel
@@ -83,9 +84,10 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             IQueryFileProvider queryFileProvider,
             JdbcConnectionsModel connectionsModel,
             IEventBus eventBus,
-            DialectProvider dialectProvider,
+            JdbcDialectProvider dialectProvider,
             CatalogCrawlService crawlService,
-            JdbcConnectionsTreeConfigurable connectionsTreeConfigurable)
+            JdbcConnectionsTreeConfigurable connectionsTreeConfigurable,
+            IPayloadbuilderService payloadbuilderService)
     {
         //@formatter:on
         this.queryEngine = queryEngine;
@@ -267,7 +269,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             }
         });
 
-        connectionsTreeModel = new JdbcConnectionsTreeModel(connectionsModel, icons, dialectProvider, node -> newQuery(node));
+        connectionsTreeModel = new JdbcConnectionsTreeModel(payloadbuilderService, connectionsModel, icons, dialectProvider, node -> newQuery(node));
         treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
         connectionsModel.addListDataListener(new ListDataListener()
         {

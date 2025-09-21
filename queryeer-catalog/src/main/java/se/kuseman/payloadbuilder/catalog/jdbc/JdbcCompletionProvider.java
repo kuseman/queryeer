@@ -10,8 +10,8 @@ import java.util.List;
 import com.queryeer.api.extensions.payloadbuilder.ICompletionProvider;
 
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 
 /** Completion provider for JDBC payloadbuilder */
@@ -19,9 +19,9 @@ class JdbcCompletionProvider implements ICompletionProvider
 {
     private final JdbcConnectionsModel model;
     private final CatalogCrawlService crawlService;
-    private final DialectProvider dialectProvider;
+    private final JdbcDialectProvider dialectProvider;
 
-    JdbcCompletionProvider(JdbcConnectionsModel model, CatalogCrawlService crawlService, DialectProvider dialectProvider)
+    JdbcCompletionProvider(JdbcConnectionsModel model, CatalogCrawlService crawlService, JdbcDialectProvider dialectProvider)
     {
         this.model = requireNonNull(model, "model");
         this.crawlService = requireNonNull(crawlService, "crawlService");

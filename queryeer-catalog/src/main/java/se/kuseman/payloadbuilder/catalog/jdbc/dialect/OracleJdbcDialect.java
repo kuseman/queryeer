@@ -15,12 +15,12 @@ import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 
 /** Dialect support for Oracle */
-class OracleDialect extends BaseDialect implements JdbcDialect
+class OracleJdbcDialect extends BaseDialect implements JdbcDialect
 {
     static final String NAME = "oracle";
-    private static final Logger LOGGER = LoggerFactory.getLogger(OracleDialect.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(OracleJdbcDialect.class);
 
-    OracleDialect(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
+    OracleJdbcDialect(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
         super(icons, crawlService, eventBus, queryActionsConfigurable, templateService, treeConfig);
     }

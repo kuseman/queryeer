@@ -18,20 +18,23 @@ import javax.swing.Action;
 import javax.swing.Icon;
 
 import com.queryeer.api.component.QueryeerTree.RegularNode;
+import com.queryeer.api.service.IPayloadbuilderService;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /** Tree model for jdbc query engine showing connections and child nodes like databases etc. */
 class JdbcConnectionsTreeModel implements RegularNode
 {
+    private final IPayloadbuilderService payloadbuilderService;
     private final JdbcConnectionsModel model;
     private final Icons icons;
-    private final DialectProvider dialectProvider;
+    private final JdbcDialectProvider dialectProvider;
     private final Consumer<RegularNode> newQueryConsumer;
 
-    JdbcConnectionsTreeModel(JdbcConnectionsModel model, Icons icons, DialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer)
+    JdbcConnectionsTreeModel(IPayloadbuilderService payloadbuilderService, JdbcConnectionsModel model, Icons icons, JdbcDialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer)
     {
+        this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
         this.model = requireNonNull(model, "model");
         this.icons = requireNonNull(icons, "icons");
         this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
@@ -339,7 +342,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<Action> getContextMenuActions()
         {
-            return asList(newQuery);
+            return asList(newQuery, importData);
         }
 
         @Override
@@ -371,6 +374,17 @@ class JdbcConnectionsTreeModel implements RegularNode
             public void actionPerformed(ActionEvent e)
             {
                 newQueryConsumer.accept(DatabaseNode.this);
+            }
+        };
+
+        private Action importData = new AbstractAction("Import Data ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                JdbcDataImporterDialog dialog = new JdbcDataImporterDialog(payloadbuilderService, JdbcConnectionsTreeModel.this.model, connectionNode.connection, database, connectionNode.jdbcDialect);
+                dialog.setModal(true);
+                dialog.setVisible(true);
             }
         };
     }
