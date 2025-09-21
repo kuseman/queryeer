@@ -10,7 +10,7 @@ import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionFactory;
 import com.queryeer.api.service.IQueryFileProvider;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /** Factory for {@link JdbcCatalogExtension}. */
 class JdbcCatalogExtensionFactory implements ICatalogExtensionFactory
@@ -19,7 +19,7 @@ class JdbcCatalogExtensionFactory implements ICatalogExtensionFactory
     private final IQueryFileProvider queryFileProvider;
     private final Icons icons;
     private final CatalogCrawlService crawlService;
-    private final DialectProvider dialectProvider;
+    private final JdbcDialectProvider dialectProvider;
 
     static
     {
@@ -40,7 +40,7 @@ class JdbcCatalogExtensionFactory implements ICatalogExtensionFactory
         }
     }
 
-    public JdbcCatalogExtensionFactory(IQueryFileProvider queryFileProvider, JdbcConnectionsModel connectionsModel, Icons icons, CatalogCrawlService crawlService, DialectProvider dialectProvider)
+    public JdbcCatalogExtensionFactory(IQueryFileProvider queryFileProvider, JdbcConnectionsModel connectionsModel, Icons icons, CatalogCrawlService crawlService, JdbcDialectProvider dialectProvider)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");

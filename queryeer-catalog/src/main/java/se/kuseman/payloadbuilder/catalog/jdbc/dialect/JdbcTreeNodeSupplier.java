@@ -50,7 +50,7 @@ class JdbcTreeNodeSupplier implements TreeNodeSupplier
     protected final QueryActionsConfigurable queryActionsConfigurable;
     protected final Icons icons;
     protected final ITemplateService templateService;
-    private ITreeConfig treeConfig;
+    private final ITreeConfig treeConfig;
 
     JdbcTreeNodeSupplier(JdbcDialect jdbcDialect, Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {

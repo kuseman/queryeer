@@ -41,7 +41,7 @@ import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.CredentialsException;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /** Queryeer extension for {@link JdbcCatalog}. */
 class JdbcCatalogExtension implements ICatalogExtension
@@ -54,7 +54,7 @@ class JdbcCatalogExtension implements ICatalogExtension
     private final Icons icons;
     private PropertiesComponent propertiesComponent;
 
-    JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, CatalogCrawlService crawlService, Icons icons, DialectProvider dialectProvider,
+    JdbcCatalogExtension(JdbcConnectionsModel connectionsModel, IQueryFileProvider queryFileProvider, CatalogCrawlService crawlService, Icons icons, JdbcDialectProvider dialectProvider,
             String catalogAlias)
     {
         this.connectionsModel = requireNonNull(connectionsModel, "connectionsModel");

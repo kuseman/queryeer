@@ -46,12 +46,12 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource.Type;
 
 /** Dialect for Microsoft SQL Server */
-class SqlServerDialect implements JdbcDialect
+class SqlServerJdbcDialect implements JdbcDialect
 {
     private static final String META_DATA_QUERY = Common.readResource("/se/kuseman/payloadbuilder/catalog/jdbc/dialect/SQL_SERVER_CATALOG_QUERY.sql");
 
     static final String NAME = "sqlserver";
-    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerDialect.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerJdbcDialect.class);
     private final CatalogCrawlService crawlerService;
     private final IEventBus eventBus;
     private final QueryActionsConfigurable queryActionsConfigurable;
@@ -60,7 +60,7 @@ class SqlServerDialect implements JdbcDialect
     private final ITemplateService templateService;
     private final IQueryPlanOutputExtension queryPlanOutputExtension;
 
-    public SqlServerDialect(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
+    public SqlServerJdbcDialect(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
             IQueryPlanOutputExtension queryPlanOutputExtension, ITreeConfig treeConfig)
     {
         this.crawlerService = crawlerService;
@@ -280,6 +280,16 @@ class SqlServerDialect implements JdbcDialect
                     && connectionState.isIncludeQueryPlan() ? "ON"
                             : "OFF"));
         }
+    }
+
+    @Override
+    public Connection createConnection(String url, String username, String password, boolean importMode) throws SQLException
+    {
+        if (importMode)
+        {
+            url += ";useBulkCopyForBatchInsert=true";
+        }
+        return JdbcDialect.super.createConnection(url, username, password, importMode);
     }
 
     @Override

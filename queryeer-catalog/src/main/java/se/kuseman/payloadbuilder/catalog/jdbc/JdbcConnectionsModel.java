@@ -27,8 +27,8 @@ import com.queryeer.api.utils.CredentialUtils.Credentials;
 import com.queryeer.api.utils.CredentialUtils.ValidationHandler;
 
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
-import se.kuseman.payloadbuilder.catalog.jdbc.dialect.DialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 
 /**
  * Model for {@link JdbcCatalogExtension}'s connections
@@ -46,9 +46,9 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
     private final List<JButton> reloadButtons = new ArrayList<>();
     private final ICryptoService cryptoService;
     private final IQueryFileProvider queryFileProvider;
-    private final DialectProvider dialectProvider;
+    private final JdbcDialectProvider dialectProvider;
 
-    JdbcConnectionsModel(ICryptoService cryptoService, IQueryFileProvider queryFileProvider, DialectProvider dialectProvider)
+    JdbcConnectionsModel(ICryptoService cryptoService, IQueryFileProvider queryFileProvider, JdbcDialectProvider dialectProvider)
     {
         this.cryptoService = requireNonNull(cryptoService, "cryptoService");
         this.queryFileProvider = requireNonNull(queryFileProvider, "queryFileProvider");
@@ -268,12 +268,22 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
 
     java.sql.Connection createConnection(JdbcConnection connection) throws SQLException
     {
+        return createConnection(connection, false);
+    }
+
+    /**
+     * Create connection for provided JdbcConnection.
+     *
+     * @param importMode If this connection is intended to be used when importing data and the dialect supports special options to make that faster this can be set to true.
+     */
+    java.sql.Connection createConnection(JdbcConnection connection, boolean importMode) throws SQLException
+    {
         JdbcDialect jdbcDialect = dialectProvider.getDialect(connection.getJdbcURL());
         try
         {
             String password = connection.getRuntimePassword() != null ? new String(connection.getRuntimePassword())
                     : "";
-            return jdbcDialect.createConnection(connection.getJdbcURL(), connection.getUsername(), password);
+            return jdbcDialect.createConnection(connection.getJdbcURL(), connection.getUsername(), password, importMode);
         }
         catch (Exception e)
         {
@@ -317,7 +327,7 @@ class JdbcConnectionsModel extends AbstractListModel<JdbcConnection>
                     : new String(runtimePassword);
             JdbcDialect dialect = dialectProvider.getDialect(connection.getJdbcURL());
             setEnableRealod(false);
-            try (java.sql.Connection sqlConnection = dialect.createConnection(connection.getJdbcURL(), connection.getUsername(), password))
+            try (java.sql.Connection sqlConnection = dialect.createConnection(connection.getJdbcURL(), connection.getUsername(), password, false))
             {
                 List<String> loadedDatabases = new ArrayList<>();
                 if (dialect.usesSchemaAsDatabase())

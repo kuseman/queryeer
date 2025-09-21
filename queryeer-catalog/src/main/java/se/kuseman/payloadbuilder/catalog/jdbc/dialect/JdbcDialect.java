@@ -70,8 +70,12 @@ public interface JdbcDialect
                 && connection.isValid(1);
     }
 
-    /** Creates a {@link Connection} for this database */
-    default Connection createConnection(String url, String username, String password) throws SQLException
+    /**
+     * Create connection with provided url and credentials.
+     *
+     * @param importMode If this connection is intended to be used when importing data and the dialect supports special options to make that faster this can be set to true.
+     */
+    default Connection createConnection(String url, String username, String password, boolean importMode) throws SQLException
     {
         return DriverManager.getConnection(url, username, password);
     }
