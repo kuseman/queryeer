@@ -2,6 +2,20 @@ CHANGELOG
 
 Queryeer
 
+v2.12.0
+feat: Refactor table output model to a more memory efficient one
+chore: Rename JdbcDatabase to JdbcDialect
+fix: Add support for Jdbc dialects to handle reading of values from result set to properly read SqlServer DATETIMEOFFSET in to a OffsetDateTime etc.
+fix: Add Jackson Datetime module to properly handle java datetime entities when serializing
+fix: Bump commons lang and fix all deprecations
+fix: Name the deployment to central
+chore: Bump payloadbuilder
+fix: Formatting
+fix(deploy): Change to new central deploy mechanic
+fix: Handle Spool type and add the target node id to properties to be able to track recursive query plans
+feat: Filtering in DialogUtils allows several partial matches (#51)
+feat: Add support for outputing link actions to TextOutputComponent feat: Add links to created file/folder when outputing to a file
+
 v2.11.0
 feat: Use io.methvin directory watcher on OSX to avoid high CPU usage that exists in default JDK poller
 fix: Quote column name in TableActionsConfigurable template query: 'Search objects'
@@ -185,6 +199,44 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.9.7
+fix(test-suite): Add another dimension to harness tests where we now run all queries with typed vectors which means we now have 4 combinations of every query being tested: - schema full + any vectors - schema less + any vectors - schema full + typed vectors - schema less + typed vectors
+fix: Fixed issues found when adding above tests
+fix: Fix issue in resolving operatorfunctionscan schema that yielded runtime error in certain cases
+fix: Fix issue when resolving an expression worked in current scope but failed in outer scope and caused a crash
+fix: Remove Optional<Schema> argument to catalog getDatasource methods. It was only confusing and made no sense, now instead the returned vectors are adjusted/validated in TableScan/IndexScan instead to ease the burden of catalog implementations
+fix: Remove Optional<Schema> argument to table function execute method. It was only confusing and made no sense, now instead the returned vectors are adjusted/validated in TableFunctionScan instead to ease the burden of catalog implementations
+fix(ESCatalog): Add Arity on match/query functions
+fix: Cache calculation of hash code for UTF8String
+fix: Fix issue where push down predicates wasn't pushed down inside a subquery
+fix: Fix issue where index seek keys was re-used in wrong datasource caused by mutability in StatementContext, now instead we store the index keys connected to it's owning table source to avoid mis-usage.
+fix(ESCatalog): Fix issue where outer referenced expressions wasn't used when pushing down predicates
+
+v1.9.6
+feat: Implement projection push down optimization. Now catalogs get a projection definition that can be used to optimize data fetching if supported.
+feat: Re-implement HTTP catalog in table-source mode to utilize mustache templating to better be able to implement more complex http bodies etc.
+fix: Remove IDatasourceOptions that was sent into execute call in IDatasource. Only confusing and weird
+feat: Add support for executing queries and working with the raw TupleVectors produced
+fix: Remove TableSourceReference.Type#CONSTANTSCAN since that was a weird construct.
+fix: Now a subQuery table source is tagged on expressions / columns that lacks during resolving to make expression evaluation more robust
+fix: Remove the CoreColumn.Type#NAMED_ASTERISK which is only confusing, we either have an asterisk or a regular column.
+fix: Rewrite ColumnResolving routine a bit for clarity
+feat: Add support for table values constructor. Ie. (   VALUE (1,2,3)   ,     (4,5,6) ) x (a,b,c)
+fix: Misc fixes in column resolving
+feat: Add jdbc catalog dialect for sqlserver to be able to handle quirks like DATETIMEOFFSET etc.
+fix: Name the deployment to central
+fix: Fix deprecations after commons-lang bump
+
+v1.9.5
+fix(deploy): Change to new central deploy mechanism
+build(deps): Bump org.apache.commons:commons-lang3 from 3.13.0 to 3.18.0
+
+v1.9.4
+feat: Add query option to force no index on a join that otherwise would be an indexseek. This is needed sometimes where a simple hashmatch is actually faster (usually when there is many rows with no hits then all batching will eat up all the performance) feat(JbcCatalog): Add two table options:  - tableHints: Adds a hints string after the table alias part. Example for SQL server is to add "WITH(NOLOCK)"  - projection: A little shortcut until projection pushdown is implemented in PLB core. Now one can hint a comma separated                string that will be the projection to the downstream select, this to avoid excessive data to be fetched due to asterisk select.
+fix: Change to UNION ALL when building index seek query, the input values are unique
+fix: Fix issue with no hits on index seeks on temporary tables where the index:ed types was different than the seek value types. Now we store the types that was used during index build and use the same types on the seek values when hashing.
+feat(HttpCatalog): Add support for printing response headers
 
 v1.9.3
 fix: Fixes an issue in hash match where we returned an empty tuple vector in left Join mode where all outer rows got a hit.
