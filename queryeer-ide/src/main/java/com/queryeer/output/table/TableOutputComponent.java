@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.ActionMap;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultRowSorter;
 import javax.swing.Icon;
@@ -53,6 +54,7 @@ import javax.swing.UIManager;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import javax.swing.event.TableModelEvent;
+import javax.swing.table.JTableHeader;
 
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.Strings;
@@ -75,6 +77,8 @@ import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 /** The main panel that contains all the result set tables */
 class TableOutputComponent extends JPanel implements ITableOutputComponent, SearchListener
 {
+    private static final String ZOOM_IN = "zoomIn";
+    private static final String ZOOM_OUT = "zoomOut";
     private static final String FIND = "FIND";
     static final int COLUMN_ADJUST_ROW_LIMIT = 30;
     private final IQueryFile queryFile;
@@ -89,6 +93,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private int lastClickedTableRow;
     private int lastClickedTableColumn;
     private IDialogFactory dialogFactory;
+
+    private int rowHeight = -1;
+    private float fontSize = -1;
 
     Map<Object, Object> internCache = new HashMap<>();
 
@@ -158,7 +165,9 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 .getMenuShortcutKeyMaskEx());
         InputMap inputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
         inputMap.put(findKeyStroke, FIND);
-        getActionMap().put(FIND, showFindDialogAction);
+
+        ActionMap actionMap = getActionMap();
+        actionMap.put(FIND, showFindDialogAction);
 
         findDialog = new TableFindDialog()
         {
@@ -175,7 +184,47 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 super.setVisible(b);
             }
         };
+
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx()), ZOOM_IN);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx()), ZOOM_OUT);
+
+        actionMap.put(ZOOM_IN, new ZoomAction(true));
+        actionMap.put(ZOOM_OUT, new ZoomAction(false));
     }
+
+    private class ZoomAction extends AbstractAction
+    {
+        private final boolean zoomIn;
+
+        ZoomAction(boolean zoomIn)
+        {
+            this.zoomIn = zoomIn;
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e)
+        {
+            fontSize += (zoomIn ? 1.0f
+                    : -1.0f);
+            rowHeight += (zoomIn ? 1
+                    : -1);
+            for (TableComponent tc : tables)
+            {
+                JTableHeader tableHeader = tc.table.getTableHeader();
+                Table table = tc.table;
+                tableHeader.setFont(tableHeader.getFont()
+                        .deriveFont(fontSize));
+
+                tableHeader.setPreferredSize(new Dimension(100, rowHeight));
+
+                table.setFont(table.getFont()
+                        .deriveFont(fontSize));
+                table.setRowHeight(rowHeight);
+            }
+        }
+    };
 
     private final PropertyChangeListener uiManagerChangeListener = new PropertyChangeListener()
     {
@@ -791,6 +840,24 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
         add(parent instanceof JSplitPane ? new JScrollPane(parent)
                 : parent, BorderLayout.CENTER);
+
+        // Initalize font and row sizes when unset
+        if (fontSize < 0)
+        {
+            fontSize = resultTable.getFont()
+                    .getSize2D();
+            rowHeight = resultTable.getRowHeight();
+        }
+        else
+        {
+            resultTable.setFont(resultTable.getFont()
+                    .deriveFont(fontSize));
+            resultTable.setRowHeight(rowHeight);
+            resultTable.getTableHeader()
+                    .setPreferredSize(new Dimension(100, rowHeight));
+            resultTable.getTableHeader()
+                    .resizeAndRepaint();
+        }
     }
 
     void resizeLastTablesColumns()
