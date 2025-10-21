@@ -8,6 +8,7 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -147,6 +148,8 @@ class TextEditor implements ITextEditor, SearchListener
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TextEditor.class);
 
+    private static final String ZOOM_IN = "zoomIn";
+    private static final String ZOOM_OUT = "zoomOut";
     private static final Icon SEARCH = IconFactory.of(FontAwesome.SEARCH);
     private static final Icon SHARE = IconFactory.of(FontAwesome.SHARE);
     private static final KeyStroke PASTE_SPECIAL_STROKE = KeyStroke.getKeyStroke(KeyEvent.VK_V, Toolkit.getDefaultToolkit()
@@ -200,6 +203,34 @@ class TextEditor implements ITextEditor, SearchListener
         // Unbint CTRL/META+SHIFT+V since we use that for paste special
         textEditor.getInputMap()
                 .put(PASTE_SPECIAL_STROKE, "none");
+
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx()), ZOOM_IN);
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx()), ZOOM_OUT);
+
+        textEditor.getActionMap()
+                .put(ZOOM_IN, new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        Font font = textEditor.getFont();
+                        textEditor.setFont(font.deriveFont(font.getSize2D() + 1.0f));
+                    }
+                });
+        textEditor.getActionMap()
+                .put(ZOOM_OUT, new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        Font font = textEditor.getFont();
+                        textEditor.setFont(font.deriveFont(font.getSize2D() - 1.0f));
+                    }
+                });
 
         scrollPane = new RTextScrollPane(textEditor, true);
 
