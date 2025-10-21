@@ -2,6 +2,9 @@ CHANGELOG
 
 Queryeer
 
+v2.13.0
+feat: Add support for Zooming in text editor and table output component (Ctrl/Meta +/-)
+
 v2.12.0
 feat: Refactor table output model to a more memory efficient one
 chore: Rename JdbcDatabase to JdbcDialect
