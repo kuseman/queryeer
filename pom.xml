@@ -46,7 +46,7 @@
         <url>https://github.com/kuseman/queryeer</url>
         <connection>scm:git:git@github.com:kuseman/queryeer.git</connection>
         <developerConnection>scm:git:git@github.com:kuseman/queryeer.git</developerConnection>
-        <tag>v2.13.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <licenses>
