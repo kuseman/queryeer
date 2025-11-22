@@ -299,6 +299,13 @@ class QueryeerController implements PropertyChangeListener
                     return;
                 }
             }
+            // If the file is not dirty to just reload the file
+            else if (!fileModel.isNew()
+                    && fileModel.isModified()
+                    && !fileModel.isDirty())
+            {
+                fileModel.load();
+            }
             // See if the file has been modified outside of application
             else if (!fileModel.isNew()
                     && fileModel.isModified())

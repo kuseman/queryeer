@@ -94,7 +94,10 @@ class QueryService
                     }
 
                     String message = t.getMessage();
-                    textOutput.appendWarning(message, TextSelection.EMPTY);
+                    if (message != null)
+                    {
+                        textOutput.appendWarning(message, TextSelection.EMPTY);
+                    }
                     LOGGER.error("Unhandled query error", e);
                 }
             }

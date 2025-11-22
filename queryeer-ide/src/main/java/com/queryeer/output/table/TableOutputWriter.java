@@ -24,6 +24,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 
+import se.kuseman.payloadbuilder.api.execution.EpochDateTime;
+import se.kuseman.payloadbuilder.api.execution.EpochDateTimeOffset;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
 
 /** Writer that writes object structure from a projection. */
@@ -106,6 +108,18 @@ class TableOutputWriter implements QueryeerOutputWriter
     public void writeFieldName(String name)
     {
         currentField.push(name);
+    }
+
+    @Override
+    public void writeDateTime(EpochDateTime datetime)
+    {
+        writeValue(datetime.getLocalDateTime());
+    }
+
+    @Override
+    public void writeDateTimeOffset(EpochDateTimeOffset datetimeOffset)
+    {
+        writeValue(datetimeOffset.getZonedDateTime());
     }
 
     @Override
