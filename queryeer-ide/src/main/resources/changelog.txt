@@ -2,6 +2,10 @@ CHANGELOG
 
 Queryeer
 
+v2.14.0
+feat: Reload changed files that is not dirty without asking
+fix: Avoid NPE when trying to print exceptions without message
+
 v2.13.0
 feat: Add support for Zooming in text editor and table output component (Ctrl/Meta +/-)
 
@@ -202,6 +206,21 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.9.8
+feat: Implement SelectInto, InsertInto and DropTable in JDBC catalog
+feat: Detect runtime type and build typed value vectors and runtime schemas in Jdbc-catalog
+feat: Add support for catalogs to specify meta data on schema columns like size/precision etc. That is later on accessible in IDatasinks etc.
+fix: Add ColumnReference as a property on CoreColumn to be able to properly resolve the original column all the way through all operators
+fix: Remove columnType from ColumnReference and instead separate add a flag on ColumnExpression to indicate populated This to make ColumnReference more easier to handle.
+fix: Refactor ColumnReference usages. Remove HasColumnReference interface. Include column name in column reference
+build(deps-dev): Bump com.microsoft.sqlserver:mssql-jdbc
+fix: Refactor select into subsystem into catalogs to prepare for catalogs to implement insert into
+fix: Add ValueVector#hasNulls to prepare for omptimizations in various places to skip null check's. Added check in min/max aggregate function
+fix: Removed ValueVector#literal methods that had a varargs input, only used in test code and there VectorTestUtils already has the needed methods
+fix: Bundle info to TableFunctionInfo#execute/getDescribeProperties to ease future development without breaking
+feat: Add bytes/second metric to OpenCsvFunction
+feat: Return a shema to OpenCsvFunction if columnHeaders option is provided
 
 v1.9.7
 fix(test-suite): Add another dimension to harness tests where we now run all queries with typed vectors which means we now have 4 combinations of every query being tested: - schema full + any vectors - schema less + any vectors - schema full + typed vectors - schema less + typed vectors
