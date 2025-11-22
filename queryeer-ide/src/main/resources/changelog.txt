@@ -2,7 +2,8 @@ CHANGELOG
 
 Queryeer
 
-v2.14.0
+v2.15.0
+feat: Bump payloadbuilder
 feat: Reload changed files that is not dirty without asking
 fix: Avoid NPE when trying to print exceptions without message
 
