@@ -1,16 +1,20 @@
 package se.kuseman.payloadbuilder.catalog.es;
 
 import static java.util.Arrays.asList;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.InvocationTargetException;
+import java.time.Duration;
 
 import javax.swing.SwingUtilities;
 
+import org.apache.commons.lang3.ThreadUtils;
 import org.apache.commons.lang3.mutable.MutableObject;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.stubbing.answers.ReturnsArgumentAt;
 
@@ -30,10 +34,10 @@ import se.kuseman.payloadbuilder.catalog.es.ESConnectionsModel.Connection;
 import se.kuseman.payloadbuilder.test.VectorTestUtils;
 
 /** Test of {@link ESCatalogExtension} */
-public class ESCatalogExtensionTest extends Assert
+class ESCatalogExtensionTest
 {
     @Test
-    public void test_handle_exception()
+    void test_handle_exception()
     {
         IQueryFileProvider queryFileProvider = Mockito.mock(IQueryFileProvider.class);
         IQuerySession session = Mockito.mock(IQuerySession.class);
@@ -194,7 +198,7 @@ public class ESCatalogExtensionTest extends Assert
     }
 
     @Test
-    public void test_setup()
+    void test_setup()
     {
         IQueryFileProvider queryFileProvider = Mockito.mock(IQueryFileProvider.class);
         IQuerySession session = Mockito.mock(IQuerySession.class);
@@ -268,7 +272,7 @@ public class ESCatalogExtensionTest extends Assert
     }
 
     @Test
-    public void test_update() throws InvocationTargetException, InterruptedException
+    void test_update() throws InvocationTargetException, InterruptedException
     {
         IQueryFileProvider queryFileProvider = Mockito.mock(IQueryFileProvider.class);
         IQuerySession session = Mockito.mock(IQuerySession.class);
@@ -310,9 +314,10 @@ public class ESCatalogExtensionTest extends Assert
 
         ESCatalogExtension.QuickPropertiesPanel qp = (ESCatalogExtension.QuickPropertiesPanel) extension.getQuickPropertiesComponent();
         qp.connections.setSelectedItem(connection2);
+        ThreadUtils.sleepQuietly(Duration.ofMillis(250));
 
         assertEquals("http://endpoint2", ((ESConnectionsModel.Connection) qp.connections.getSelectedItem()).getEndpoint());
-        assertNull((qp.indices.getSelectedItem()));
+        assertNull(qp.indices.getSelectedItem());
         assertNull(connection1.getRuntimeAuthPassword());
 
         // Verify that connection is changed according to session values

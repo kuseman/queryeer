@@ -3,15 +3,15 @@ package com.queryeer;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.Ignore;
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
 /** Testing of templates. */
 public class TemplateServiceTest
 {
     @Test
-    @Ignore
-    public void test()
+    @Disabled
+    void test()
     {
         TemplateService ts = new TemplateService();
 

@@ -18,6 +18,7 @@ public interface ITextEditorDocumentParser
     /**
      * Parse with provided document reader. This method is called when the document is drity and needs parsing. It's called in a separate thread. This method should parse and store resulting state
      * that is needed for what this parser supports.
+     *
      * <p>
      * Thread can be interrupted when document gets dirty and a new session is scheduled so it's good to support {@link Thread#isInterrupted()} and cancel current session
      * </p>
@@ -52,6 +53,7 @@ public interface ITextEditorDocumentParser
 
     /**
      * Return {@link ToolTipItem} at provided offset. This is called on mouse over to get detailed information about an item at a specific offset.'
+     *
      * <p>
      * NOTE! No heavy calculations should be done here since this is executed on EDT
      * </p>
@@ -71,6 +73,7 @@ public interface ITextEditorDocumentParser
 
     /**
      * Return {@link LinkAction} at provided offset. This is called on mouse over when CTRL is pressed to get actions for an item at a specific offset. A hyper link.
+     *
      * <p>
      * NOTE! No heavy calculations should be done here since this is executed on EDT
      * </p>
