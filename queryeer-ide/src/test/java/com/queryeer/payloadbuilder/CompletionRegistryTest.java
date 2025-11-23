@@ -1,17 +1,17 @@
 package com.queryeer.payloadbuilder;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import se.kuseman.payloadbuilder.api.QualifiedName;
 
 /** Test of {@link CompletionRegistry} */
-public class CompletionRegistryTest
+class CompletionRegistryTest
 {
     @Test
-    public void test_qualified_name_contains()
+    void test_qualified_name_contains()
     {
         assertTrue(CompletionRegistry.containsIgnoreCase(QualifiedName.of("sys", "objects"), QualifiedName.of("sys", "objects")));
         assertTrue(CompletionRegistry.containsIgnoreCase(QualifiedName.of("sys", "objects"), QualifiedName.of("objects")));

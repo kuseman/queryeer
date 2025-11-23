@@ -1,18 +1,18 @@
 package com.queryeer;
 
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.lang.reflect.Method;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** Test of {@link ProxyOutputWriter} */
-public class ProxyOutputWriterTest
+class ProxyOutputWriterTest
 {
     @Test
-    public void test_all_get_methods_are_declared()
+    void test_all_get_methods_are_declared()
     {
         // Make sure that the proxy output writer has overridden all interface methods
         Method[] methods = OutputWriter.class.getDeclaredMethods();

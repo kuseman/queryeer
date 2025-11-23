@@ -76,6 +76,7 @@ public interface IConfigurable extends IExtension
     /**
      * Re-encrypt secrets of this configurable using provided crypto service. Implementations of this method should first decrypt it's secrets using existing {@link ICryptoService} and then encrypt
      * using provided new crypto service.
+     *
      * <p>
      * NOTE! Changes are stored/reverted as usual upon {@link #commitChanges()}/{@link IConfigurable#revertChanges()}
      * </p>

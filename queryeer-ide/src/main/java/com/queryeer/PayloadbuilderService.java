@@ -7,10 +7,12 @@ import java.util.function.Function;
 import com.queryeer.api.service.IPayloadbuilderService;
 
 import se.kuseman.payloadbuilder.api.catalog.Catalog;
+import se.kuseman.payloadbuilder.api.catalog.Schema;
 import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.core.CompiledQuery;
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
 import se.kuseman.payloadbuilder.core.RawQueryResult;
+import se.kuseman.payloadbuilder.core.RawQueryResult.ResultConsumer;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -30,7 +32,19 @@ class PayloadbuilderService implements IPayloadbuilderService
 
         while (queryResult.hasMoreResults())
         {
-            queryResult.consumeResult(vectorConsumer);
+            queryResult.consumeResult(new ResultConsumer()
+            {
+                @Override
+                public void schema(Schema schema)
+                {
+                }
+
+                @Override
+                public boolean consume(TupleVector vector)
+                {
+                    return vectorConsumer.apply(vector);
+                }
+            });
         }
     }
 }

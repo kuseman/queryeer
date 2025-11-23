@@ -1,16 +1,16 @@
 package com.queryeer;
 
 import static java.util.Arrays.asList;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 import org.apache.commons.lang3.mutable.MutableObject;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -20,7 +20,7 @@ import com.queryeer.api.extensions.IConfigurable.EncryptionResult;
 import com.queryeer.api.service.ICryptoService;
 
 /** Test of crypto service */
-public class CryptoServiceTest
+class CryptoServiceTest
 {
     private ServiceLoader serviceLoader = Mockito.mock(ServiceLoader.class);
     @SuppressWarnings("unchecked")
@@ -40,7 +40,7 @@ public class CryptoServiceTest
     };
 
     @Test
-    public void test_decrypt()
+    void test_decrypt()
     {
         assertNull(cryptoService.decryptString(null));
         assertEquals("non-encrypted-string", cryptoService.decryptString("non-encrypted-string"));
@@ -58,7 +58,7 @@ public class CryptoServiceTest
     }
 
     @Test
-    public void test_encrypt()
+    void test_encrypt()
     {
         assertNull(cryptoService.encryptString(null));
 
@@ -79,7 +79,7 @@ public class CryptoServiceTest
 
     @SuppressWarnings("unchecked")
     @Test
-    public void test_changeMasterPassword_success()
+    void test_changeMasterPassword_success()
     {
         // Set up service
         when(password.get()).thenReturn("dummy".toCharArray());
@@ -117,7 +117,7 @@ public class CryptoServiceTest
 
     @SuppressWarnings("unchecked")
     @Test
-    public void test_that_master_password_is_changed_even_if_no_configurables_changed()
+    void test_that_master_password_is_changed_even_if_no_configurables_changed()
     {
         // Set up service
         when(password.get()).thenReturn("dummy".toCharArray());
@@ -155,7 +155,7 @@ public class CryptoServiceTest
 
     @SuppressWarnings("unchecked")
     @Test
-    public void test_that_master_password_is_NOT_changed_if_one_configurable_aborts()
+    void test_that_master_password_is_NOT_changed_if_one_configurable_aborts()
     {
         // Set up service
         when(password.get()).thenReturn("dummy".toCharArray());
@@ -192,7 +192,7 @@ public class CryptoServiceTest
 
     @SuppressWarnings("unchecked")
     @Test
-    public void test_that_master_password_is_NOT_changed_if_one_configurable_throws()
+    void test_that_master_password_is_NOT_changed_if_one_configurable_throws()
     {
         // Set up service
         when(password.get()).thenReturn("dummy".toCharArray());
