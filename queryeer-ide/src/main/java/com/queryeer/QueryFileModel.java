@@ -7,6 +7,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.PrintWriter;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -15,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.SwingPropertyChangeSupport;
 
 import org.apache.commons.io.IOUtils;
@@ -33,6 +35,8 @@ import com.queryeer.api.extensions.output.IOutputComponent;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
+
+import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /**
  * Model of a query file. Has information about filename, execution state etc.
@@ -72,6 +76,9 @@ class QueryFileModel implements IQueryFile
 
     /** Execution fields */
     private StopWatch sw;
+
+    /** Timer if this file is executing at an interval. */
+    private Timer executionTimer;
 
     /** Initialize a file from filename */
     QueryFileModel(IQueryEngine queryEngine, IQueryEngine.IState engineState, IEditor editor, IOutputExtension outputExtension, IOutputFormatExtension outputFormat, File file, boolean newFile)
@@ -218,6 +225,102 @@ class QueryFileModel implements IQueryFile
     void bumpActivity()
     {
         lastActivity = System.currentTimeMillis();
+    }
+
+    boolean isRunningAtInterval()
+    {
+        return executionTimer != null;
+    }
+
+    /** Abort this query. */
+    void abort()
+    {
+        queryEngine.abortQuery(this);
+
+        // If running at interval then stop the timer
+        if (executionTimer != null)
+        {
+            executionTimer.stop();
+            executionTimer = null;
+
+            // Fire an event to let titles etc. redraw when ending interval execution
+            pcs.firePropertyChange(STATE, null, state);
+        }
+        if (state.isExecuting())
+        {
+            setState(State.ABORTED);
+        }
+    }
+
+    /** Execute this query file. */
+    void execute(Duration duration)
+    {
+        if (duration == null)
+        {
+            // If this query is on a timer then skip regular execution to avoid weird states
+            if (executionTimer != null)
+            {
+                return;
+            }
+            executeInternal();
+        }
+        else
+        {
+            // Stop previous timer if any
+            if (executionTimer != null)
+            {
+                executionTimer.stop();
+            }
+
+            executionTimer = new Timer((int) duration.toMillis(), evt -> executeInternal());
+            // Do the execution instantly
+            executionTimer.setInitialDelay(0);
+            executionTimer.start();
+        }
+    }
+
+    /** Execute this query file. */
+    void executeInternal()
+    {
+        if (!queryEngine.shouldExecute(this))
+        {
+            return;
+        }
+
+        if (state.isExecuting())
+        {
+            return;
+        }
+
+        OutputWriter writer = outputExtension.createOutputWriter(this);
+
+        if (writer == null)
+        {
+            return;
+        }
+
+        // Don't run empty queries
+        if (editor.isValueEmpty())
+        {
+            return;
+        }
+        // When executing in a timer we don't apply selected text execution
+        Object query = editor.getValue(executionTimer != null ? true
+                : false);
+
+        QueryService.executeQuery(this, getOutputWriter(this, writer), query, false, () ->
+        {
+        });
+    }
+
+    /** Returns the execution interval if any as string. */
+    String getExecutionInterval()
+    {
+        if (executionTimer != null)
+        {
+            return "" + (executionTimer.getDelay() / 1000) + "s";
+        }
+        return "";
     }
 
     QueryFileMetaData getMetaData()
@@ -399,19 +502,14 @@ class QueryFileModel implements IQueryFile
         //@formatter:off
         return """
                 <html>
-                %s%s%s
-                """.formatted(getQueryEngine() != null ? ("<b>" + getQueryEngine()
-                .getTitle() + "</b><br/>")
-                : "",
-                getFile()
-                        .getAbsolutePath()
-                      + "<br/>",
-                !isBlank(getMetaData()
-                        .getDescription())
-                                ? (getMetaData()
-                                        .getDescription()
-                                   + "<br/>")
-                                : "");
+                %s%s%s%s
+                """.formatted
+                (
+                        getQueryEngine() != null ? ("<b>" + getQueryEngine().getTitle() + "</b><br/>") : "",
+                        getFile().getAbsolutePath() + "<br/>",
+                        !isBlank(getMetaData().getDescription()) ? (getMetaData().getDescription() + "<br/>") : "",
+                        executionTimer != null ? ("... every " + getExecutionInterval()) : ""
+                );
         //@formatter:on
     }
 
@@ -529,5 +627,28 @@ class QueryFileModel implements IQueryFile
             return this == EXECUTING
                     || this == EXECUTING_BY_EVENT;
         }
+    }
+
+    /** Creates a proxy outputwriter that writes to multiple output writers. */
+    private static OutputWriter getOutputWriter(QueryFileModel file, OutputWriter masterWriter)
+    {
+        List<OutputWriter> activeAutoPopulatedWriters = file.getOutputComponents()
+                .stream()
+                .filter(o -> o.getExtension()
+                        .isAutoPopulated()
+                        && o.active())
+                .map(o -> o.getExtension()
+                        .createOutputWriter(file))
+                .toList();
+
+        // No auto populating components return the master writer
+        if (activeAutoPopulatedWriters.isEmpty())
+        {
+            return masterWriter;
+        }
+
+        List<OutputWriter> result = new ArrayList<>(activeAutoPopulatedWriters);
+        result.add(0, masterWriter);
+        return new ProxyOutputWriter(result);
     }
 }

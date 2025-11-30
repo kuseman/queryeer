@@ -1,5 +1,7 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.List;
@@ -12,8 +14,7 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TableAlias;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TableAliasType;
@@ -25,10 +26,10 @@ import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Tsql_fileContext;
 
 /** Test of {@link SqlServerDocumentParser} */
-public class SqlServerDocumentParserTest extends Assert
+class SqlServerDocumentParserTest
 {
     @Test
-    public void test_TableSourceAliasCollector() throws FileNotFoundException, IOException
+    void test_TableSourceAliasCollector() throws FileNotFoundException, IOException
     {
         Set<TableAlias> actual;
         String query;

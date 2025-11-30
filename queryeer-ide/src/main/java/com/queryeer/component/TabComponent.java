@@ -24,6 +24,7 @@ import javax.swing.plaf.basic.BasicButtonUI;
 public class TabComponent extends JPanel
 {
     private final JLabel lblTitle;
+    private final JLabel lblStatusIcon;
 
     public TabComponent(String title, Icon icon)
     {
@@ -36,10 +37,15 @@ public class TabComponent extends JPanel
         setOpaque(false);
         setBorder(BorderFactory.createEmptyBorder(2, 0, 0, 0));
 
+        lblStatusIcon = new JLabel();
+        lblStatusIcon.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 2));
+
         lblTitle = new JLabel(title, icon, SwingConstants.CENTER);
         // CSOFF
         lblTitle.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 5));
         // CSON
+
+        add(lblStatusIcon);
         add(lblTitle);
 
         if (closeAction != null)
@@ -58,6 +64,11 @@ public class TabComponent extends JPanel
     public void setIcon(Icon icon)
     {
         lblTitle.setIcon(icon);
+    }
+
+    public void setStatusIcon(Icon icon)
+    {
+        lblStatusIcon.setIcon(icon);
     }
 
     /** Tab button */
