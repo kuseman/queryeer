@@ -25,6 +25,7 @@ import java.awt.event.WindowEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -32,6 +33,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import javax.swing.AbstractAction;
@@ -149,9 +151,7 @@ class QueryeerView extends JFrame
     private boolean suppressChangeEvents = false;
 
     private List<String> recentFiles = emptyList();
-    private Consumer<String> openRecentFileConsumer;
-    private Consumer<IQueryEngine> newQueryConsumer;
-    private Consumer<ViewAction> actionHandler;
+    private BiConsumer<QueryeerController.ViewAction, Object> actionHandler;
     private boolean quickPropertiesCollapsed;
     private int prevPropertiesDividerLocation;
     private WindowsDialog windowsDialog;
@@ -286,6 +286,18 @@ class QueryeerView extends JFrame
         topPanel.setLayout(new BorderLayout());
         getContentPane().add(topPanel, BorderLayout.NORTH);
 
+        // CSOFF
+        KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
+        KeyStroke newQueryKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_N, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        KeyStroke showQuickFilesKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
+        KeyStroke showQuickDatasourcesKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0);
+        // CSON
+
         JMenuBar menuBar = new JMenuBar();
         topPanel.add(menuBar, BorderLayout.NORTH);
 
@@ -319,13 +331,38 @@ class QueryeerView extends JFrame
         toolsMenu.add(new JMenuItem(optionsAction))
                 .setText("Options ...");
 
+        JMenu executeMenu = new JMenu("Execute");
+        executeMenu.add(new JMenuItem(new AbstractAction("Execute now (" + getAcceleratorText(executeKeyStroke) + ")")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                actionHandler.accept(ViewAction.EXECUTE, null);
+            }
+        }));
+
+        int[] intervals = { 1, 5, 10, 30, 60 };
+        for (int interval : intervals)
+        {
+            executeMenu.add(new JMenuItem(new AbstractAction("... every " + interval + " second(s)")
+            {
+                @Override
+                public void actionPerformed(ActionEvent e)
+                {
+                    actionHandler.accept(ViewAction.EXECUTE, Duration.ofSeconds(interval));
+                }
+            }));
+        }
+
+        toolsMenu.add(executeMenu);
+
         JMenu helpMenu = new JMenu("Help");
         helpMenu.add(new JMenuItem(new AbstractAction()
         {
             @Override
             public void actionPerformed(ActionEvent e)
             {
-                actionHandler.accept(ViewAction.ABOUT);
+                actionHandler.accept(ViewAction.ABOUT, null);
             }
         }))
                 .setText("About Queryeer IDE");
@@ -407,18 +444,6 @@ class QueryeerView extends JFrame
         toolBar.setFloatable(false);
         topPanel.add(toolBar, BorderLayout.SOUTH);
 
-        // CSOFF
-        KeyStroke executeKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_E, Toolkit.getDefaultToolkit()
-                .getMenuShortcutKeyMaskEx());
-        KeyStroke stopKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
-        KeyStroke newQueryKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_N, Toolkit.getDefaultToolkit()
-                .getMenuShortcutKeyMaskEx());
-        KeyStroke toggleResultKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_R, Toolkit.getDefaultToolkit()
-                .getMenuShortcutKeyMaskEx());
-        KeyStroke showQuickFilesKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F1, 0);
-        KeyStroke showQuickDatasourcesKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0);
-        // CSON
-
         // Register actions
         actionRegistry.register(EXECUTE, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(executeKeyStroke)));
         actionRegistry.register(STOP, ActionScope.COMPONENT_FOCUS, List.of(new IActionRegistry.KeyboardShortcut(stopKeyStroke)));
@@ -486,10 +511,7 @@ class QueryeerView extends JFrame
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    if (newQueryConsumer != null)
-                    {
-                        newQueryConsumer.accept(queryEngine);
-                    }
+                    actionHandler.accept(ViewAction.NEWQUERY, queryEngine);
                 }
             }));
         }
@@ -586,7 +608,7 @@ class QueryeerView extends JFrame
             {
                 return;
             }
-            actionHandler.accept(ViewAction.FORMAT_CHANGED);
+            actionHandler.accept(ViewAction.FORMAT_CHANGED, null);
         });
 
         toolBar.addSeparator();
@@ -625,7 +647,7 @@ class QueryeerView extends JFrame
 
             IOutputExtension extension = (IOutputExtension) comboOutput.getSelectedItem();
             comboFormat.setEnabled(extension.supportsOutputFormats());
-            actionHandler.accept(ViewAction.OUTPUT_CHANGED);
+            actionHandler.accept(ViewAction.OUTPUT_CHANGED, null);
         });
 
         IOutputExtension extension = (IOutputExtension) comboOutput.getSelectedItem();
@@ -862,7 +884,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.OPTIONS);
+            actionHandler.accept(ViewAction.OPTIONS, null);
         }
     };
 
@@ -871,7 +893,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.OPEN);
+            actionHandler.accept(ViewAction.OPEN, null);
         }
     };
 
@@ -880,7 +902,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.SAVE);
+            actionHandler.accept(ViewAction.SAVE, null);
         }
     };
 
@@ -889,7 +911,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.SAVEAS);
+            actionHandler.accept(ViewAction.SAVEAS, null);
         }
     };
 
@@ -898,7 +920,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.EXIT);
+            actionHandler.accept(ViewAction.EXIT, null);
         }
     };
 
@@ -907,7 +929,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.EXECUTE);
+            actionHandler.accept(ViewAction.EXECUTE, null);
         }
     };
 
@@ -916,7 +938,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.CANCEL);
+            actionHandler.accept(ViewAction.CANCEL, null);
         }
     };
 
@@ -925,7 +947,7 @@ class QueryeerView extends JFrame
         @Override
         public void actionPerformed(ActionEvent e)
         {
-            actionHandler.accept(ViewAction.NEWQUERY);
+            actionHandler.accept(ViewAction.NEWQUERY, null);
         }
     };
 
@@ -968,10 +990,7 @@ class QueryeerView extends JFrame
         {
             JMenuItem item = (JMenuItem) e.getSource();
             String file = item.getText();
-            if (openRecentFileConsumer != null)
-            {
-                openRecentFileConsumer.accept(file);
-            }
+            actionHandler.accept(ViewAction.OPEN_RECENT_FILE, file);
         }
     };
 
@@ -1171,19 +1190,9 @@ class QueryeerView extends JFrame
         }
     }
 
-    void setOpenRecentFileConsumer(Consumer<String> openRecentFileConsumer)
-    {
-        this.openRecentFileConsumer = openRecentFileConsumer;
-    }
-
-    void setActionHandler(Consumer<QueryeerController.ViewAction> actionHandler)
+    void setActionHandler(BiConsumer<QueryeerController.ViewAction, Object> actionHandler)
     {
         this.actionHandler = actionHandler;
-    }
-
-    void setNewQueryConsumer(Consumer<IQueryEngine> newQueryConsumer)
-    {
-        this.newQueryConsumer = newQueryConsumer;
     }
 
     private class WindowsDialog extends DialogUtils.ADialog
@@ -1527,7 +1536,7 @@ class QueryeerView extends JFrame
             else if (item.type == ListItem.Type.RecentFile
                     && item.file != null)
             {
-                openRecentFileConsumer.accept(item.file.getAbsolutePath());
+                actionHandler.accept(ViewAction.OPEN_RECENT_FILE, item.file.getAbsolutePath());
             }
             else if (item.type == ListItem.Type.ProjectFile
                     && item.file != null)

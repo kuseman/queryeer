@@ -8,16 +8,16 @@ import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenStream;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import se.kuseman.payloadbuilder.jdbc.parser.presto.SqlBaseLexer;
 import se.kuseman.payloadbuilder.jdbc.parser.presto.SqlBaseParser;
 
 //CSOFF
-public class PrestoTest
+class PrestoTest
 {
     @Test
-    public void test()
+    void test()
     {
         CharStream charStream = CharStreams.fromString("select * FROM product");
         Lexer lexer = new SqlBaseLexer(charStream);

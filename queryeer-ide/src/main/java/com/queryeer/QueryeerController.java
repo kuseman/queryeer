@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -120,8 +121,6 @@ class QueryeerController implements PropertyChangeListener
     {
         view.setTitle("Queryeer IDE - " + version);
         view.setActionHandler(this::handleViewAction);
-        view.setOpenRecentFileConsumer(this::openRecentFileAction);
-        view.setNewQueryConsumer(qe -> newQueryAction(qe, null, null, null, null, true, Optional.empty()));
 
         eventBus.register(this);
 
@@ -408,7 +407,7 @@ class QueryeerController implements PropertyChangeListener
         return true;
     }
 
-    private void handleViewAction(ViewAction action)
+    private void handleViewAction(ViewAction action, Object value)
     {
         switch (action)
         {
@@ -416,7 +415,14 @@ class QueryeerController implements PropertyChangeListener
                 cancelAction();
                 break;
             case EXECUTE:
-                executeAction();
+                if (value instanceof Duration duration)
+                {
+                    executeAction(duration);
+                }
+                else if (value == null)
+                {
+                    executeAction(null);
+                }
                 break;
             case EXIT:
                 exitAction();
@@ -425,7 +431,14 @@ class QueryeerController implements PropertyChangeListener
                 formatChangedAction();
                 break;
             case NEWQUERY:
-                newQueryAction(null);
+                if (value instanceof IQueryEngine qe)
+                {
+                    newQueryAction(qe, null, null, null, null, true, Optional.empty());
+                }
+                else
+                {
+                    newQueryAction(null);
+                }
                 break;
             case OPEN:
                 openAction();
@@ -444,6 +457,12 @@ class QueryeerController implements PropertyChangeListener
                 break;
             case ABOUT:
                 aboutDialog.setVisible(true);
+                break;
+            case OPEN_RECENT_FILE:
+                if (value instanceof String file)
+                {
+                    openRecentFileAction(file);
+                }
                 break;
             default:
                 throw new IllegalArgumentException("Unknown action " + action);
@@ -507,7 +526,7 @@ class QueryeerController implements PropertyChangeListener
             newQueryAction(event.getQueryEngine(), event.getState(), null, null, event.getNewQueryName(), true, Optional.ofNullable(event.getEditorValue()));
             if (event.isExecute())
             {
-                executeAction();
+                executeAction(null);
             }
         }
         else if (event.getFile() != null)
@@ -600,13 +619,7 @@ class QueryeerController implements PropertyChangeListener
         QueryFileModel queryFile = model.getSelectedFile();
         if (queryFile != null)
         {
-            queryFile.getQueryEngine()
-                    .abortQuery(queryFile);
-            if (queryFile.getState()
-                    .isExecuting())
-            {
-                queryFile.setState(State.ABORTED);
-            }
+            queryFile.abort();
         }
     }
 
@@ -689,7 +702,7 @@ class QueryeerController implements PropertyChangeListener
                                 newQueryAction(null, null, event.getNewQueryName(), true, Optional.of(value));
                                 if (execute)
                                 {
-                                    executeAction();
+                                    executeAction(null);
                                 }
                             });
                         }
@@ -715,70 +728,13 @@ class QueryeerController implements PropertyChangeListener
     }
 
     /** Execute listener. */
-    private void executeAction()
+    private void executeAction(Duration interval)
     {
         QueryFileModel queryFile = model.getSelectedFile();
-        if (queryFile == null)
+        if (queryFile != null)
         {
-            return;
+            queryFile.execute(interval);
         }
-
-        if (!queryFile.getQueryEngine()
-                .shouldExecute(queryFile))
-        {
-            return;
-        }
-
-        if (queryFile.getState()
-                .isExecuting())
-        {
-            return;
-        }
-
-        // Don't run empty queries
-        if (queryFile.getEditor()
-                .isValueEmpty())
-        {
-            return;
-        }
-
-        OutputWriter writer = queryFile.getOutputExtension()
-                .createOutputWriter(queryFile);
-
-        if (writer == null)
-        {
-            return;
-        }
-
-        Object query = queryFile.getEditor()
-                .getValue(false);
-
-        QueryService.executeQuery(queryFile, getOutputWriter(queryFile, writer), query, false, () ->
-        {
-        });
-    }
-
-    /** Creates a proxy outputwriter that writes to multiple output writers. */
-    private static OutputWriter getOutputWriter(QueryFileModel file, OutputWriter masterWriter)
-    {
-        List<OutputWriter> activeAutoPopulatedWriters = file.getOutputComponents()
-                .stream()
-                .filter(o -> o.getExtension()
-                        .isAutoPopulated()
-                        && o.active())
-                .map(o -> o.getExtension()
-                        .createOutputWriter(file))
-                .toList();
-
-        // No auto populating components return the master writer
-        if (activeAutoPopulatedWriters.isEmpty())
-        {
-            return masterWriter;
-        }
-
-        List<OutputWriter> result = new ArrayList<>(activeAutoPopulatedWriters);
-        result.add(0, masterWriter);
-        return new ProxyOutputWriter(result);
     }
 
     /** New query action. */
@@ -1013,7 +969,8 @@ class QueryeerController implements PropertyChangeListener
         OUTPUT_CHANGED,
         FORMAT_CHANGED,
         OPTIONS,
-        ABOUT
+        ABOUT,
+        OPEN_RECENT_FILE
     }
 
     /**

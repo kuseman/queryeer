@@ -15,8 +15,7 @@
 
         <!-- Versions -->
         <slf4j-reload4j.version>1.7.36</slf4j-reload4j.version>
-        <ikonli-fontawesome-pack.version>2.4.0</ikonli-fontawesome-pack.version>
-        <ikonli-swing.version>2.4.0</ikonli-swing.version>
+        <ikonli.version>12.4.0</ikonli.version>
         <rsyntaxtextarea.version>3.4.0</rsyntaxtextarea.version>
         <autocomplete.version>3.3.1</autocomplete.version>
         <rstaui.version>3.3.1</rstaui.version>
@@ -95,12 +94,12 @@
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-fontawesome-pack</artifactId>
-            <version>${ikonli-fontawesome-pack.version}</version>
+            <version>${ikonli.version}</version>
         </dependency>
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-swing</artifactId>
-            <version>${ikonli-swing.version}</version>
+            <version>${ikonli.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fifesoft</groupId>

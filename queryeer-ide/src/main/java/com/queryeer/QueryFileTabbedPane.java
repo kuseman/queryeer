@@ -211,6 +211,8 @@ class QueryFileTabbedPane extends JTabbedPane
             setTitle(getTabTitle(file));
             setIcon(file.getQueryEngine()
                     .getIcon());
+            setStatusIcon(file.isRunningAtInterval() ? Constants.PLAY_CIRCLE
+                    : null);
             for (int i = 0; i < QueryFileTabbedPane.this.getTabCount(); i++)
             {
                 if (QueryFileTabbedPane.this.getTabComponentAt(i) == this)
@@ -224,8 +226,6 @@ class QueryFileTabbedPane extends JTabbedPane
 
         private static String getTabTitle(QueryFileModel queryFile)
         {
-            String filename = FilenameUtils.getName(queryFile.getFile()
-                    .getAbsolutePath());
             StringBuilder sb = new StringBuilder();
             if (queryFile.isDirty())
             {
@@ -241,7 +241,10 @@ class QueryFileTabbedPane extends JTabbedPane
                         .append(") ");
             }
 
+            String filename = FilenameUtils.getName(queryFile.getFile()
+                    .getAbsolutePath());
             sb.append(filename);
+
             if (queryFile.getState()
                     .isExecuting())
             {
