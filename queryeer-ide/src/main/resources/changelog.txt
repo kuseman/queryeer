@@ -2,6 +2,9 @@ CHANGELOG
 
 Queryeer
 
+v2.16.0
+feat: Add support for running queires at specific intervals
+
 v2.15.0
 feat: Bump payloadbuilder
 feat: Reload changed files that is not dirty without asking
@@ -207,6 +210,11 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.9.9
+feat: Add support for tables in FilesystemCatalog. This now detects filetype and redirects to systemcatalog OpenCsv/Openjson/OpenXml functions
+feat: Add support for datasink in FilesystemCatalog. SelectInto/InsertInto files
+feat: Add support for ColumnType#Any in Jdbc InsertSink
 
 v1.9.8
 feat: Implement SelectInto, InsertInto and DropTable in JDBC catalog
