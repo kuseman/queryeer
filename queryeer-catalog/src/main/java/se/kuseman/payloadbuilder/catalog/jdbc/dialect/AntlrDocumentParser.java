@@ -31,6 +31,7 @@ import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -214,7 +215,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
             return null;
         }
 
-        CompletionResult completionResult = getCompletionItems(tokenOffset);
+        CompletionResult completionResult = ObjectUtils.getIfNull(getCompletionItems(tokenOffset), CompletionResult.EMPTY);
 
         List<CompletionItem> clipboardCompletions = getClipboardCompletions(tokenOffset);
 
