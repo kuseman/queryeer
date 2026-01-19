@@ -163,15 +163,20 @@ class QueryeerModel implements IQueryFileProvider
 
         file.dispose();
 
-        if (files.remove(index) == previousSelectedFile)
-        {
-            previousSelectedFile = null;
-        }
         // Prev will be re-set upon property change so store it before firing
+        // CSOFF
         QueryFileModel prevFile = previousSelectedFile;
+        // CSON
+
+        files.remove(index);
 
         pcs.fireIndexedPropertyChange(FILES, index, file, null);
 
+        // Don't keep a reference to a removed file
+        if (file == previousSelectedFile)
+        {
+            previousSelectedFile = null;
+        }
         removedFiles.add(file);
         QueryFileModel selectedFile;
         // Select previous or the removed files index

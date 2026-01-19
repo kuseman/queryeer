@@ -158,6 +158,7 @@ class QueryeerView extends JFrame
 
     private List<AbstractButton> editorToolbarActions = new ArrayList<>();
     private List<JMenuItem> editorMenuActions = new ArrayList<>();
+    private List<JMenuItem> openFilesMenuItems = new ArrayList<>();
 
     // CSOFF
     //@formatter:off
@@ -728,8 +729,6 @@ class QueryeerView extends JFrame
         pack();
     }
 
-    private List<JMenuItem> openFilesMenuItems = new ArrayList<>();
-
     private PropertyChangeListener queryeerModelListener = new PropertyChangeListener()
     {
         @Override
@@ -781,6 +780,8 @@ class QueryeerView extends JFrame
             }
             else if (QueryeerModel.SELECTED_FILE.equalsIgnoreCase(evt.getPropertyName()))
             {
+                populateActions(emptyList());
+
                 // Mark selected file with an icon
                 QueryFileModel fileModel = (QueryFileModel) evt.getNewValue();
                 if (fileModel == null)
@@ -1051,6 +1052,11 @@ class QueryeerView extends JFrame
                         .remove(actionCommand);
             }
 
+            ActionListener[] actionListeners = button.getActionListeners();
+            for (ActionListener l : actionListeners)
+            {
+                button.removeActionListener(l);
+            }
             toolBar.remove(button);
         }
         for (JMenuItem menuItem : editorMenuActions)
@@ -1078,6 +1084,7 @@ class QueryeerView extends JFrame
         }
 
         editorToolbarActions.clear();
+        editorMenuActions.clear();
         for (Action action : actions)
         {
             Integer order = (Integer) action.getValue(com.queryeer.api.action.Constants.ACTION_ORDER);

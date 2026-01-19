@@ -1034,5 +1034,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     public void dispose()
     {
         UIManager.removePropertyChangeListener(uiManagerChangeListener);
+        findDialog.setVisible(false);
+        findDialog.dispose();
     }
 }

@@ -348,8 +348,11 @@ class TextEditor implements ITextEditor, SearchListener
 
     private class Panel extends JPanel
     {
+        private List<Action> actions;
+
         Panel(List<Action> actions)
         {
+            this.actions = actions;
             setLayout(new BorderLayout());
 
             installEditorKit();
@@ -456,12 +459,26 @@ class TextEditor implements ITextEditor, SearchListener
         }
         UIManager.removePropertyChangeListener(uiManagerListener);
 
-        // Close dialogs
-        findDialog.setVisible(false);
-        replaceDialog.setVisible(false);
-        gotoDialog.setVisible(false);
-        pasteSpecialDialog.setVisible(false);
-        replaceDialog.setVisible(false);
+        List.of(findDialog, replaceDialog, gotoDialog, pasteSpecialDialog)
+                .forEach(d ->
+                {
+                    d.setVisible(false);
+                    d.dispose();
+                });
+
+        panel.actions.forEach(a ->
+        {
+            PropertyChangeListener[] listeners = ((AbstractAction) a).getPropertyChangeListeners();
+            for (PropertyChangeListener l : listeners)
+            {
+                a.removePropertyChangeListener(l);
+            }
+        });
+
+        if (completer != null)
+        {
+            completer.autoCompletion.uninstall();
+        }
     }
 
     @Override
