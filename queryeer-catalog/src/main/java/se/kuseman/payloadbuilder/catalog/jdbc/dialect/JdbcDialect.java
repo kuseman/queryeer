@@ -14,6 +14,7 @@ import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
+import se.kuseman.payloadbuilder.catalog.jdbc.monitor.IServerMonitorExtension;
 
 /** Definition of a JDBC dialect. This is the glue that is missing from plain JDBC to do quirks and specials for different RDBMS:es */
 public interface JdbcDialect
@@ -122,6 +123,14 @@ public interface JdbcDialect
     default boolean supportsIncludeQueryPlanAction()
     {
         return false;
+    }
+
+    /**
+     * Returns the server monitor extension for this dialect, or null if monitoring is not supported.
+     */
+    default IServerMonitorExtension getMonitorExtension()
+    {
+        return null;
     }
 
     /**

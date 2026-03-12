@@ -97,6 +97,16 @@ class JdbcCompletionProvider implements ICompletionProvider
             {
                 return false;
             }
+
+            @Override
+            public void addChangeListener(Runnable listener)
+            {
+            }
+
+            @Override
+            public void removeChangeListener(Runnable listener)
+            {
+            }
         };
 
         Catalog catalog = crawlService.getCatalog(state, database);
