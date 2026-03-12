@@ -77,7 +77,8 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
         }
     }
 
-    void addChangeListener(Runnable r)
+    @Override
+    public void addChangeListener(Runnable r)
     {
         if (changeListeners == null)
         {
@@ -86,7 +87,8 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
         changeListeners.add(r);
     }
 
-    void removeChangeListener(Runnable r)
+    @Override
+    public void removeChangeListener(Runnable r)
     {
         if (changeListeners == null)
         {

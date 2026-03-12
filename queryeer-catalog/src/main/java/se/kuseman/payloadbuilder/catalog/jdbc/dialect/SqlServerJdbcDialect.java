@@ -44,6 +44,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.RoutineParameter;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource.Type;
+import se.kuseman.payloadbuilder.catalog.jdbc.monitor.IServerMonitorExtension;
 
 /** Dialect for Microsoft SQL Server */
 class SqlServerJdbcDialect implements JdbcDialect
@@ -59,6 +60,7 @@ class SqlServerJdbcDialect implements JdbcDialect
     private final Icons icons;
     private final ITemplateService templateService;
     private final IQueryPlanOutputExtension queryPlanOutputExtension;
+    private final IServerMonitorExtension monitorExtension = new SqlServerMonitorExtension();
 
     public SqlServerJdbcDialect(CatalogCrawlService crawlerService, IEventBus eventBus, Icons icons, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService,
             IQueryPlanOutputExtension queryPlanOutputExtension, ITreeConfig treeConfig)
@@ -332,6 +334,12 @@ class SqlServerJdbcDialect implements JdbcDialect
     public boolean supportsShowEstimatedQueryPlanAction()
     {
         return true;
+    }
+
+    @Override
+    public IServerMonitorExtension getMonitorExtension()
+    {
+        return monitorExtension;
     }
 
     private TableSource.Type tableSourceTypeFrom(String type)

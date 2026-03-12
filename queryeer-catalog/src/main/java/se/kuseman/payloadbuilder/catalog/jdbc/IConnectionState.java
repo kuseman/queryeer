@@ -23,6 +23,12 @@ public interface IConnectionState
     /** Create a new {@link Connection} from this state. */
     Connection createConnection() throws SQLException;
 
+    /** Add change listener to state. */
+    void addChangeListener(Runnable listener);
+
+    /** Remove change listener from state. */
+    void removeChangeListener(Runnable listener);
+
     /** Returns true if the query should include a query plan. */
     boolean isIncludeQueryPlan();
 
