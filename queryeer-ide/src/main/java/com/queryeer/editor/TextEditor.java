@@ -174,6 +174,7 @@ class TextEditor implements ITextEditor, SearchListener
     private ErrorStrip errorStrip;
     private EditorParser parser;
     private EditorCompleter completer;
+    private MultiCaretSupport multiCaretSupport;
 
     TextEditor(ITextEditorKit editorKit)
     {
@@ -185,7 +186,8 @@ class TextEditor implements ITextEditor, SearchListener
         this.eventBus = eventBus;
         this.editorKit = requireNonNull(editorKit, "editorKit");
 
-        textEditor = new TextEditorPane();
+        MultiCaretAwareEditorPane multiCaretAwarePane = new MultiCaretAwareEditorPane();
+        textEditor = multiCaretAwarePane;
         textEditor.setColumns(editorKit.getColumns());
         textEditor.setRows(editorKit.getRows());
         textEditor.setCodeFoldingEnabled(true);
@@ -193,6 +195,8 @@ class TextEditor implements ITextEditor, SearchListener
         textEditor.setTabSize(2);
         textEditor.setTabsEmulated(true);
         textEditor.setEditable(!editorKit.readOnly());
+
+        multiCaretSupport = new MultiCaretSupport(multiCaretAwarePane);
 
         UIManager.addPropertyChangeListener(uiManagerListener);
         adaptToLookAndFeel();
@@ -229,6 +233,48 @@ class TextEditor implements ITextEditor, SearchListener
                     {
                         Font font = textEditor.getFont();
                         textEditor.setFont(font.deriveFont(font.getSize2D() - 1.0f));
+                    }
+                });
+
+        // Multi-caret: Ctrl/Cmd+D — select next occurrence
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_D, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx()), "multiCaret.selectNextOccurrence");
+        textEditor.getActionMap()
+                .put("multiCaret.selectNextOccurrence", new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        multiCaretSupport.selectNextOccurrence();
+                    }
+                });
+
+        // Multi-caret: Ctrl/Cmd+Alt+Down — add caret below
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx() | InputEvent.ALT_DOWN_MASK), "multiCaret.addCaretBelow");
+        textEditor.getActionMap()
+                .put("multiCaret.addCaretBelow", new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        multiCaretSupport.addCaretBelow();
+                    }
+                });
+
+        // Multi-caret: Ctrl/Cmd+Alt+Up — add caret above
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx() | InputEvent.ALT_DOWN_MASK), "multiCaret.addCaretAbove");
+        textEditor.getActionMap()
+                .put("multiCaret.addCaretAbove", new AbstractAction()
+                {
+                    @Override
+                    public void actionPerformed(ActionEvent e)
+                    {
+                        multiCaretSupport.addCaretAbove();
                     }
                 });
 
@@ -448,6 +494,7 @@ class TextEditor implements ITextEditor, SearchListener
     @Override
     public void close()
     {
+        multiCaretSupport.dispose();
         if (parser != null)
         {
             Future<?> session = parser.currentSession;
@@ -484,6 +531,8 @@ class TextEditor implements ITextEditor, SearchListener
     @Override
     public void clearBeforeExecution()
     {
+        multiCaretSupport.clearSecondaryCarets();
+
         int selStart = textEditor.getSelectionStart();
         int selEnd = textEditor.getSelectionEnd();
 
