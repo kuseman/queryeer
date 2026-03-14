@@ -14,6 +14,7 @@ import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.extensions.IExtension;
+import com.queryeer.api.extensions.assistant.IAIContextItem;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
@@ -105,6 +106,15 @@ public interface IQueryEngine extends IExtension
     default <T extends IQuickSearchModel.Item> IQuickSearchModel<T> getDatasourceSearchModel()
     {
         return null;
+    }
+
+    /**
+     * Return available AI context items for the provided query file. Items represent schema objects (tables, views, etc.) or other engine-specific context that users can selectively include in the AI
+     * system prompt via the chat window picker.
+     */
+    default List<IAIContextItem> getAIContextItems(IQueryFile queryFile)
+    {
+        return emptyList();
     }
 
     /** State that can be stored on a query file. Engines can use this to store a connection etc. that is associated with the file */

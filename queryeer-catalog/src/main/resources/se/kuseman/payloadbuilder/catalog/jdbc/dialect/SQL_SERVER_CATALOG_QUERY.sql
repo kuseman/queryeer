@@ -13,7 +13,7 @@ SELECT s.name         objectSchema
 ,      oc.scale       columnScale
 ,      oc.is_nullable columnNullable
 
-,      i.name         primaryKeyName
+,      pk.name        primaryKeyName
 
 FROM sys.all_objects ot
 INNER JOIN sys.all_columns oc
@@ -23,15 +23,18 @@ INNER JOIN sys.[schemas] s
 INNER JOIN sys.types t
   ON t.user_type_id = oc.user_type_id
 
-LEFT JOIN sys.index_columns ic 
-  ON  ic.object_id = oc.object_id
-  AND ic.column_id = oc.column_id
+LEFT JOIN
+(
+  SELECT i.name, ic.object_id, ic.column_id
+  FROM sys.indexes i
+  INNER JOIN sys.index_columns ic
+    ON ic.index_id = i.index_id
+    AND ic.object_id = i.object_id
+  WHERE i.is_primary_key = 1
+) pk
+  ON pk.object_id = oc.object_id
+  AND pk.column_id = oc.column_id
 
- LEFT JOIN sys.indexes i
-  ON i.object_id = ic.object_id
-  AND i.index_id = ic.index_id
-  AND i.is_primary_key = 1
-  
 WHERE ot.type IN ('V', 'U', 'SN', 'TF', 'IF')
 ORDER BY s.name, ot.name, oc.column_id
 

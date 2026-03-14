@@ -25,6 +25,8 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
 import com.queryeer.api.component.PropertyFields.PropertyField;
@@ -164,6 +166,20 @@ public class PropertiesComponent extends JPanel
                 int anchor = pf.isOperation() ? GridBagConstraints.BASELINE_LEADING
                         : GridBagConstraints.BASELINE;
                 add(component, new GridBagConstraints(0, y, 2, 1, 1.0, 0.0, anchor, fill, new Insets(0, 0, 3, 0), 0, 0));
+            }
+            else if (pf.getProperty() != null
+                    && pf.getProperty()
+                            .multiline())
+            {
+                // Multiline: label on its own row, then scroll pane on the next row spanning both columns
+                label.setText(pf.getTitle());
+                if (!isBlank(pf.getDescription()))
+                {
+                    label.setToolTipText(pf.getDescription());
+                }
+                add(label, new GridBagConstraints(0, y, 2, 1, 1.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.HORIZONTAL, new Insets(0, 3, 1, 3), 0, 0));
+                y++;
+                add(component, new GridBagConstraints(0, y, 2, 1, 1.0, 0.0, GridBagConstraints.WEST, GridBagConstraints.BOTH, new Insets(0, 3, 3, 3), 0, 0));
             }
             else
             {
@@ -305,6 +321,35 @@ public class PropertiesComponent extends JPanel
             }
 
             return textField;
+        }
+        else if (String.class == type
+                && field.getProperty() != null
+                && field.getProperty()
+                        .multiline())
+        {
+            final JTextArea textArea = new PTextArea(field.getProperty()
+                    .multilineRows());
+            textArea.setLineWrap(true);
+            textArea.setWrapStyleWord(true);
+            textArea.addKeyListener(new KeyAdapter()
+            {
+                @Override
+                public void keyReleased(KeyEvent e)
+                {
+                    setValue(field, textArea.getText());
+                }
+            });
+            componentSetters.add(o -> textArea.setText(stringValue(o)));
+            textArea.setEditable(!readyOnly);
+
+            if (!field.isReadOnly()
+                    && field.getProperty()
+                            .enableAware())
+            {
+                enableAwareProperties.put(field.getName(), e -> textArea.setEnabled(e));
+            }
+
+            return new JScrollPane(textArea);
         }
         else if (String.class == type)
         {
@@ -494,5 +539,22 @@ public class PropertiesComponent extends JPanel
                 super.processKeyEvent(e);
             }
         };
+    }
+
+    static class PTextArea extends JTextArea
+    {
+        PTextArea(int rows)
+        {
+            super(rows, 0);
+        }
+
+        @Override
+        protected void processKeyEvent(KeyEvent e)
+        {
+            if (this.hasFocus())
+            {
+                super.processKeyEvent(e);
+            }
+        }
     }
 }

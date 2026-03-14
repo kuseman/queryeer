@@ -1,7 +1,9 @@
 package se.kuseman.payloadbuilder.catalog.jdbc;
 
+import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.groupingBy;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.Strings.CI;
 
@@ -36,6 +38,7 @@ import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.event.ShowOptionsEvent;
+import com.queryeer.api.extensions.assistant.IAIContextItem;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
@@ -47,6 +50,10 @@ import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.api.utils.MapUtils;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Index;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 
 /** JdbcQuery engine */
 class JdbcQueryEngine implements IQueryEngine
@@ -260,6 +267,78 @@ class JdbcQueryEngine implements IQueryEngine
     public IQuickSearchModel<DatasourcesQuickSearchModel.DatasourceItem> getDatasourceSearchModel()
     {
         return datasourcesQuickSearchModel;
+    }
+
+    @Override
+    public List<IAIContextItem> getAIContextItems(IQueryFile queryFile)
+    {
+        JdbcEngineState engineState = queryFile.getEngineState();
+        if (engineState == null
+                || engineState.connectionState == null)
+        {
+            return emptyList();
+        }
+
+        String database = engineState.getDatabase();
+        Catalog catalog = crawlService.getCatalog(engineState, database);
+        if (catalog == null)
+        {
+            return emptyList();
+        }
+
+        List<IAIContextItem> items = new ArrayList<>();
+        Map<ObjectName, List<Index>> indicesByObject = catalog.getIndices()
+                .stream()
+                .collect(groupingBy(Index::getObjectName));
+
+        List<ObjectName> referencedNames = getReferencedNamesFromQuery(queryFile, engineState);
+
+        for (TableSource ts : catalog.getTableSources())
+        {
+            // NOTE! TableSource adds stuff in it's equals so we need to construct a new object name here
+            List<Index> indices = indicesByObject.getOrDefault(new ObjectName(ts.getCatalog(), ts.getSchema(), ts.getName()), emptyList());
+            boolean defaultSelected = matchesAny(ts, referencedNames);
+            items.add(new JdbcAITableSourceContextItem(ts, indices, defaultSelected));
+        }
+        return items;
+    }
+
+    private List<ObjectName> getReferencedNamesFromQuery(IQueryFile queryFile, JdbcEngineState engineState)
+    {
+        Object editorValue = queryFile.getEditor()
+                .getValue(false);
+        if (editorValue == null)
+        {
+            return emptyList();
+        }
+        String queryText = editorValue.toString()
+                .trim();
+        if (isBlank(queryText))
+        {
+            return emptyList();
+        }
+        JdbcDialect dialect = engineState.getJdbcDialect();
+        if (dialect == null)
+        {
+            return emptyList();
+        }
+        return dialect.getReferencedTableSources(queryText, engineState);
+    }
+
+    private static boolean matchesAny(TableSource ts, List<ObjectName> referencedNames)
+    {
+        for (ObjectName ref : referencedNames)
+        {
+            if (CI.equals(ts.getName(), ref.getName())
+                    && (ref.getSchema() == null
+                            || CI.equals(ts.getSchema(), ref.getSchema()))
+                    && (ref.getCatalog() == null
+                            || CI.equals(ts.getCatalog(), ref.getCatalog())))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     //@formatter:off

@@ -13,4 +13,10 @@ public interface IQueryPlanOutputExtension extends IOutputExtension
     {
         throw new IllegalArgumentException("This output extension does not support output writers");
     }
+
+    @Override
+    default boolean isAutoAdded()
+    {
+        return false;
+    }
 }

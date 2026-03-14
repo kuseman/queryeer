@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import javax.swing.SwingUtilities;
 import javax.swing.event.SwingPropertyChangeSupport;
@@ -40,6 +41,7 @@ class QueryeerModel implements IQueryFileProvider
     private final Config config;
     private final File backupPath;
     private final SwingPropertyChangeSupport pcs = new SwingPropertyChangeSupport(this);
+    private final List<Consumer<IQueryFile>> currentFileListeners = new ArrayList<>();
     private final List<QueryFileModel> files = new ArrayList<>();
     private final List<QueryFileModel> removedFiles = new ArrayList<>();
     private final FileWatchService watchService;
@@ -89,6 +91,18 @@ class QueryeerModel implements IQueryFileProvider
     void addPropertyChangeListener(PropertyChangeListener listener)
     {
         pcs.addPropertyChangeListener(listener);
+    }
+
+    @Override
+    public void addCurrentFileListener(Consumer<IQueryFile> listener)
+    {
+        currentFileListeners.add(listener);
+    }
+
+    @Override
+    public void removeCurrentFileListener(Consumer<IQueryFile> listener)
+    {
+        currentFileListeners.remove(listener);
     }
 
     void addFile(QueryFileModel file, boolean forceLast)
@@ -208,6 +222,7 @@ class QueryeerModel implements IQueryFileProvider
             previousSelectedFile = selectedFile;
             selectedFile = file;
             pcs.firePropertyChange(SELECTED_FILE, old, selectedFile);
+            currentFileListeners.forEach(l -> l.accept(selectedFile));
         }
     }
 
