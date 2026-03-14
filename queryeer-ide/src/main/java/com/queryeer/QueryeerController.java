@@ -26,6 +26,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -181,7 +183,21 @@ class QueryeerController implements PropertyChangeListener
 
             if (sessionFile.isNew)
             {
-                newFileCounter++;
+                String name = sessionFile.file.getName();
+                Matcher m = Pattern.compile("Query(\\d+).*")
+                        .matcher(name);
+                if (m.matches())
+                {
+                    int n = Integer.parseInt(m.group(1));
+                    if (n >= newFileCounter)
+                    {
+                        newFileCounter = n + 1;
+                    }
+                }
+                else
+                {
+                    newFileCounter++;
+                }
             }
 
             // Verify backup file
