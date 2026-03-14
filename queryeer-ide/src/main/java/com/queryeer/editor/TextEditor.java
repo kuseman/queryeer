@@ -807,7 +807,7 @@ class TextEditor implements ITextEditor, SearchListener
 
         try
         {
-            List<MutableInt> startOffsets = new ArrayList<>();
+            List<MutableInt> commentOffsets = new ArrayList<>();
 
             for (int i = 0; i < lines; i++)
             {
@@ -819,40 +819,63 @@ class TextEditor implements ITextEditor, SearchListener
                                 && endOffset <= selEnd)
                         || between(startOffset, endOffset, selEnd))
                 {
-                    if (addComments == null)
+                    int lineLength = endOffset - startOffset;
+                    if (lineLength == 0)
                     {
-                        addComments = !"--".equals(textEditor.getText(startOffset, 2));
+                        continue;
                     }
 
-                    startOffsets.add(new MutableInt(startOffset));
+                    // Find first non-whitespace position on this line
+                    String lineText = textEditor.getText(startOffset, lineLength);
+                    int indent = 0;
+                    while (indent < lineLength
+                            && (lineText.charAt(indent) == ' '
+                                    || lineText.charAt(indent) == '\t'))
+                    {
+                        indent++;
+                    }
+
+                    if (indent == lineLength)
+                    {
+                        // Whitespace-only line, skip
+                        continue;
+                    }
+
+                    if (addComments == null)
+                    {
+                        addComments = !lineText.substring(indent)
+                                .startsWith("--");
+                    }
+
+                    commentOffsets.add(new MutableInt(startOffset + indent));
                 }
             }
 
-            if (!startOffsets.isEmpty())
+            if (!commentOffsets.isEmpty())
             {
                 int modifier = 0;
-                for (MutableInt startOffset : startOffsets)
+                for (MutableInt commentOffset : commentOffsets)
                 {
                     if (addComments)
                     {
                         textEditor.getDocument()
-                                .insertString(startOffset.intValue() + modifier, "--", null);
+                                .insertString(commentOffset.intValue() + modifier, "--", null);
                     }
                     else
                     {
                         textEditor.getDocument()
-                                .remove(startOffset.intValue() + modifier, 2);
+                                .remove(commentOffset.intValue() + modifier, 2);
                     }
-                    startOffset.setValue(Math.max(startOffset.intValue() + modifier, 0));
+                    commentOffset.setValue(Math.max(commentOffset.intValue() + modifier, 0));
                     modifier += addComments ? 2
                             : -2;
                 }
 
-                selStart = startOffsets.get(0)
+                selStart = commentOffsets.get(0)
                         .intValue();
                 if (!caretSelection)
                 {
-                    selEnd = startOffsets.get(startOffsets.size() - 1)
+                    selEnd = commentOffsets.get(commentOffsets.size() - 1)
                             .intValue();
                 }
                 else
