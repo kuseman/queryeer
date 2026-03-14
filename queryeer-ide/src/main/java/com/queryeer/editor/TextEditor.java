@@ -353,25 +353,43 @@ class TextEditor implements ITextEditor, SearchListener
         });
 
         // Set parsing state when document changes to avoid fetching completion items for the wrong state etc.
-        textEditor.getDocument()
-                .addDocumentListener(new ADocumentListenerAdapter()
+        // Store as a field so it can be re-registered when textEditor.load() replaces the document.
+        ADocumentListenerAdapter documentChangeListener = new ADocumentListenerAdapter()
+        {
+            @Override
+            protected void update()
+            {
+                if (parser != null)
                 {
-                    @Override
-                    protected void update()
-                    {
-                        if (parser != null)
-                        {
-                            parser.state = EditorParser.State.PARSING;
-                        }
+                    parser.state = EditorParser.State.PARSING;
+                }
 
-                        int size = propertyChangeListeners.size();
-                        for (int i = size - 1; i >= 0; i--)
-                        {
-                            propertyChangeListeners.get(i)
-                                    .propertyChange(new PropertyChangeEvent(textEditor, IEditor.VALUE_CHANGED, null, null));
-                        }
-                    }
-                });
+                int size = propertyChangeListeners.size();
+                for (int i = size - 1; i >= 0; i--)
+                {
+                    propertyChangeListeners.get(i)
+                            .propertyChange(new PropertyChangeEvent(textEditor, IEditor.VALUE_CHANGED, null, null));
+                }
+            }
+        };
+        textEditor.getDocument()
+                .addDocumentListener(documentChangeListener);
+
+        // Re-register the document listener whenever textEditor.load() replaces the underlying document.
+        // Without this, VALUE_CHANGED is never fired after a session restore and backups stop being written.
+        textEditor.addPropertyChangeListener("document", evt ->
+        {
+            Document oldDoc = (Document) evt.getOldValue();
+            Document newDoc = (Document) evt.getNewValue();
+            if (oldDoc != null)
+            {
+                oldDoc.removeDocumentListener(documentChangeListener);
+            }
+            if (newDoc != null)
+            {
+                newDoc.addDocumentListener(documentChangeListener);
+            }
+        });
 
         //@formatter:off
         List<Action> actions = new ArrayList<>();
