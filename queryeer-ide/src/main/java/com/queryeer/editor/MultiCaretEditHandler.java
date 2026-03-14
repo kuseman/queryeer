@@ -164,6 +164,11 @@ class MultiCaretEditHandler
                     && contents.isDataFlavorSupported(DataFlavor.stringFlavor))
             {
                 String text = (String) contents.getTransferData(DataFlavor.stringFlavor);
+                // Normalize line endings to \n so that \r\n clipboard content (Windows) does not
+                // introduce bare \r characters into the document. The document's EndOfLineStringProperty
+                // controls how \n is translated back to the original line ending on save/backup.
+                text = text.replace("\r\n", "\n")
+                        .replace("\r", "\n");
                 // Smart paste: if the clipboard was produced by a multi-caret copy (N lines for
                 // N carets), distribute one line per caret; otherwise paste the whole text at
                 // every caret position.
