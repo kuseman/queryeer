@@ -34,6 +34,12 @@ public @interface Property
     /** Is this a password property */
     boolean password() default false;
 
+    /** Should this property be rendered as a multi-line text area instead of a single-line text field */
+    boolean multiline() default false;
+
+    /** Number of visible rows when {@link #multiline()} is true */
+    int multilineRows() default 4;
+
     /** Return tooltip that should be displayed on this property */
     String tooltip() default "";
 

@@ -93,6 +93,7 @@ import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.IOutputFormatExtension;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.assistant.AIAssistantService;
 import com.queryeer.domain.Caret;
 import com.queryeer.event.CaretChangedEvent;
 import com.queryeer.event.QueryFileClosingEvent;
@@ -171,7 +172,8 @@ class QueryeerView extends JFrame
             List<IOutputFormatExtension> outputFormatExtensions,
             List<IQueryEngine> queryEngines,
             ActionRegistry actionRegistry,
-            IDialogFactory dialogFactory)
+            IDialogFactory dialogFactory,
+            AIAssistantService aiAssistantService)
     //@formatter:on
     // CSON
     {
@@ -257,6 +259,19 @@ class QueryeerView extends JFrame
 
         panelTasks.add(labelTasksSpinner);
 
+        JLabel labelAIAssistant = new JLabel(IconFactory.of(FontAwesome.COMMENTS));
+        labelAIAssistant.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
+        labelAIAssistant.setToolTipText("AI Assistant");
+        labelAIAssistant.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseClicked(MouseEvent e)
+            {
+                aiAssistantService.showChatWindow();
+            }
+        });
+
+        panelStatus.add(labelAIAssistant);
         panelStatus.add(labelLogs);
         panelStatus.add(panelTasks);
         panelStatus.add(labelMemory);

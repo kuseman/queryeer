@@ -1,10 +1,13 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
 import java.io.Reader;
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.List;
 
 import org.apache.commons.io.IOUtils;
 
@@ -14,6 +17,7 @@ import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.monitor.IServerMonitorExtension;
 
 /** Definition of a JDBC dialect. This is the glue that is missing from plain JDBC to do quirks and specials for different RDBMS:es */
@@ -85,6 +89,27 @@ public interface JdbcDialect
     default ITextEditorDocumentParser getParser(IConnectionState connectionState)
     {
         return null;
+    }
+
+    /**
+     * Parse the provided query text and return all table source {@link ObjectName}s referenced in it. Returns an empty list if the dialect does not support ANTLR-based parsing.
+     */
+    default List<ObjectName> getReferencedTableSources(String queryText, IConnectionState connectionState)
+    {
+        ITextEditorDocumentParser docParser = getParser(connectionState);
+        if (!(docParser instanceof AntlrDocumentParser<?> antlrParser))
+        {
+            return Collections.emptyList();
+        }
+        try
+        {
+            antlrParser.parse(new StringReader(queryText));
+            return antlrParser.getReferencedTableSources();
+        }
+        catch (Exception e)
+        {
+            return Collections.emptyList();
+        }
     }
 
     /** Return catalog meta data for provided database */

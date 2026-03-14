@@ -166,6 +166,43 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     {
     }
 
+    /** Return all table source ObjectNames referenced in the last parsed document. */
+    List<ObjectName> getReferencedTableSources()
+    {
+        if (context == null)
+        {
+            return emptyList();
+        }
+        Set<Integer> tableSourceIndices = getTableSourceRuleIndices();
+        if (tableSourceIndices.isEmpty())
+        {
+            return emptyList();
+        }
+        List<ObjectName> result = new ArrayList<>();
+        collectTableSources(context, tableSourceIndices, result);
+        return result;
+    }
+
+    private void collectTableSources(ParseTree tree, Set<Integer> indices, List<ObjectName> result)
+    {
+        if (tree instanceof ParserRuleContext ctx
+                && indices.contains(ctx.getRuleIndex()))
+        {
+            Pair<Interval, ObjectName> ts = getTableSource(ctx);
+            if (ts != null
+                    && ts.getValue() != null)
+            {
+                result.add(ts.getValue());
+                return; // leaf table reference – don't recurse further
+            }
+            // No ObjectName (e.g. subquery context) – fall through and recurse
+        }
+        for (int i = 0; i < tree.getChildCount(); i++)
+        {
+            collectTableSources(tree.getChild(i), indices, result);
+        }
+    }
+
     /** Return ANTLR rule id's that are used for code completions */
     protected abstract Set<Integer> getCodeCompleteRuleIndices();
 

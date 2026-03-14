@@ -10,12 +10,16 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
 
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -128,12 +132,45 @@ class ServiceLoader
 
         for (Class<?> clz : extensionClasses)
         {
-            List<Class<?>> ifaces = Arrays.stream(clz.getInterfaces())
-                    .filter(c -> IExtension.class.isAssignableFrom(c))
-                    .collect(toList());
-
-            register(clz, ifaces);
+            List<Class<?>> interfaces = collectIExtensionInterfaces(clz);
+            register(clz, interfaces);
         }
+    }
+
+    /**
+     * Collect all IExtension-assignable interfaces from the full class/interface hierarchy using BFS. This ensures that e.g. a class implementing IAIAssistantProvider (which extends IConfigurable)
+     * also gets registered under IConfigurable.
+     */
+    private static List<Class<?>> collectIExtensionInterfaces(Class<?> clz)
+    {
+        List<Class<?>> result = new ArrayList<>();
+        Set<Class<?>> visited = new LinkedHashSet<>();
+        Queue<Class<?>> queue = new ArrayDeque<>();
+        queue.add(clz);
+        while (!queue.isEmpty())
+        {
+            Class<?> current = queue.poll();
+            if (current == null
+                    || !visited.add(current))
+            {
+                continue;
+            }
+            for (Class<?> iface : current.getInterfaces())
+            {
+                if (IExtension.class.isAssignableFrom(iface)
+                        && iface != IExtension.class
+                        && !result.contains(iface))
+                {
+                    result.add(iface);
+                }
+                queue.add(iface);
+            }
+            if (current.getSuperclass() != null)
+            {
+                queue.add(current.getSuperclass());
+            }
+        }
+        return result;
     }
 
     /** Concrete type of service */
@@ -190,6 +227,11 @@ class ServiceLoader
                         if (List.class.isAssignableFrom((Class<?>) ptype.getRawType()))
                         {
                             arg = getAll((Class<?>) ptype.getActualTypeArguments()[0]);
+                            // A List<T> dependency with no registered implementations resolves to an empty list
+                            if (arg == null)
+                            {
+                                arg = emptyList();
+                            }
                         }
                     }
                     if (arg == null)
