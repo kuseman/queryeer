@@ -236,7 +236,7 @@ class TextEditor implements ITextEditor, SearchListener
                     }
                 });
 
-        // Multi-caret: Ctrl/Cmd+D — select next occurrence
+        // Multi-caret: Ctrl/Cmd+D — select next occurrence (or delete line when no multi-caret context)
         textEditor.getInputMap()
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_D, Toolkit.getDefaultToolkit()
                         .getMenuShortcutKeyMaskEx()), "multiCaret.selectNextOccurrence");
@@ -246,7 +246,23 @@ class TextEditor implements ITextEditor, SearchListener
                     @Override
                     public void actionPerformed(ActionEvent e)
                     {
-                        multiCaretSupport.selectNextOccurrence();
+                        String sel = textEditor.getSelectedText();
+                        if (!multiCaretSupport.hasSecondaryCarets()
+                                && (sel == null
+                                        || sel.isEmpty()))
+                        {
+                            // No multi-caret context and no selection: delete the current line
+                            Action deleteLineAction = textEditor.getActionMap()
+                                    .get(RTextAreaEditorKit.rtaDeleteLineAction);
+                            if (deleteLineAction != null)
+                            {
+                                deleteLineAction.actionPerformed(e);
+                            }
+                        }
+                        else
+                        {
+                            multiCaretSupport.selectNextOccurrence();
+                        }
                     }
                 });
 
