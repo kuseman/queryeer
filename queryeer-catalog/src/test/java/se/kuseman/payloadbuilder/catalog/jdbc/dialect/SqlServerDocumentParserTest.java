@@ -1,11 +1,20 @@
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
+import static java.util.Collections.emptyList;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
@@ -14,13 +23,25 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.queryeer.api.editor.ITextEditorDocumentParser.CompletionItem;
+import com.queryeer.api.editor.ITextEditorDocumentParser.CompletionResult;
+import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.ITemplateService;
+
+import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TableAlias;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TableAliasType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TokenOffset;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.SqlServerDocumentParser.TableSourceAliasCollector;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.RoutineParameter;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlLexer;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Tsql_fileContext;
@@ -28,6 +49,114 @@ import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Tsql_fileContext;
 /** Test of {@link SqlServerDocumentParser} */
 class SqlServerDocumentParserTest
 {
+    private CatalogCrawlService crawlService;
+    private IConnectionState connectionState;
+    private SqlServerDocumentParser sqlServerDocumentParser;
+
+    /** Catalog with dbo.MyProc(@param1 varchar, @param2 int) */
+    private static final Catalog TEST_CATALOG = new Catalog("testdb", emptyList(),
+            List.of(new Routine("", "dbo", "MyProc", Routine.Type.PROCEDURE,
+                    List.of(new RoutineParameter("@param1", "varchar", 50, 0, 0, true, false), new RoutineParameter("@param2", "int", 0, 10, 0, false, false)))),
+            emptyList(), emptyList(), emptyList());
+
+    @BeforeEach
+    void setUp()
+    {
+        crawlService = mock(CatalogCrawlService.class);
+        connectionState = mock(IConnectionState.class);
+        when(connectionState.getDatabase()).thenReturn("testdb");
+        when(crawlService.getCatalog(any(), anyString())).thenReturn(TEST_CATALOG);
+
+        sqlServerDocumentParser = new SqlServerDocumentParser(mock(Icons.class), mock(IEventBus.class), mock(QueryActionsConfigurable.class), crawlService, connectionState,
+                mock(ITemplateService.class));
+    }
+
+    private CompletionResult complete(String query, int caretOffset)
+    {
+        sqlServerDocumentParser.parse(new StringReader(query));
+        return sqlServerDocumentParser.getCompletionItems(caretOffset);
+    }
+
+    private List<String> replacements(CompletionResult result)
+    {
+        return result.getItems()
+                .stream()
+                .map(CompletionItem::getReplacementText)
+                .collect(Collectors.toList());
+    }
+
+    @Test
+    void test_procedureParameters_twoPartName()
+    {
+        // EXEC dbo.MyProc | — caret right after the proc name
+        String query = "EXEC dbo.MyProc ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        assertEquals(List.of("@param1 = ", "@param2 = "), replacements(result));
+    }
+
+    @Test
+    void test_procedureParameters_onePartName()
+    {
+        // EXEC MyProc | — unqualified proc name (schema-less)
+        Catalog noSchema = new Catalog("testdb", emptyList(), List.of(new Routine("", "", "MyProc", Routine.Type.PROCEDURE, List.of(new RoutineParameter("@param1", "int", 0, 10, 0, false, false)))),
+                emptyList(), emptyList(), emptyList());
+        when(crawlService.getCatalog(any(), anyString())).thenReturn(noSchema);
+
+        String query = "EXEC MyProc ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        assertEquals(List.of("@param1 = "), replacements(result));
+    }
+
+    @Test
+    void test_procedureParameters_afterFilledParamAndComma()
+    {
+        // EXEC dbo.MyProc @param1 = 'value', | — caret after trailing comma
+        // This exercises the offset-based tree-walk fix: ANTLR error recovery can set
+        // Execute_bodyContext.stop to the token before the comma, leaving the comma
+        // orphaned outside the context's subtree so parent-chain walking fails.
+        String query = "EXEC dbo.MyProc @param1 = 'value', ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        // @param1 is already used — only @param2 should be suggested
+        assertEquals(List.of("@param2 = "), replacements(result));
+    }
+
+    @Test
+    void test_procedureParameters_noSuggestionInsideValue()
+    {
+        // EXEC dbo.MyProc @param1 = 'val|ue' — caret is inside the value string
+        String query = "EXEC dbo.MyProc @param1 = 'value'";
+        int caretInsideValue = query.indexOf("'value'") + 2; // two chars into the string literal
+        CompletionResult result = complete(query, caretInsideValue);
+
+        assertTrue(result == null
+                || result.getItems()
+                        .stream()
+                        .noneMatch(i -> i.getReplacementText()
+                                .endsWith(" = ")),
+                "Expected no parameter name suggestions while typing a value");
+    }
+
+    @Test
+    void test_procedureParameters_allParamsAlreadyUsed()
+    {
+        // Both params filled — nothing left to suggest
+        String query = "EXEC dbo.MyProc @param1 = 1, @param2 = 2, ";
+        CompletionResult result = complete(query, query.length());
+
+        assertTrue(result == null
+                || result.getItems()
+                        .stream()
+                        .noneMatch(i -> i.getReplacementText()
+                                .endsWith(" = ")),
+                "Expected no parameter suggestions when all params are already provided");
+    }
+
     @Test
     void test_TableSourceAliasCollector() throws FileNotFoundException, IOException
     {
