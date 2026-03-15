@@ -1214,7 +1214,7 @@ class TextEditor implements ITextEditor, SearchListener
         private int cachedCompletionsOffset = -1;
         private List<CompletionItem> cachedCompletions;
 
-        private boolean doAutoCompleteWhenReady = false;
+        private volatile boolean doAutoCompleteWhenReady = false;
 
         EditorCompleter(EditorParser parser)
         {
@@ -1274,8 +1274,8 @@ class TextEditor implements ITextEditor, SearchListener
                         if (autoCompletion.isPopupVisible())
                         {
                             autoCompletion.hideChildWindows();
+                            autoCompletion.doCompletion();
                         }
-                        autoCompletion.doCompletion();
                     });
                 }
             }
@@ -1591,10 +1591,6 @@ class TextEditor implements ITextEditor, SearchListener
                             parseResult.addNotice(notice);
                         }
 
-                        if (parseCompleteListener != null)
-                        {
-                            parseCompleteListener.run();
-                        }
                     }
                     catch (Exception e)
                     {
@@ -1609,6 +1605,10 @@ class TextEditor implements ITextEditor, SearchListener
                     {
                         LOGGER.debug("Parse session completed {}", parseResult.getParseTime());
                         state = State.COMPLETE;
+                        if (parseCompleteListener != null)
+                        {
+                            parseCompleteListener.run();
+                        }
                         SwingUtilities.invokeLater(() -> editor.textEditor.forceReparsing(this));
                     }
                 });

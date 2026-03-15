@@ -44,6 +44,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.ForeignKey;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Index;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.RoutineParameter;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlLexer;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser;
@@ -52,6 +53,10 @@ import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Create_tableContext
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Ddl_objectContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Declare_statementContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Delete_statementContext;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Execute_bodyContext;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Execute_parameterContext;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Execute_statement_argContext;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Execute_statement_arg_namedContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.ExpressionContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Expression_elemContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Full_table_nameContext;
@@ -235,8 +240,8 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     || ta.type() == TableAliasType.TABLE_FUNCTION
                     || ta.type() == TableAliasType.CHANGETABLE)
             {
-                Catalog catalog = crawlService.getCatalog(connectionState, ta.objectName()
-                        .getCatalog());
+                Catalog catalog = crawlService.getCatalog(connectionState, Objects.toString(ta.objectName()
+                        .getCatalog(), connectionState.getDatabase()));
                 if (catalog == null)
                 {
                     partialResult = true;
@@ -364,10 +369,203 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         return new CompletionResult(result, partialResult);
     }
 
+    /**
+     * Recursively walk the parse tree to find an Execute_bodyContext where the caret (caretOffset) is positioned after the procedure name. This offset-based approach handles ANTLR error recovery
+     * where a trailing comma can cause the caret token to be orphaned outside the Execute_bodyContext's stop boundary, making parent-chain walking unreliable.
+     */
+    private Execute_bodyContext findExecuteBodyByOffset(ParseTree tree, int caretOffset)
+    {
+        if (tree instanceof Execute_bodyContext execBody
+                && execBody.func_proc_name_server_database_schema() != null)
+        {
+            Func_proc_name_server_database_schemaContext procName = execBody.func_proc_name_server_database_schema();
+            if (procName.stop != null
+                    && caretOffset > procName.stop.getStopIndex()
+                    && !isCaretInParamValuePosition(execBody, caretOffset))
+            {
+                return execBody;
+            }
+            // Don't recurse further into this execBody's children
+            return null;
+        }
+
+        for (int i = 0; i < tree.getChildCount(); i++)
+        {
+            Execute_bodyContext found = findExecuteBodyByOffset(tree.getChild(i), caretOffset);
+            if (found != null)
+            {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns true if the caret is positioned inside the value part of a named parameter (between the EQUAL sign and the end of the parameter value). This prevents showing parameter name completions
+     * when the user is typing a value.
+     */
+    private boolean isCaretInParamValuePosition(Execute_bodyContext execBody, int caretOffset)
+    {
+        return checkCaretInValuePosition(execBody, caretOffset);
+    }
+
+    private boolean checkCaretInValuePosition(ParseTree tree, int caretOffset)
+    {
+        if (tree instanceof Execute_statement_arg_namedContext namedCtx)
+        {
+            Execute_parameterContext paramCtx = namedCtx.execute_parameter();
+            if (paramCtx != null
+                    && paramCtx.stop != null)
+            {
+                // Find the EQUAL token between the parameter name and value
+                int equalStopIndex = -1;
+                for (int i = 0; i < namedCtx.getChildCount(); i++)
+                {
+                    ParseTree child = namedCtx.getChild(i);
+                    if (child instanceof TerminalNode tn
+                            && tn.getSymbol()
+                                    .getType() == TSqlLexer.EQUAL)
+                    {
+                        equalStopIndex = tn.getSymbol()
+                                .getStopIndex();
+                        break;
+                    }
+                }
+                // Caret is in value position if it's strictly between the EQUAL sign and the end of the
+                // parameter value. After a trailing comma, caretOffset > paramCtx.stop.getStopIndex() + 1
+                // so we correctly skip this check.
+                if (equalStopIndex >= 0
+                        && caretOffset > equalStopIndex
+                        && caretOffset <= paramCtx.stop.getStopIndex() + 1)
+                {
+                    return true;
+                }
+            }
+            // Don't recurse further into namedCtx children
+            return false;
+        }
+
+        for (int i = 0; i < tree.getChildCount(); i++)
+        {
+            if (checkCaretInValuePosition(tree.getChild(i), caretOffset))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private CompletionResult suggestProcedureParameters(Execute_bodyContext execBody)
+    {
+        Func_proc_name_server_database_schemaContext procNameCtx = execBody.func_proc_name_server_database_schema();
+        Pair<Interval, ObjectName> procRef = getProcedureFunction(procNameCtx);
+        if (procRef == null)
+        {
+            return null;
+        }
+
+        String database = Objects.toString(procRef.getValue()
+                .getCatalog(), connectionState.getDatabase());
+        Catalog catalog = crawlService.getCatalog(connectionState, database);
+        if (catalog == null)
+        {
+            return new CompletionResult(emptyList(), true);
+        }
+
+        String schema = procRef.getValue()
+                .getSchema();
+        String name = procRef.getValue()
+                .getName();
+
+        Routine routine = catalog.getRoutines()
+                .stream()
+                .filter(r -> r.getType() == Routine.Type.PROCEDURE
+                        && CI.equals(r.getName(), name)
+                        && (isBlank(schema)
+                                || CI.equals(r.getSchema(), schema)))
+                .findFirst()
+                .orElse(null);
+
+        if (routine == null
+                || routine.getParameters()
+                        .isEmpty())
+        {
+            return null;
+        }
+
+        // Collect already-used named parameters to skip them
+        Set<String> usedParams = new HashSet<>();
+        Execute_statement_argContext argCtx = execBody.execute_statement_arg();
+        if (argCtx != null)
+        {
+            collectUsedNamedParams(argCtx, usedParams);
+        }
+
+        List<CompletionItem> items = new ArrayList<>();
+        for (RoutineParameter param : routine.getParameters())
+        {
+            String paramName = param.getName();
+            if (usedParams.contains(paramName.toLowerCase()))
+            {
+                continue;
+            }
+            String definition = Column.getDefinition(param.getType(), param.getMaxLength(), param.getPrecision(), param.getScale(), param.isNullable());
+            String description = """
+                    <html>
+                    <h3>%s</h3>
+                    <ul>
+                    <li>Type: <strong>%s</strong></li>
+                    <li>Nullable: <strong>%s</strong></li>
+                    %s
+                    </ul>
+                    """.formatted(paramName, definition, param.isNullable() ? "yes"
+                    : "no",
+                    param.isOutput() ? "<li>Output: <strong>yes</strong></li>"
+                            : "");
+            // Strip '@' from matchPart so typing partial name after '@' filters correctly
+            String matchPart = paramName.startsWith("@") ? paramName.substring(1)
+                    : paramName;
+            items.add(new CompletionItem(List.of(matchPart), paramName + " = ", null, description, icons.atIcon, 5));
+        }
+
+        return new CompletionResult(items, false);
+    }
+
+    private void collectUsedNamedParams(Execute_statement_argContext ctx, Set<String> usedParams)
+    {
+        for (Execute_statement_arg_namedContext named : ctx.execute_statement_arg_named())
+        {
+            if (named.name != null)
+            {
+                usedParams.add(named.name.getText()
+                        .toLowerCase());
+            }
+        }
+        for (Execute_statement_argContext nested : ctx.execute_statement_arg())
+        {
+            collectUsedNamedParams(nested, usedParams);
+        }
+    }
+
     @Override
     protected CompletionResult getCompletionItems(TokenOffset tokenOffset)
     {
-        // First check found tokens parents if we can detect context
+        // Check for stored procedure parameter context using offset-based tree traversal.
+        // Parent-chain walking is unreliable after a trailing comma because ANTLR error recovery
+        // can set Execute_bodyContext.stop to the last successfully parsed token (before the comma),
+        // leaving the comma token orphaned outside the context's subtree.
+        Execute_bodyContext execBody = context != null ? findExecuteBodyByOffset(context, tokenOffset.caretOffset())
+                : null;
+        if (execBody != null)
+        {
+            CompletionResult paramResult = suggestProcedureParameters(execBody);
+            if (paramResult != null)
+            {
+                return paramResult;
+            }
+        }
+
+        // Check found tokens parents if we can detect context
         if (isExpression(tokenOffset.tree()))
         {
             return suggestColumns(tokenOffset.tree());
@@ -532,15 +730,41 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
         if (ctx instanceof Func_proc_name_server_database_schemaContext fpCtx)
         {
-            databaseCtx = fpCtx.database;
-            schemaCtx = fpCtx.schema;
-            procedureCtx = fpCtx.procedure;
+            if (fpCtx.procedure != null)
+            {
+                databaseCtx = fpCtx.database;
+                schemaCtx = fpCtx.schema;
+                procedureCtx = fpCtx.procedure;
+            }
+            else if (fpCtx.func_proc_name_database_schema() != null)
+            {
+                Func_proc_name_database_schemaContext dbSchemaCtx = fpCtx.func_proc_name_database_schema();
+                if (dbSchemaCtx.procedure != null)
+                {
+                    databaseCtx = dbSchemaCtx.database;
+                    schemaCtx = dbSchemaCtx.schema;
+                    procedureCtx = dbSchemaCtx.procedure;
+                }
+                else if (dbSchemaCtx.func_proc_name_schema() != null)
+                {
+                    schemaCtx = dbSchemaCtx.func_proc_name_schema().schema;
+                    procedureCtx = dbSchemaCtx.func_proc_name_schema().procedure;
+                }
+            }
         }
         else if (ctx instanceof Func_proc_name_database_schemaContext fpCtx)
         {
-            databaseCtx = fpCtx.database;
-            schemaCtx = fpCtx.schema;
-            procedureCtx = fpCtx.procedure;
+            if (fpCtx.procedure != null)
+            {
+                databaseCtx = fpCtx.database;
+                schemaCtx = fpCtx.schema;
+                procedureCtx = fpCtx.procedure;
+            }
+            else if (fpCtx.func_proc_name_schema() != null)
+            {
+                schemaCtx = fpCtx.func_proc_name_schema().schema;
+                procedureCtx = fpCtx.func_proc_name_schema().procedure;
+            }
         }
         else if (ctx instanceof Func_proc_name_schemaContext fpCtx)
         {
