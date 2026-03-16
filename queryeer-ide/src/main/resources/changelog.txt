@@ -2,6 +2,29 @@ CHANGELOG
 
 Queryeer
 
+v2.17.0
+
+chore: Bump payloadbuilder
+feat: Add ClaudeCode assistant provider that uses existing calude code installation
+feat: Add support for providers to specify response formats. And add support for parsing markdown and render that as HTML in chat window
+feat: Detect code blocks in responses and add a copy-to-clipboard button for those
+fix: Show the link actions popup upon click instead of mouse hoover to avoid copy text getting intercepted while holding CTRL.
+     This will be one click more for actions but is worth it because of the hazzle with copy not working when you expect it to
+fix: Fix issues with complete dialog that was sometimes not opened/closed etc.
+fix: Fix issue in jdbc/sqlserver completer where the wrong catalog name was used yielding no items in dialog
+feat: Add support for complete store procedure parameters
+fix: Fix issue where delete line (Ctrl-D) did not work when in non multicaret mode
+fix: Fix issue where double line breaks was introduced in backup files in some rare caes
+fix: Parse new files upon load and get it's counter and use in the sessions file counter
+fix: Improve text editor toggleComment function to be more flexible regarding on where on the line each comment starts
+feat: Add support for AI assistance for query files. A chat window can now be opened and talks to a AI provider of choosing. (Anthropic claude is implemented).
+      Context objects from the selected query can be selected and included in the chat conversation.
+feat: Add support for multicaret in TextEditor. Block selection, copy/paste etc.
+chore: Add Maven wrapper
+feat: Add support for system monitor output components for JDBC engine to be able to monitor key aspects like locks/waits etc.
+fix: Fix memory leak where query files did not get GC:ed when closed
+fix: Fix issue where clipboard auto complete did not show in some cases
+
 v2.16.0
 feat: Add support for running queires at specific intervals
 
@@ -210,6 +233,25 @@ fix: Bump dependencies
 fix: Add missing image referenced in README
 
 Payloadbuilder
+
+v1.10.0
+fix: Fix performance issue in insertsink where prepared statements was created on each batch. Commit is moved to after all batches.
+     Set null is now typed correctly.
+fix: Fix issue with aggregation projections where the whole expression was treated like an aggregation which is wrong,
+     now only aggregate functions are used in the aggregate operator and all other expressions are added in a projection above
+     which enables to use scalar functions with aggregate functions as arguments etc.
+chore: Add maven wrapper
+fix: Fix issue with left join on nested loops when having pushed down sub query expressions where inner schemas was eliminated
+     and causing ordinal mismatches between compile time and runtime schemas
+fix: Turned off caching of inner plan in joins. This is not working since the cache is never flushed during a statement execution
+     and hence will yield wrong result if applied in a correlated context
+build(deps-dev): Bump org.assertj:assertj-core in /payloadbuilder-core
+fix: Refactor SelectInto sink for temp tables to get rid of the ugly knowlegde about temptables in StatementRewriter,
+     now that is enclosed inside SystemCatalog where it belongs.
+fix: Alter ES disk watermarks to fix build problems in Github
+fix: Fix issue where a CachePlan was insterted above a correlated sub query expression
+fix: Fix issue in TupleVector validator that failed when having nested complex types (object arrays in object)
+fix: Fix issue in droping of temporary tables, schema meta data was still present that triggered an error when adding a temporary table that should have worked
 
 v1.9.9
 feat: Add support for tables in FilesystemCatalog. This now detects filetype and redirects to systemcatalog OpenCsv/Openjson/OpenXml functions
