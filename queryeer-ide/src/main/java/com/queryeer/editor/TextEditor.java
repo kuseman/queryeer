@@ -1677,25 +1677,6 @@ class TextEditor implements ITextEditor, SearchListener
 
             if (action != null)
             {
-                if (!linkActionsPopup.isVisible())
-                {
-                    linkActionsPopup.removeAll();
-                    for (Action a : action.getActions())
-                    {
-                        JMenuItem item = ActionUtils.buildMenuItem(a);
-                        item.setAlignmentX(0.0f);
-                        linkActionsPopup.add(item);
-                    }
-                    try
-                    {
-                        Rectangle2D rect = textArea.modelToView2D(offset);
-                        linkActionsPopup.show(textArea, (int) rect.getX(), (int) (rect.getY() + 14));
-                    }
-                    catch (BadLocationException e)
-                    {
-                    }
-                }
-
                 return new LinkGeneratorResult()
                 {
                     @Override
@@ -1707,9 +1688,23 @@ class TextEditor implements ITextEditor, SearchListener
                     @Override
                     public HyperlinkEvent execute()
                     {
-                        action.getActions()
-                                .get(0)
-                                .actionPerformed(new ActionEvent(textArea, 0, ""));
+                        // Show the popup on click so it never grabs focus during Ctrl+hover,
+                        // which would otherwise intercept Ctrl+C and other keyboard shortcuts.
+                        linkActionsPopup.removeAll();
+                        for (Action a : action.getActions())
+                        {
+                            JMenuItem item = ActionUtils.buildMenuItem(a);
+                            item.setAlignmentX(0.0f);
+                            linkActionsPopup.add(item);
+                        }
+                        try
+                        {
+                            Rectangle2D rect = textArea.modelToView2D(action.getStartOffset());
+                            linkActionsPopup.show(textArea, (int) rect.getX(), (int) (rect.getY() + 14));
+                        }
+                        catch (BadLocationException e)
+                        {
+                        }
                         return null;
                     }
                 };
