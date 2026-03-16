@@ -4,40 +4,44 @@ import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.WindowConstants;
-import javax.swing.text.AttributeSet;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.DefaultStyledDocument;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
+import javax.swing.event.HyperlinkEvent;
+import javax.swing.event.HyperlinkListener;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 
 import com.queryeer.Constants;
 import com.queryeer.api.IQueryFile;
@@ -45,7 +49,9 @@ import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.extensions.assistant.AIChatMessage;
 import com.queryeer.api.extensions.assistant.AIChatMessage.Role;
+import com.queryeer.api.extensions.assistant.AIChatSession;
 import com.queryeer.api.extensions.assistant.IAIAssistantProvider;
+import com.queryeer.api.extensions.assistant.IAIAssistantProvider.ResponseFormat;
 import com.queryeer.api.extensions.assistant.IAIContextItem;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IEventBus;
@@ -54,6 +60,30 @@ import com.queryeer.api.service.IQueryFileProvider;
 /** Floating AI assistant chat window. Each query file has its own conversation state. */
 class AIChatWindow extends DialogUtils.AFrame
 {
+    private static final String COPY_SCHEME = "copy:";
+    // CSOFF
+    private static final String HTML_STYLE = "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " .user-label { color: #0064b4; font-weight: bold; }"
+                                             + " .user-text { color: #0050a0; margin-left: 8px; margin-top: 2px; }"
+                                             + " .asst-label { color: #147814; font-weight: bold; }"
+                                             + " .asst-text { color: #1e641e; margin-left: 8px; margin-top: 2px; }"
+                                             + " .error-text { color: #cc0000; margin-left: 8px; }"
+                                             + " pre { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; padding: 6px; margin: 4px; }"
+                                             + " code { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; }"
+                                             + " blockquote { margin-left: 16px; }"
+                                             + " table { border: 1px solid #cccccc; border-collapse: collapse; }"
+                                             + " td, th { border: 1px solid #cccccc; padding: 4px 8px; }"
+                                             + " .copy-btn { font-size: 10pt; color: #666666; }";
+    // CSON
+
+    private static final String HTML_START = "<html><head><style>" + HTML_STYLE + "</style></head><body>";
+    private static final String HTML_END = "</body></html>";
+    private static final String EMPTY_HTML = HTML_START + HTML_END;
+
+    private static final Parser MARKDOWN_PARSER = Parser.builder()
+            .build();
+    private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder()
+            .build();
+
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(BasicThreadFactory.builder()
             .daemon(true)
             .namingPattern("AIAssistant-%d")
@@ -67,19 +97,18 @@ class AIChatWindow extends DialogUtils.AFrame
     private JButton infoToggleButton;
     private JScrollPane infoScrollPane;
     private boolean infoExpanded = false;
-    private JTextPane chatPane;
+    private JEditorPane chatPane;
     private JTextArea inputArea;
     private JButton sendButton;
     private JButton contextButton;
     private JCheckBox includeQueryCheckBox;
 
-    private final SimpleAttributeSet userLabelStyle;
-    private final SimpleAttributeSet userTextStyle;
-    private final SimpleAttributeSet assistantLabelStyle;
-    private final SimpleAttributeSet assistantTextStyle;
-
     private IQueryFile currentFile;
     private boolean responding = false;
+    private Timer streamingTimer;
+    /** Maps copy-button IDs (e.g. "cb-3") to the raw code content to be copied. */
+    private final Map<String, String> codeBlockMap = new HashMap<>();
+    private final AtomicInteger codeBlockIdCounter = new AtomicInteger(0);
 
     // CSOFF
     AIChatWindow(List<IAIAssistantProvider> providers, IQueryFileProvider queryFileProvider, IEventBus eventBus)
@@ -88,20 +117,6 @@ class AIChatWindow extends DialogUtils.AFrame
         this.providers = requireNonNull(providers, "providers");
         this.eventBus = requireNonNull(eventBus, "eventBus");
         requireNonNull(queryFileProvider, "queryFileProvider");
-
-        userLabelStyle = new SimpleAttributeSet();
-        StyleConstants.setBold(userLabelStyle, true);
-        StyleConstants.setForeground(userLabelStyle, new Color(0, 100, 180));
-
-        userTextStyle = new SimpleAttributeSet();
-        StyleConstants.setForeground(userTextStyle, new Color(0, 80, 160));
-
-        assistantLabelStyle = new SimpleAttributeSet();
-        StyleConstants.setBold(assistantLabelStyle, true);
-        StyleConstants.setForeground(assistantLabelStyle, new Color(20, 120, 20));
-
-        assistantTextStyle = new SimpleAttributeSet();
-        StyleConstants.setForeground(assistantTextStyle, new Color(30, 100, 30));
 
         setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
         setPreferredSize(new Dimension(650, 800));
@@ -130,11 +145,20 @@ class AIChatWindow extends DialogUtils.AFrame
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 if (value instanceof IAIAssistantProvider p)
                 {
-                    setText(p.name());
+                    String label = p.name();
+                    if (p.getResponseFormat() == ResponseFormat.MARKDOWN)
+                    {
+                        label += " [md]";
+                    }
+                    setText(label);
                 }
                 return this;
             }
         });
+        providers.stream()
+                .filter(IAIAssistantProvider::isConfigured)
+                .findFirst()
+                .ifPresent(providerCombo::setSelectedItem);
         providerCombo.addItemListener(e -> updateInfoPanel());
         topPanel.add(providerCombo);
 
@@ -174,10 +198,11 @@ class AIChatWindow extends DialogUtils.AFrame
         northContainer.add(infoContainer, BorderLayout.CENTER);
         getContentPane().add(northContainer, BorderLayout.NORTH);
 
-        // Center: scrollable chat history
-        chatPane = new JTextPane();
+        // Center: scrollable chat history rendered as HTML
+        chatPane = new JEditorPane("text/html", EMPTY_HTML);
         chatPane.setEditable(false);
         chatPane.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        chatPane.addHyperlinkListener(copyButtonListener());
         JScrollPane chatScroll = new JScrollPane(chatPane);
         getContentPane().add(chatScroll, BorderLayout.CENTER);
 
@@ -301,8 +326,9 @@ class AIChatWindow extends DialogUtils.AFrame
     {
         currentFile = file;
         FileChatState state = currentState();
-        chatPane.setDocument(state != null ? state.document
-                : new DefaultStyledDocument());
+        chatPane.setText(state != null ? buildHtml(state.completedHtmlBody, null)
+                : EMPTY_HTML);
+        scrollToBottom();
         updateContextButton();
         updateInfoPanel();
     }
@@ -370,34 +396,45 @@ class AIChatWindow extends DialogUtils.AFrame
         if (provider == null
                 || !provider.isConfigured())
         {
-            appendText(state.document, "\n[No provider configured. Please configure an AI provider in Options.]\n", assistantTextStyle);
+            state.completedHtmlBody += errorHtml("No provider configured. Please configure an AI provider in Options.");
+            chatPane.setText(buildHtml(state.completedHtmlBody, null));
+            scrollToBottom();
             return;
         }
 
         inputArea.setText("");
-        appendText(state.document, "\nYou: ", userLabelStyle);
-        appendText(state.document, userText + "\n", userTextStyle);
-        setResponding(true);
+        state.completedHtmlBody += userHtml(userText);
         state.responseBuilder.setLength(0);
-        appendText(state.document, "\nAssistant: ", assistantLabelStyle);
+        chatPane.setText(buildHtml(state.completedHtmlBody, ""));
+        scrollToBottom();
+        setResponding(true, state, provider);
 
         List<AIChatMessage> historySnapshot = new ArrayList<>(state.history);
         String systemPrompt = buildSystemPrompt(state);
         state.history.add(new AIChatMessage(Role.USER, userText));
 
-        EXECUTOR.submit(() -> provider.chat(historySnapshot, userText, systemPrompt, chunk -> SwingUtilities.invokeLater(() ->
+        AIChatSession session = new AIChatSession(state.sessionId, id -> state.sessionId = id);
+
+        EXECUTOR.submit(() -> provider.chat(historySnapshot, userText, systemPrompt, session, chunk -> SwingUtilities.invokeLater(() ->
         {
             state.responseBuilder.append(chunk);
-            appendText(state.document, chunk, assistantTextStyle);
+            // streaming display is handled by the timer
         }), () -> SwingUtilities.invokeLater(() ->
         {
-            state.history.add(new AIChatMessage(Role.ASSISTANT, state.responseBuilder.toString()));
-            appendText(state.document, "\n", assistantTextStyle);
-            setResponding(false);
+            stopStreamingTimer();
+            String responseText = state.responseBuilder.toString();
+            state.history.add(new AIChatMessage(Role.ASSISTANT, responseText));
+            state.completedHtmlBody += assistantHtml(responseText, provider);
+            chatPane.setText(buildHtml(state.completedHtmlBody, null));
+            scrollToBottom();
+            setResponding(false, state, provider);
         }), error -> SwingUtilities.invokeLater(() ->
         {
-            appendText(state.document, "\n[Error: " + error.getMessage() + "]\n", assistantTextStyle);
-            setResponding(false);
+            stopStreamingTimer();
+            state.completedHtmlBody += errorHtml(error.getMessage());
+            chatPane.setText(buildHtml(state.completedHtmlBody, null));
+            scrollToBottom();
+            setResponding(false, state, provider);
         })));
     }
 
@@ -443,22 +480,6 @@ class AIChatWindow extends DialogUtils.AFrame
         return sb.toString();
     }
 
-    private void appendText(StyledDocument doc, String text, AttributeSet style)
-    {
-        try
-        {
-            doc.insertString(doc.getLength(), text, style);
-            if (chatPane.getDocument() == doc)
-            {
-                chatPane.setCaretPosition(doc.getLength());
-            }
-        }
-        catch (BadLocationException e)
-        {
-            // ignore
-        }
-    }
-
     private void clearChat()
     {
         FileChatState state = currentState();
@@ -467,28 +488,170 @@ class AIChatWindow extends DialogUtils.AFrame
             return;
         }
         state.history.clear();
-        try
-        {
-            state.document.remove(0, state.document.getLength());
-        }
-        catch (BadLocationException e)
-        {
-            // ignore
-        }
+        state.completedHtmlBody = "";
+        state.sessionId = null;
+        codeBlockMap.clear();
+        chatPane.setText(EMPTY_HTML);
     }
 
-    private void setResponding(boolean responding)
+    private void setResponding(boolean responding, FileChatState state, IAIAssistantProvider provider)
     {
         this.responding = responding;
         sendButton.setEnabled(!responding);
         inputArea.setEnabled(!responding);
+        if (responding)
+        {
+            startStreamingTimer(state, provider);
+        }
+    }
+
+    private void startStreamingTimer(FileChatState state, IAIAssistantProvider provider)
+    {
+        // CSOFF
+        streamingTimer = new Timer(250, e ->
+        // CSON
+        {
+            String current = state.responseBuilder.toString();
+            chatPane.setText(buildHtml(state.completedHtmlBody, current));
+            scrollToBottom();
+        });
+        streamingTimer.setRepeats(true);
+        streamingTimer.start();
+    }
+
+    private void stopStreamingTimer()
+    {
+        if (streamingTimer != null)
+        {
+            streamingTimer.stop();
+            streamingTimer = null;
+        }
+    }
+
+    private void scrollToBottom()
+    {
+        SwingUtilities.invokeLater(() -> chatPane.setCaretPosition(chatPane.getDocument()
+                .getLength()));
+    }
+
+    // ---- HTML building helpers ----
+
+    private static String buildHtml(String completedBody, String streamingText)
+    {
+        StringBuilder sb = new StringBuilder(HTML_START);
+        sb.append(completedBody);
+        if (streamingText != null
+                && !streamingText.isEmpty())
+        {
+            sb.append("<p><b class=\"asst-label\">Assistant:</b></p>");
+            sb.append("<div class=\"asst-text\"><p>");
+            sb.append(escapeHtml(streamingText));
+            sb.append("</p></div>");
+        }
+        sb.append(HTML_END);
+        return sb.toString();
+    }
+
+    private static String userHtml(String text)
+    {
+        return "<p><b class=\"user-label\">You:</b></p><p class=\"user-text\">" + escapeHtml(text) + "</p>";
+    }
+
+    private String assistantHtml(String text, IAIAssistantProvider provider)
+    {
+        String content = provider.getResponseFormat() == ResponseFormat.MARKDOWN ? injectCopyButtons(renderMarkdown(text))
+                : "<p>" + escapeHtml(text) + "</p>";
+        return "<p><b class=\"asst-label\">Assistant:</b></p><div class=\"asst-text\">" + content + "</div>";
+    }
+
+    private static String errorHtml(String message)
+    {
+        return "<p class=\"error-text\">[Error: " + escapeHtml(message) + "]</p>";
+    }
+
+    private static String renderMarkdown(String markdown)
+    {
+        return MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(markdown));
+    }
+
+    private static final Pattern CODE_BLOCK_PATTERN = Pattern.compile("<pre><code[^>]*>(.*?)</code></pre>", Pattern.DOTALL);
+
+    /**
+     * Wraps each {@code 
+     * 
+     * 
+    
+    <pre>
+     * <code>} block with a copy-button link and registers the code content.
+     */
+    private String injectCopyButtons(String html)
+    {
+        Matcher m = CODE_BLOCK_PATTERN.matcher(html);
+        if (!m.find())
+        {
+            return html;
+        }
+        StringBuilder sb = new StringBuilder();
+        m.reset();
+        while (m.find())
+        {
+            String id = "cb-" + codeBlockIdCounter.incrementAndGet();
+            codeBlockMap.put(id, unescapeHtml(m.group(1)));
+            // CSOFF
+            m.appendReplacement(sb, "<div style=\"text-align:right\"><a class=\"copy-btn\" href=\"" + COPY_SCHEME + id + "\">\u29c9 Copy</a></div>" + Matcher.quoteReplacement(m.group(0)));
+            // CSON
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    private HyperlinkListener copyButtonListener()
+    {
+        return e ->
+        {
+            if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED
+                    && e.getDescription() != null
+                    && e.getDescription()
+                            .startsWith(COPY_SCHEME))
+            {
+                String id = e.getDescription()
+                        .substring(COPY_SCHEME.length());
+                String code = codeBlockMap.get(id);
+                if (code != null)
+                {
+                    Toolkit.getDefaultToolkit()
+                            .getSystemClipboard()
+                            .setContents(new StringSelection(code), null);
+                }
+            }
+        };
+    }
+
+    private static String unescapeHtml(String html)
+    {
+        return html.replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
+    }
+
+    private static String escapeHtml(String text)
+    {
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("\n", "<br>");
     }
 
     private static class FileChatState
     {
         final List<AIChatMessage> history = new ArrayList<>();
         final List<IAIContextItem> selectedContextItems = new ArrayList<>();
-        final DefaultStyledDocument document = new DefaultStyledDocument();
         final StringBuilder responseBuilder = new StringBuilder();
+        String completedHtmlBody = "";
+        /** Session ID returned by the provider (e.g. Claude Code {@code --resume} ID). Null until first response. */
+        String sessionId = null;
     }
 }

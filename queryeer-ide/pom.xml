@@ -28,6 +28,7 @@
         <flatlaf.version>3.5.4</flatlaf.version>
         <directory-watcher.version>0.19.0</directory-watcher.version>
         <jackson-datatype-jsr310.version>2.16.1</jackson-datatype-jsr310.version>
+        <commonmark.version>0.24.0</commonmark.version>
     </properties>
 
     <dependencies>
@@ -52,6 +53,11 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson-datatype-jsr310.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>${commonmark.version}</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>

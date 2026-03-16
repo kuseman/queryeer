@@ -400,6 +400,12 @@ class AnthropicAIAssistantProvider implements IAIAssistantProvider
         return settings.systemPrompt;
     }
 
+    @Override
+    public ResponseFormat getResponseFormat()
+    {
+        return ResponseFormat.MARKDOWN;
+    }
+
     /** Internal config model. */
     private static class AnthropicSettings
     {
