@@ -14,6 +14,15 @@ public interface IAIAssistantProvider extends IConfigurable
 {
     static final String DEFAULT_SYSTEM_PROMPT = "You are an AI assistant helping with database queries and SQL.";
 
+    /** Format that the provider's response text is delivered in. */
+    enum ResponseFormat
+    {
+        /** Plain text – displayed as-is. */
+        PLAIN_TEXT,
+        /** Markdown – rendered to HTML in the chat window. */
+        MARKDOWN
+    }
+
     /** Display name of this provider (e.g. "OpenAI GPT-4", "Anthropic Claude"). */
     String name();
 
@@ -36,6 +45,21 @@ public interface IAIAssistantProvider extends IConfigurable
      */
     void chat(List<AIChatMessage> history, String userMessage, String systemPrompt, Consumer<String> onChunk, Runnable onComplete, Consumer<Throwable> onError);
 
+    /**
+     * Send a chat request to the AI with optional session-resume support.
+     *
+     * <p>
+     * The default implementation ignores {@code session} and delegates to {@link #chat(List, String, String, Consumer, Runnable, Consumer)}. Providers that support server-side session continuity
+     * should override this method.
+     * </p>
+     *
+     * @param session Session context carrying an optional resume ID and a callback to receive the new session ID. May be {@code null}.
+     */
+    default void chat(List<AIChatMessage> history, String userMessage, String systemPrompt, AIChatSession session, Consumer<String> onChunk, Runnable onComplete, Consumer<Throwable> onError)
+    {
+        chat(history, userMessage, systemPrompt, onChunk, onComplete, onError);
+    }
+
     /** Cancel any ongoing chat request. */
     default void cancel()
     {
@@ -47,6 +71,12 @@ public interface IAIAssistantProvider extends IConfigurable
     default String getSystemPrompt()
     {
         return DEFAULT_SYSTEM_PROMPT;
+    }
+
+    /** Return the format in which this provider delivers response text. Default is {@link ResponseFormat#PLAIN_TEXT}. */
+    default ResponseFormat getResponseFormat()
+    {
+        return ResponseFormat.PLAIN_TEXT;
     }
 
     /**
