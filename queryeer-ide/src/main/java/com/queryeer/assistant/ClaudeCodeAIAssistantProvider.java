@@ -106,6 +106,8 @@ class ClaudeCodeAIAssistantProvider implements IAIAssistantProvider
                 : null;
         List<String> command = buildCommand(executable, userMessage, systemPrompt, resumeId);
 
+        onChunk.accept("Starting Calude executable..." + System.lineSeparator());
+
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
 
@@ -324,9 +326,7 @@ class ClaudeCodeAIAssistantProvider implements IAIAssistantProvider
         command.add("stream-json");
         command.add("--verbose");
         command.add("--include-partial-messages");
-        // System prompt is only sent on the first turn; resuming sessions already have it
-        if (isBlank(resumeId)
-                && !isBlank(systemPrompt))
+        if (!isBlank(systemPrompt))
         {
             command.add("--system-prompt");
             command.add(systemPrompt);
