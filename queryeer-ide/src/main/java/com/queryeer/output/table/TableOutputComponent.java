@@ -552,7 +552,15 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 {
                     if (col == 0)
                     {
-                        table.setRowSelectionInterval(row, row);
+                        boolean shift = e.isShiftDown();
+                        boolean ctrl = e.isControlDown();
+                        // Ctrl-only click is already handled by JTable in mousePressed (toggle).
+                        // Calling changeSelection again here would double-toggle and undo it.
+                        if (!ctrl
+                                || shift)
+                        {
+                            table.changeSelection(row, 0, ctrl, shift);
+                        }
                     }
                     else
                     {
