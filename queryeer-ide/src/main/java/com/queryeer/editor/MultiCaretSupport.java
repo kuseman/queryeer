@@ -1,10 +1,16 @@
 package com.queryeer.editor;
 
+import java.awt.Color;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.awt.geom.Rectangle2D;
 import java.util.List;
 
 import javax.swing.AbstractAction;
@@ -228,7 +234,7 @@ class MultiCaretSupport
             }
 
             // Secondary caret: dot at end of match, mark at start (selection goes left-to-right)
-            state.secondaryCarets.add(new int[] { foundAt + toFind.length(), foundAt });
+            state.secondaryCarets.add(new int[] { foundAt + toFind.length(), foundAt, -1 });
             state.updateHighlights();
         }
         catch (BadLocationException e)
@@ -241,6 +247,74 @@ class MultiCaretSupport
     {
         textArea.removeKeyListener(keyInterceptor);
         state.clearSecondaryCarets();
+    }
+
+    /**
+     * Paints secondary caret indicators directly onto the component graphics. Called from {@link MultiCaretAwareEditorPane#paintComponent} so carets render on top of text and highlights, bypassing
+     * coordinate and clipping issues that arise when using the highlight layer for positions at end-of-line.
+     */
+    void paintCaretIndicators(Graphics g)
+    {
+        if (!state.hasSecondaryCarets())
+        {
+            return;
+        }
+        Graphics2D g2 = (Graphics2D) g.create();
+        try
+        {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new Color(100, 100, 255, 200));
+            for (int[] caret : state.secondaryCarets)
+            {
+                int virtualX = caret.length > 2 ? caret[2]
+                        : -1;
+                paintCaretAt(g2, caret[0], virtualX);
+            }
+        }
+        finally
+        {
+            g2.dispose();
+        }
+    }
+
+    private void paintCaretAt(Graphics2D g2, int dot, int virtualX)
+    {
+        try
+        {
+            Rectangle2D r = textArea.modelToView2D(dot);
+            if (r == null)
+            {
+                return;
+            }
+            // When dot is at a newline character, modelToView2D may map to the start of the
+            // next line (y jumps). Detect this and use the right edge of the preceding character.
+            if (dot > 0)
+            {
+                Rectangle2D prev = textArea.modelToView2D(dot - 1);
+                if (prev != null
+                        && prev.getY() < r.getY())
+                {
+                    r = new Rectangle2D.Double(prev.getMaxX(), prev.getY(), 0, prev.getHeight());
+                }
+            }
+            // When the caret was placed beyond the actual line end (block selection on short lines),
+            // virtualX holds the intended pixel column so the caret appears at the correct visual
+            // position rather than at the end of the text on that line.
+            int x = (virtualX >= 0) ? virtualX
+                    : (int) r.getX();
+            int y = (int) r.getY();
+            int h = (int) r.getHeight();
+            if (h <= 0)
+            {
+                h = textArea.getFontMetrics(textArea.getFont())
+                        .getHeight();
+            }
+            g2.fillRect(x, y, 2, h);
+        }
+        catch (BadLocationException e)
+        {
+            // Swallow
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -274,7 +348,7 @@ class MultiCaretSupport
         if (savedDot != clickPos
                 || savedMark != clickPos)
         {
-            state.secondaryCarets.add(new int[] { savedDot, savedMark });
+            state.secondaryCarets.add(new int[] { savedDot, savedMark, -1 });
         }
         state.updateHighlights();
     }
@@ -284,21 +358,29 @@ class MultiCaretSupport
     // -----------------------------------------------------------------------
 
     /**
-     * Called from {@link MultiCaretAwareEditorPane#processMouseEvent} for Alt+Shift+Click. Replaces existing secondary carets with a new set covering every line from the current primary caret line to
-     * {@code clickPos}'s line, each placed at the column of {@code clickPos} (clamped to the line's length).
+     * Called from {@link MultiCaretAwareEditorPane#processMouseEvent} for Alt+Shift+Click and Alt+Shift+Drag. Replaces existing secondary carets with a new set covering every line from the current
+     * primary caret line to {@code clickPos}'s line. Both the anchor column and the target column are derived from pixel X coordinates and mapped independently per line via {@link #getVirtualColumn},
+     * so that lines with different content before the target position still have their carets placed at the correct visual column rather than at a fixed character offset that would land at different
+     * visual positions on different lines.
+     *
+     * @param clickPos document offset nearest to the mouse (used only to determine the target line)
+     * @param mouseX mouse X pixel coordinate (used to compute the virtual target column)
      */
-    void handleAltShiftClick(int clickPos)
+    void handleAltShiftClick(int clickPos, int mouseX)
     {
         try
         {
             int primaryPos = textArea.getCaretPosition();
             int primaryLine = textArea.getLineOfOffset(primaryPos);
-            int primaryLineStart = textArea.getLineStartOffset(primaryLine);
-            int primaryCol = primaryPos - primaryLineStart;
+
+            // Convert the anchor caret position to a pixel X so we can independently map it to the
+            // correct visual column on each line. A fixed character offset would land at different
+            // visual X positions when lines differ in content before the target column.
+            Rectangle2D primaryRect = textArea.modelToView2D(primaryPos);
+            int primaryX = (primaryRect != null) ? (int) Math.round(primaryRect.getX())
+                    : mouseX;
 
             int clickLine = textArea.getLineOfOffset(clickPos);
-            int clickLineStart = textArea.getLineStartOffset(clickLine);
-            int clickCol = clickPos - clickLineStart;
 
             int fromLine = Math.min(primaryLine, clickLine);
             int toLine = Math.max(primaryLine, clickLine);
@@ -313,13 +395,23 @@ class MultiCaretSupport
                 int lineLen = isLastLine ? (lineEnd - lineStart)
                         : (lineEnd - lineStart - 1);
 
-                // dot stays at the origin (primaryCol) side; mark anchors at the clickCol side.
-                int dotPos = lineStart + Math.min(primaryCol, lineLen);
-                int markPos = lineStart + Math.min(clickCol, lineLen);
+                // Compute the visual column for each line independently so that lines with
+                // different content before the target column get their carets at the correct
+                // visual position rather than a shifted character offset.
+                int dotCol = getVirtualColumn(line, primaryX);
+                int markCol = getVirtualColumn(line, mouseX);
+                int dotPos = lineStart + Math.min(dotCol, lineLen);
+                int markPos = lineStart + Math.min(markCol, lineLen);
+
+                // When the dot column exceeds the line length the document offset is clamped to
+                // end-of-line, so record the intended pixel X so the caret can be painted at the
+                // correct visual position (in the virtual space beyond the line end).
+                int dotVirtualX = (dotCol > lineLen) ? primaryX
+                        : -1;
 
                 if (line == primaryLine)
                 {
-                    // Extend the primary caret into a selection spanning primaryCol to clickCol.
+                    // Extend the primary caret into a selection spanning the anchor to the click.
                     textArea.getCaret()
                             .setDot(markPos);
                     textArea.getCaret()
@@ -327,7 +419,7 @@ class MultiCaretSupport
                 }
                 else
                 {
-                    state.secondaryCarets.add(new int[] { dotPos, markPos });
+                    state.secondaryCarets.add(new int[] { dotPos, markPos, dotVirtualX });
                 }
             }
 
@@ -342,6 +434,46 @@ class MultiCaretSupport
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
+
+    /**
+     * Returns the virtual column (zero-based character count from line start) corresponding to pixel x-coordinate {@code mouseX}. Positions within the line are found by scanning character boundaries
+     * via {@link javax.swing.JTextComponent#modelToView2D}. If {@code mouseX} lies beyond the last character, the column is extrapolated using the font's space-character width so that dragging into
+     * empty space still produces a correct target column rather than being capped at the line length.
+     */
+    private int getVirtualColumn(int line, int mouseX) throws BadLocationException
+    {
+        int lineStart = textArea.getLineStartOffset(line);
+        int lineEnd = textArea.getLineEndOffset(line);
+        boolean isLastLine = (line == textArea.getLineCount() - 1);
+        int lineLen = isLastLine ? (lineEnd - lineStart)
+                : (lineEnd - lineStart - 1);
+
+        // Scan character positions within the line to find which column mouseX falls into.
+        for (int col = 0; col < lineLen; col++)
+        {
+            Rectangle2D rect = textArea.modelToView2D(lineStart + col);
+            if (rect != null
+                    && rect.getX() + rect.getWidth() / 2.0 > mouseX)
+            {
+                return col;
+            }
+        }
+
+        // mouseX is at or beyond the end of the line — extrapolate using the space character width.
+        FontMetrics fm = textArea.getFontMetrics(textArea.getFont());
+        int charWidth = (fm != null) ? fm.charWidth(' ')
+                : 0;
+        if (charWidth > 0)
+        {
+            Rectangle2D endRect = textArea.modelToView2D(lineStart + lineLen);
+            if (endRect != null)
+            {
+                int extra = (int) Math.max(0, (mouseX - endRect.getX()) / charWidth);
+                return lineLen + extra;
+            }
+        }
+        return lineLen;
+    }
 
     private void addCaretVertical(int direction)
     {
@@ -368,7 +500,7 @@ class MultiCaretSupport
                     : (targetLineEnd - targetLineStart);
 
             int newPos = targetLineStart + Math.min(refCol, maxCol);
-            state.secondaryCarets.add(new int[] { newPos, newPos });
+            state.secondaryCarets.add(new int[] { newPos, newPos, -1 });
             state.updateHighlights();
         }
         catch (BadLocationException e)

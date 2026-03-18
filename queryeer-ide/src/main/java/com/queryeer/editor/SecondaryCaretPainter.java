@@ -46,7 +46,23 @@ class SecondaryCaretPainter extends LayeredHighlighter.LayerPainter
             {
                 return;
             }
+            // When 'offs' is a newline character, modelToView2D maps to the START of the next
+            // line (y jumps) rather than the end of the current line. Detect this by comparing
+            // with the preceding character's rectangle and, if the y coordinate is lower, draw
+            // at the right edge of the last visible character on the current line instead.
+            if (offs > 0)
+            {
+                Rectangle2D prev = c.modelToView2D(offs - 1);
+                if (prev != null
+                        && prev.getY() < r.getY())
+                {
+                    r = new Rectangle2D.Double(prev.getMaxX(), prev.getY(), 0, prev.getHeight());
+                }
+            }
             Graphics2D g2 = (Graphics2D) g.create();
+            // Remove the clip inherited from the highlighter so the 2-px line is always
+            // visible even when the highlight range has zero visual width.
+            g2.setClip(null);
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(color);
             int x = (int) r.getX();

@@ -16,7 +16,10 @@ import javax.swing.text.Highlighter;
  */
 class MultiCaretState
 {
-    /** Secondary carets: each {@code int[2]} is {@code {dot, mark}}. {@code dot == mark} means no selection. */
+    /**
+     * Secondary carets: each {@code int[3]} is {@code {dot, mark, virtualDotX}}. {@code dot == mark} means no selection. {@code virtualDotX} is the pixel X to paint the caret at when it was placed
+     * beyond the actual line end (block selection on short lines); {@code -1} means use {@code modelToView2D(dot)} normally.
+     */
     final List<int[]> secondaryCarets = new ArrayList<>();
 
     /** Highlight tags returned by {@code Highlighter.addHighlight}, kept for removal on next refresh. */
@@ -77,7 +80,9 @@ class MultiCaretState
         List<int[]> snap = new ArrayList<>(secondaryCarets.size());
         for (int[] c : secondaryCarets)
         {
-            snap.add(new int[] { c[0], c[1] });
+            int virtualX = c.length > 2 ? c[2]
+                    : -1;
+            snap.add(new int[] { c[0], c[1], virtualX });
         }
         return snap;
     }
@@ -180,31 +185,14 @@ class MultiCaretState
             int mark = caret[1];
             try
             {
-                if (dot == mark)
+                if (dot != mark)
                 {
-                    // Caret only: paint a thin vertical line using a 1-char-wide range
-                    if (dot < textArea.getDocument()
-                            .getLength())
-                    {
-                        int end = Math.min(dot + 1, textArea.getDocument()
-                                .getLength());
-                        highlightTags.add(h.addHighlight(dot, end, CARET_PAINTER));
-                    }
-                }
-                else
-                {
-                    // Selection
+                    // Selection highlight only. Caret indicators are painted directly in
+                    // MultiCaretAwareEditorPane.paintComponent to avoid clipping and
+                    // line-boundary issues with the highlight layer.
                     int selStart = Math.min(dot, mark);
                     int selEnd = Math.max(dot, mark);
                     highlightTags.add(h.addHighlight(selStart, selEnd, SELECTION_PAINTER));
-                    // Also draw caret indicator at dot position
-                    if (dot < textArea.getDocument()
-                            .getLength())
-                    {
-                        int caretEnd = Math.min(dot + 1, textArea.getDocument()
-                                .getLength());
-                        highlightTags.add(h.addHighlight(dot, caretEnd, CARET_PAINTER));
-                    }
                 }
             }
             catch (BadLocationException e)
