@@ -122,17 +122,17 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                     && currentFile != null)
             {
                 JdbcEngineState engineState = currentFile.getEngineState();
-                ConnectionState state = engineState.connectionState;
-                if (state != null)
+                ConnectionContext connectionContext = engineState.connectionContext;
+                if (connectionContext != null)
                 {
                     SwingUtilities.invokeLater(() ->
                     {
                         try
                         {
-                            state.setDatabaseOnConnection((String) l.getItem());
+                            connectionContext.setDatabaseOnConnection((String) l.getItem());
                             if (connectionsTreeConfigurable.isFilterTree())
                             {
-                                filterTree(state);
+                                filterTree(connectionContext);
                             }
                         }
                         catch (SQLException e)
@@ -140,7 +140,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                             currentFile.getOutputComponent(ITextOutputComponent.class)
                                     .appendWarning(e.getMessage(), TextSelection.EMPTY);
                         }
-                        setStatus(currentFile, state);
+                        setStatus(currentFile, connectionContext);
                     });
                 }
 
@@ -252,17 +252,17 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
 
                 JdbcDialect jdbcDialect = dialectProvider.getDialect(result.getJdbcURL());
                 JdbcEngineState engineState = currentFile.getEngineState();
-                ConnectionState state = engineState.connectionState;
+                ConnectionContext connectionContext = engineState.connectionContext;
 
                 // Close old state if any
-                if (state != null)
+                if (connectionContext != null)
                 {
-                    JdbcQueryEngine.EXECUTOR.execute(() -> IOUtils.closeQuietly(state));
+                    JdbcQueryEngine.EXECUTOR.execute(() -> IOUtils.closeQuietly(connectionContext));
                 }
 
                 // Create new state
-                ConnectionState newState = new ConnectionState(result, jdbcDialect);
-                engineState.setConnectionState(newState);
+                ConnectionContext newState = new ConnectionContext(result, jdbcDialect);
+                engineState.setConnectionContext(newState);
                 queryEngine.focus(currentFile);
                 // Lazy load databases
                 loadConnectionMetaData(engineState);
@@ -324,16 +324,16 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         filterTreeButton.setSelected(connectionsTreeConfigurable.isFilterTree());
         filterTreeButton.addActionListener(l ->
         {
-            ConnectionState state = null;
+            ConnectionContext connectionContext = null;
             IQueryFile currentFile = queryFileProvider.getCurrentFile();
             if (currentFile != null)
             {
                 JdbcEngineState engineState = currentFile.getEngineState();
-                state = engineState.connectionState;
+                connectionContext = engineState.connectionContext;
             }
 
             // Always filter the tree when toggle the button
-            filterTree(filterTreeButton.isSelected() ? state
+            filterTree(filterTreeButton.isSelected() ? connectionContext
                     : null);
             connectionsTreeConfigurable.setFilterTree(filterTreeButton.isSelected());
             connectionsTreeConfigurable.saveConfig();
@@ -381,7 +381,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
 
     private void newQuery(RegularNode node)
     {
-        ConnectionState state = null;
+        ConnectionContext state = null;
         if (node instanceof ConnectionNode cnode)
         {
             state = cnode.createState();
@@ -414,10 +414,10 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                 if (currentFile != null)
                 {
                     JdbcEngineState currentEngineState = currentFile.getEngineState();
-                    ConnectionState currentState = currentEngineState.connectionState;
+                    ConnectionContext currentContext = currentEngineState.connectionContext;
                     // If the current file is the same as the one we loaded databases on then re-focus it
-                    if (currentState != null
-                            && currentState.getJdbcConnection() == state.getJdbcConnection())
+                    if (currentContext != null
+                            && currentContext.getJdbcConnection() == state.getJdbcConnection())
                     {
                         SwingUtilities.invokeLater(() -> focus(currentFile));
                     }
@@ -430,7 +430,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         }
     }
 
-    void setSelectedDatabase(ConnectionState state)
+    void setSelectedDatabase(ConnectionContext state)
     {
         suppressEvents = true;
         try
@@ -443,10 +443,10 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         }
     }
 
-    void setStatus(IQueryFile file, ConnectionState state)
+    void setStatus(IQueryFile file, ConnectionContext state)
     {
         String connectionInfo = "<html><font color=\"%s\"><b>%s: %s / %s%s / %s</b></font>".formatted(Objects.toString(state.getJdbcConnection()
-                .getColor(), "#000000"), state.getjdbcDialect()
+                .getColor(), "#000000"), state.getJdbcDialect()
                         .getSessionKeyword(),
                 isBlank(state.getSessionId()) ? "Not connected"
                         : state.getSessionId(),
@@ -469,11 +469,11 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             databasesModel.removeAllElements();
             databases.setEnabled(false);
             JdbcEngineState engineState = queryFile.getEngineState();
-            ConnectionState state = engineState.connectionState;
-            currentConnection.setText(state != null ? state.getJdbcConnection()
+            ConnectionContext connectionContext = engineState.connectionContext;
+            currentConnection.setText(connectionContext != null ? connectionContext.getJdbcConnection()
                     .getName()
                     : "");
-            if (state != null)
+            if (connectionContext != null)
             {
                 // Force a reparse when we focus a new file
                 if (queryFile.getEditor() instanceof ITextEditor textEditor)
@@ -485,20 +485,20 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
                     textEditor.parse();
                 }
 
-                if (state.getJdbcConnection()
+                if (connectionContext.getJdbcConnection()
                         .getDatabases() != null)
                 {
-                    databasesModel.addAll(state.getJdbcConnection()
+                    databasesModel.addAll(connectionContext.getJdbcConnection()
                             .getDatabases());
-                    databasesModel.setSelectedItem(state.getDatabase());
+                    databasesModel.setSelectedItem(connectionContext.getDatabase());
                     databases.setEnabled(true);
                 }
                 if (!connectionsTreeConfigurable.isFilterTree()
                         && connectionsTreeConfigurable.isSyncTree())
                 {
-                    selectTreeNode(state);
+                    selectTreeNode(connectionContext);
                 }
-                setStatus(queryFile, state);
+                setStatus(queryFile, connectionContext);
             }
             else
             {
@@ -507,7 +507,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
 
             if (connectionsTreeConfigurable.isFilterTree())
             {
-                filterTree(state);
+                filterTree(connectionContext);
             }
         }
         finally
@@ -516,7 +516,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         }
     }
 
-    private void filterTree(ConnectionState state)
+    private void filterTree(ConnectionContext state)
     {
         if (state == null)
         {
@@ -541,7 +541,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         }
     }
 
-    private void selectTreeNode(ConnectionState state)
+    private void selectTreeNode(ConnectionContext state)
     {
         AtomicBoolean done = new AtomicBoolean(false);
         AtomicReference<TreePath> selectPath = new AtomicReference<>();

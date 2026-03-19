@@ -163,8 +163,8 @@ class JdbcQueryEngine implements IQueryEngine
         JdbcEngineState engineState = queryFile.getEngineState();
         synchronized (engineState)
         {
-            ConnectionState state = engineState.connectionState;
-            JdbcDialect jdbcDialect = state != null ? state.getjdbcDialect()
+            ConnectionContext connectionContext = engineState.connectionContext;
+            JdbcDialect jdbcDialect = connectionContext != null ? connectionContext.getJdbcDialect()
                     : null;
             String queryText = "";
             boolean temporaryState = false;
@@ -184,7 +184,7 @@ class JdbcQueryEngine implements IQueryEngine
                 if (ctx.getJdbcConnection() != null)
                 {
                     jdbcDialect = ctx.getJdbcDialect();
-                    state = new ConnectionState(ctx.getJdbcConnection(), ctx.getJdbcDialect(), ctx.getDatabase());
+                    connectionContext = new ConnectionContext(ctx.getJdbcConnection(), ctx.getJdbcDialect(), ctx.getDatabase());
                     temporaryState = true;
                 }
             }
@@ -194,7 +194,7 @@ class JdbcQueryEngine implements IQueryEngine
             }
 
             // No state present, print warning
-            if (state == null)
+            if (connectionContext == null)
             {
                 textOutput.appendWarning(QUERY_NOT_CONNECTED_MESSAGE, TextSelection.EMPTY);
 
@@ -208,7 +208,7 @@ class JdbcQueryEngine implements IQueryEngine
                 return;
             }
 
-            executeInternal(queryFile, engineState, textOutput, writer, jdbcDialect, queryText, state, temporaryState);
+            executeInternal(queryFile, engineState, textOutput, writer, jdbcDialect, queryText, connectionContext, temporaryState);
         }
     }
 
@@ -217,9 +217,9 @@ class JdbcQueryEngine implements IQueryEngine
     {
         JdbcEngineState state = queryFile.getEngineState();
         if (state != null
-                && state.connectionState != null)
+                && state.connectionContext != null)
         {
-            state.connectionState.abort();
+            state.connectionContext.abort();
         }
     }
 
@@ -274,7 +274,7 @@ class JdbcQueryEngine implements IQueryEngine
     {
         JdbcEngineState engineState = queryFile.getEngineState();
         if (engineState == null
-                || engineState.connectionState == null)
+                || engineState.connectionContext == null)
         {
             return emptyList();
         }
@@ -349,7 +349,7 @@ class JdbcQueryEngine implements IQueryEngine
             OutputWriter writer,
             JdbcDialect jdbcDialect,
             String queryText,
-            ConnectionState state,
+            ConnectionContext state,
             boolean temporaryState) throws Exception
     {
         //@formatter:on
@@ -460,21 +460,21 @@ class JdbcQueryEngine implements IQueryEngine
         }
     }
 
-    private int writeResultSet(IQueryFile queryFile, Connection connection, JdbcEngineState engineState, ConnectionState state, ResultSet rs, OutputWriter writer) throws Exception
+    private int writeResultSet(IQueryFile queryFile, Connection connection, JdbcEngineState engineState, ConnectionContext state, ResultSet rs, OutputWriter writer) throws Exception
     {
         int rowCount = 0;
         Pair<int[], String[]> pair = getColumnsMeta(rs);
         int[] sqlTypes = pair.getKey();
         String[] columns = pair.getValue();
 
-        JdbcDialect jdbcDialect = state.getjdbcDialect();
+        JdbcDialect jdbcDialect = state.getJdbcDialect();
 
         if (writer instanceof QueryeerOutputWriter qwriter)
         {
             //@formatter:off
             Map<String, Object> metaData = MapUtils.ofEntries(true,
                     MapUtils.entry("Connection", state.getJdbcConnection().getName()),
-                    MapUtils.entry("Database", state.getjdbcDialect().usesSchemaAsDatabase() ? connection.getSchema()
+                    MapUtils.entry("Database", state.getJdbcDialect().usesSchemaAsDatabase() ? connection.getSchema()
                             : connection.getCatalog())
                     );
             //@formatter:on

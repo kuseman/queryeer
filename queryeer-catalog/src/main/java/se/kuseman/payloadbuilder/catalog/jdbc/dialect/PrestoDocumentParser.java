@@ -20,7 +20,7 @@ import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
@@ -33,9 +33,10 @@ import se.kuseman.payloadbuilder.jdbc.parser.presto.SqlBaseParser.TableNameConte
  */
 class PrestoDocumentParser extends AntlrDocumentParser<SqlBaseParser.SingleStatementContext>
 {
-    PrestoDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionState connectionState, ITemplateService templateService)
+    PrestoDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionContext connectionContext,
+            ITemplateService templateService)
     {
-        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionState, templateService);
+        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionContext, templateService);
     }
 
     @Override
@@ -132,8 +133,8 @@ class PrestoDocumentParser extends AntlrDocumentParser<SqlBaseParser.SingleState
     @Override
     protected Map<String, Object> getTableSourceTooltipModel(ObjectName name)
     {
-        String database = Objects.toString(name.getCatalog(), connectionState.getDatabase());
-        Catalog catalog = crawlService.getCatalog(connectionState, database);
+        String database = Objects.toString(name.getCatalog(), connectionContext.getDatabase());
+        Catalog catalog = crawlService.getCatalog(connectionContext, database);
         if (catalog == null)
         {
             return null;

@@ -21,7 +21,7 @@ import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
@@ -61,18 +61,18 @@ class BaseDialect implements JdbcDialect
     }
 
     @Override
-    public ITextEditorDocumentParser getParser(IConnectionState connectionState)
+    public ITextEditorDocumentParser getParser(IConnectionContext connectionContext)
     {
-        return new PrestoDocumentParser(eventBus, queryActionsConfigurable, crawlService, connectionState, templateService);
+        return new PrestoDocumentParser(eventBus, queryActionsConfigurable, crawlService, connectionContext, templateService);
     }
 
     @Override
-    public Catalog getCatalog(IConnectionState connectionState, String database)
+    public Catalog getCatalog(IConnectionContext connectionContext, String database)
     {
         // Queries meta data through plain JDBC meta data
         Catalog catalog = null;
         boolean useSchemaAsDatabase = usesSchemaAsDatabase();
-        try (Connection connection = connectionState.createConnection())
+        try (Connection connection = connectionContext.createConnection())
         {
             LOGGER.info("Fetching catalog metadata for: " + database);
             // CSOFF

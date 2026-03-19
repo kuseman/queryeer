@@ -32,7 +32,7 @@ import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TableAlias;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TableAliasType;
@@ -50,7 +50,7 @@ import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Tsql_fileContext;
 class SqlServerDocumentParserTest
 {
     private CatalogCrawlService crawlService;
-    private IConnectionState connectionState;
+    private IConnectionContext connectionContext;
     private SqlServerDocumentParser sqlServerDocumentParser;
 
     /** Catalog with dbo.MyProc(@param1 varchar, @param2 int) */
@@ -63,11 +63,11 @@ class SqlServerDocumentParserTest
     void setUp()
     {
         crawlService = mock(CatalogCrawlService.class);
-        connectionState = mock(IConnectionState.class);
-        when(connectionState.getDatabase()).thenReturn("testdb");
+        connectionContext = mock(IConnectionContext.class);
+        when(connectionContext.getDatabase()).thenReturn("testdb");
         when(crawlService.getCatalog(any(), anyString())).thenReturn(TEST_CATALOG);
 
-        sqlServerDocumentParser = new SqlServerDocumentParser(mock(Icons.class), mock(IEventBus.class), mock(QueryActionsConfigurable.class), crawlService, connectionState,
+        sqlServerDocumentParser = new SqlServerDocumentParser(mock(Icons.class), mock(IEventBus.class), mock(QueryActionsConfigurable.class), crawlService, connectionContext,
                 mock(ITemplateService.class));
     }
 

@@ -9,7 +9,7 @@ import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.service.IIconFactory;
 
 import se.kuseman.payloadbuilder.api.OutputWriter;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
 
 /**
  * Output extension that adds a "Server Monitor" tab to all JDBC query files. The tab continuously monitors the connected SQL Server (or other supported databases) showing active sessions, wait
@@ -54,11 +54,11 @@ public class JdbcServerMonitorOutputExtension implements IOutputExtension
     public IOutputComponent createResultComponent(IQueryFile file)
     {
         // Only attach to JDBC query files
-        if (!(file.getEngineState() instanceof IConnectionState connectionState))
+        if (!(file.getEngineState() instanceof IJdbcEngineState engineState))
         {
             return null;
         }
-        return new ServerMonitorOutputComponent(connectionState, this, iconFactory, dialogFactory);
+        return new ServerMonitorOutputComponent(engineState, this, iconFactory, dialogFactory);
     }
 
     @Override

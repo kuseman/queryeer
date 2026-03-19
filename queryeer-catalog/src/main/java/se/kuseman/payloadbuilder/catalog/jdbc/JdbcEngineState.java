@@ -16,13 +16,14 @@ import com.queryeer.api.extensions.engine.IQueryEngine.IState;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
-class JdbcEngineState implements IQueryEngine.IState, IConnectionState
+/** JDBC engine state holding connection and query plan configuration for a query file. */
+class JdbcEngineState implements IJdbcEngineState
 {
     private final IQueryEngine queryEngine;
 
     private List<Runnable> changeListeners;
     final TextEditorDocumentParserProxy documentParser;
-    ConnectionState connectionState;
+    ConnectionContext connectionContext;
 
     boolean includeQueryPlan;
     boolean estimateQueryPlan;
@@ -32,10 +33,10 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
         this(queeryEngine, null);
     }
 
-    JdbcEngineState(IQueryEngine queryEngine, ConnectionState connectionState)
+    JdbcEngineState(IQueryEngine queryEngine, ConnectionContext connectionContext)
     {
         this.queryEngine = requireNonNull(queryEngine);
-        this.connectionState = connectionState;
+        this.connectionContext = connectionContext;
         this.documentParser = new TextEditorDocumentParserProxy();
 
         resetParser();
@@ -44,22 +45,22 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     IState cloneState()
     {
         JdbcEngineState newState = new JdbcEngineState(queryEngine);
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            newState.setConnectionState(connectionState.cloneState());
+            newState.setConnectionContext(connectionContext.cloneState());
         }
         return newState;
     }
 
-    void setConnectionState(ConnectionState connectionState)
+    void setConnectionContext(ConnectionContext connectionContext)
     {
-        this.connectionState = connectionState;
+        this.connectionContext = connectionContext;
         documentParser.currentParser = null;
         resetParser();
 
         if (changeListeners != null)
         {
-            for (Runnable r : changeListeners)
+            for (Runnable r : new ArrayList<>(changeListeners))
             {
                 r.run();
             }
@@ -69,9 +70,9 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     void resetParser()
     {
         // Switch parser if we switched state
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            documentParser.currentParser = connectionState.getjdbcDialect()
+            documentParser.currentParser = connectionContext.getJdbcDialect()
                     .getParser(this);
 
         }
@@ -124,22 +125,22 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
         String database = "database";
         if (!testData)
         {
-            url = connectionState != null ? Objects.toString(connectionState.getJdbcConnection()
+            url = connectionContext != null ? Objects.toString(connectionContext.getJdbcConnection()
                     .getJdbcURL(), "")
                     : "";
-            database = connectionState != null ? connectionState.getDatabase()
+            database = connectionContext != null ? connectionContext.getDatabase()
                     : "";
         }
 
-        return IConnectionState.getMetaParameters(url, database);
+        return IJdbcEngineState.getMetaParameters(url, database);
     }
 
     @Override
     public void close() throws IOException
     {
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            connectionState.close();
+            connectionContext.close();
         }
     }
 
@@ -148,9 +149,9 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     @Override
     public String getDatabase()
     {
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            return connectionState.getDatabase();
+            return connectionContext.getDatabase();
         }
         return null;
     }
@@ -158,9 +159,9 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     @Override
     public JdbcDialect getJdbcDialect()
     {
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            return connectionState.getjdbcDialect();
+            return connectionContext.getJdbcDialect();
         }
         return null;
     }
@@ -168,9 +169,9 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     @Override
     public JdbcConnection getJdbcConnection()
     {
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            return connectionState.getJdbcConnection();
+            return connectionContext.getJdbcConnection();
         }
         return null;
     }
@@ -178,9 +179,9 @@ class JdbcEngineState implements IQueryEngine.IState, IConnectionState
     @Override
     public Connection createConnection() throws SQLException
     {
-        if (connectionState != null)
+        if (connectionContext != null)
         {
-            return connectionState.createConnection();
+            return connectionContext.createConnection();
         }
         return null;
     }

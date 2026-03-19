@@ -12,8 +12,8 @@ import com.queryeer.api.IQueryFile;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
-/** Connection state of a {@link IQueryFile}. Contains an open connection a selected database etc. */
-class ConnectionState implements Closeable
+/** Connection context of a {@link IQueryFile}. Contains an open connection a selected database etc. */
+class ConnectionContext implements IConnectionContext, Closeable
 {
     private final JdbcConnection jdbcConnection;
     private final JdbcDialect jdbcDialect;
@@ -25,12 +25,12 @@ class ConnectionState implements Closeable
     private volatile Statement currentStatement;
     private volatile boolean abort;
 
-    ConnectionState(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect)
+    ConnectionContext(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect)
     {
         this(jdbcConnection, jdbcDialect, null);
     }
 
-    ConnectionState(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect, String database)
+    ConnectionContext(JdbcConnection jdbcConnection, JdbcDialect jdbcDialect, String database)
     {
         this.jdbcDialect = requireNonNull(jdbcDialect);
         this.jdbcConnection = requireNonNull(jdbcConnection);
@@ -38,7 +38,8 @@ class ConnectionState implements Closeable
     }
 
     /** Create a new connection. */
-    Connection createConnection() throws SQLException
+    @Override
+    public Connection createConnection() throws SQLException
     {
         String password = jdbcConnection.getRuntimePassword() != null ? new String(jdbcConnection.getRuntimePassword())
                 : "";
@@ -80,12 +81,14 @@ class ConnectionState implements Closeable
         return connection;
     }
 
-    JdbcConnection getJdbcConnection()
+    @Override
+    public JdbcConnection getJdbcConnection()
     {
         return jdbcConnection;
     }
 
-    JdbcDialect getjdbcDialect()
+    @Override
+    public JdbcDialect getJdbcDialect()
     {
         return jdbcDialect;
     }
@@ -156,7 +159,8 @@ class ConnectionState implements Closeable
         currentStatement = null;
     }
 
-    String getDatabase()
+    @Override
+    public String getDatabase()
     {
         return database;
     }
@@ -169,8 +173,8 @@ class ConnectionState implements Closeable
         JdbcUtils.closeQuiet(con);
     }
 
-    ConnectionState cloneState()
+    ConnectionContext cloneState()
     {
-        return new ConnectionState(jdbcConnection, jdbcDialect, database);
+        return new ConnectionContext(jdbcConnection, jdbcDialect, database);
     }
 }

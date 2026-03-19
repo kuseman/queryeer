@@ -46,7 +46,7 @@ import com.vmware.antlr4c3.CodeCompletionCore;
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
 import se.kuseman.payloadbuilder.catalog.jdbc.ExecuteQueryContext;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionTarget;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.QueryActionResult;
@@ -69,15 +69,15 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     private final IEventBus eventBus;
     private final QueryActionsConfigurable queryActionsConfigurable;
     protected final CatalogCrawlService crawlService;
-    protected final IConnectionState connectionState;
+    protected final IConnectionContext connectionContext;
     protected final ITemplateService templateService;
 
-    AntlrDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService crawlService, IConnectionState connectionState, ITemplateService templateService)
+    AntlrDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService crawlService, IConnectionContext connectionContext, ITemplateService templateService)
     {
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.queryActionsConfigurable = requireNonNull(queryActionsConfigurable, "queryActionsConfigurable");
         this.crawlService = requireNonNull(crawlService, "crawlService");
-        this.connectionState = requireNonNull(connectionState, "connectionState");
+        this.connectionContext = requireNonNull(connectionContext, "connectionContext");
         this.templateService = requireNonNull(templateService, "templateService");
     }
 
@@ -369,9 +369,9 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     @Override
     public LinkAction getLinkAction(int offset)
     {
-        String url = connectionState.getJdbcConnection()
+        String url = connectionContext.getJdbcConnection()
                 .getJdbcURL();
-        String database = connectionState.getDatabase();
+        String database = connectionContext.getDatabase();
 
         Set<Integer> tableSourceIndices = getTableSourceRuleIndices();
         Set<Integer> procedureFunctionIndices = getProcedureFunctionsRuleIndices();

@@ -68,8 +68,8 @@ class DatasourcesQuickSearchModel implements IQuickSearchModel<DatasourcesQuickS
 
         // Get the dialect from the connection URL
         JdbcDialect jdbcDialect = dialectProvider.getDialect(item.connection.getJdbcURL());
-        ConnectionState newState = new ConnectionState(item.connection, jdbcDialect, item.database);
-        state.setConnectionState(newState);
+        ConnectionContext newState = new ConnectionContext(item.connection, jdbcDialect, item.database);
+        state.setConnectionContext(newState);
         state.getQueryEngine()
                 .focus(file);
 
