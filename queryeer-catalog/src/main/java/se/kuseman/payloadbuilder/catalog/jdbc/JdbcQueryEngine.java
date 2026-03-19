@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.editor.IEditorFactory;
 import com.queryeer.api.editor.TextSelection;
@@ -77,6 +78,7 @@ class JdbcQueryEngine implements IQueryEngine
     private final JdbcDialectProvider dialectProvider;
     private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
     private final IGraphVisualizationService graphVisualizationService;
+    private final IDialogFactory dialogFactory;
     private JdbcEngineQuickPropertiesComponent quickProperties;
     private IPayloadbuilderService payloadbuilderService;
 
@@ -92,7 +94,8 @@ class JdbcQueryEngine implements IQueryEngine
             DatasourcesQuickSearchModel datasourcesQuickSearchModel,
             JdbcConnectionsTreeConfigurable connectionsTreeConfigurable,
             IPayloadbuilderService payloadbuilderService,
-            IGraphVisualizationService graphVisualizationService)
+            IGraphVisualizationService graphVisualizationService,
+            IDialogFactory dialogFactory)
     {
         //@formatter:on
         this.crawlService = requireNonNull(crawlService, "crawlService");
@@ -106,6 +109,7 @@ class JdbcQueryEngine implements IQueryEngine
         this.connectionsTreeConfigurable = requireNonNull(connectionsTreeConfigurable, "connectionsTreeConfigurable");
         this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
         this.graphVisualizationService = requireNonNull(graphVisualizationService, "graphVisualizationService");
+        this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
     }
 
     @Override
@@ -124,7 +128,8 @@ class JdbcQueryEngine implements IQueryEngine
                     crawlService,
                     connectionsTreeConfigurable,
                     payloadbuilderService,
-                    graphVisualizationService);
+                    graphVisualizationService,
+                    dialogFactory);
             //@formatter:on
         }
         return quickProperties;

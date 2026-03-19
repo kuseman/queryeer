@@ -40,6 +40,7 @@ import org.apache.commons.io.IOUtils;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.QueryFileMetaData;
 import com.queryeer.api.component.AutoCompletionComboBox;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.component.QueryeerTree;
 import com.queryeer.api.component.QueryeerTree.FilterPath;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
@@ -89,7 +90,8 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             CatalogCrawlService crawlService,
             JdbcConnectionsTreeConfigurable connectionsTreeConfigurable,
             IPayloadbuilderService payloadbuilderService,
-            IGraphVisualizationService graphVisualizationService)
+            IGraphVisualizationService graphVisualizationService,
+            IDialogFactory dialogFactory)
     {
         //@formatter:on
         this.queryEngine = queryEngine;
@@ -271,7 +273,8 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             }
         });
 
-        connectionsTreeModel = new JdbcConnectionsTreeModel(payloadbuilderService, connectionsModel, icons, dialectProvider, node -> newQuery(node), crawlService, graphVisualizationService);
+        connectionsTreeModel = new JdbcConnectionsTreeModel(payloadbuilderService, connectionsModel, icons, dialectProvider, node -> newQuery(node), crawlService, graphVisualizationService,
+                icons.getIconFactory(), dialogFactory);
         treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
         connectionsModel.addListDataListener(new ListDataListener()
         {
