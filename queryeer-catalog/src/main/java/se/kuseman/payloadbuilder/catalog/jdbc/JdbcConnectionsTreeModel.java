@@ -8,6 +8,8 @@ import static java.util.stream.Collectors.toList;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.event.ActionEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -18,20 +20,24 @@ import java.util.function.Consumer;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils.ADialog;
+import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
 import com.queryeer.api.extensions.visualization.graph.Graph;
 import com.queryeer.api.service.IGraphVisualizationService;
+import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IPayloadbuilderService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
+import se.kuseman.payloadbuilder.catalog.jdbc.monitor.ServerMonitorPanel;
 
 /** Tree model for jdbc query engine showing connections and child nodes like databases etc. */
 class JdbcConnectionsTreeModel implements RegularNode
@@ -43,10 +49,12 @@ class JdbcConnectionsTreeModel implements RegularNode
     private final Consumer<RegularNode> newQueryConsumer;
     private final CatalogCrawlService crawlService;
     private final IGraphVisualizationService graphVisualizationService;
+    private final IIconFactory iconFactory;
+    private final IDialogFactory dialogFactory;
 
     //@formatter:off
     JdbcConnectionsTreeModel(IPayloadbuilderService payloadbuilderService, JdbcConnectionsModel model, Icons icons, JdbcDialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer,
-            CatalogCrawlService crawlService, IGraphVisualizationService graphVisualizationService)
+            CatalogCrawlService crawlService, IGraphVisualizationService graphVisualizationService, IIconFactory iconFactory, IDialogFactory dialogFactory)
     //@formatter:on
     {
         this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
@@ -56,6 +64,8 @@ class JdbcConnectionsTreeModel implements RegularNode
         this.newQueryConsumer = requireNonNull(newQueryConsumer, "newQueryConsumer");
         this.crawlService = requireNonNull(crawlService, "crawlService");
         this.graphVisualizationService = requireNonNull(graphVisualizationService, "graphVisualizationService");
+        this.iconFactory = requireNonNull(iconFactory, "iconFactory");
+        this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
     }
 
     @Override
@@ -180,6 +190,10 @@ class JdbcConnectionsTreeModel implements RegularNode
             {
                 return emptyList();
             }
+            if (jdbcDialect.getMonitorExtension() != null)
+            {
+                return asList(newQuery, serverMonitor);
+            }
             return asList(newQuery);
         }
 
@@ -215,6 +229,30 @@ class JdbcConnectionsTreeModel implements RegularNode
             public void actionPerformed(ActionEvent e)
             {
                 newQueryConsumer.accept(ConnectionNode.this);
+            }
+        };
+
+        private Action serverMonitor = new AbstractAction("Show Server Monitor ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                ConnectionContext ctx = createState();
+                ServerMonitorPanel panel = new ServerMonitorPanel(ctx, iconFactory, dialogFactory);
+                ADialog dialog = new ADialog((Frame) null, connection.getName() + " — Server Monitor", false);
+                dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+                dialog.addWindowListener(new WindowAdapter()
+                {
+                    @Override
+                    public void windowClosed(WindowEvent ev)
+                    {
+                        panel.dispose();
+                    }
+                });
+                dialog.setContentPane(panel);
+                dialog.setSize(1000, 600);
+                dialog.setLocationRelativeTo(null);
+                dialog.setVisible(true);
             }
         };
     }

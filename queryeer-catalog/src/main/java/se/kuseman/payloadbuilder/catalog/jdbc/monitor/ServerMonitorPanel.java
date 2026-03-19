@@ -22,7 +22,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.swing.BorderFactory;
-import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
@@ -41,18 +40,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.queryeer.api.component.IDialogFactory;
-import com.queryeer.api.extensions.output.IOutputComponent;
-import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IIconFactory.Provider;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
-/** Output component that displays live server monitoring data (sessions, waits, locks, etc.) */
-class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
+/** Panel that displays live server monitoring data (sessions, waits, locks, etc.) */
+public class ServerMonitorPanel extends JPanel
 {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ServerMonitorOutputComponent.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServerMonitorPanel.class);
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final int DEFAULT_INTERVAL_SECONDS = 5;
 
@@ -61,9 +58,8 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
             .namingPattern("ServerMonitor#-%d")
             .build());
 
-    private final JdbcServerMonitorOutputExtension extension;
-    private final IJdbcEngineState jdbcEngineState;
-    private final IIconFactory iconFactory;
+    private final IConnectionContext connectionContext;
+    private final IDialogFactory dialogFactory;
 
     // UI
     private final JTabbedPane tabbedPane;
@@ -79,16 +75,11 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
     // Separate monitoring connection
     private volatile Connection monitorConnection;
 
-    // Connection change listener
-    private final Runnable connectionChangeListener;
-    private final IDialogFactory dialogFactory;
-
-    ServerMonitorOutputComponent(IJdbcEngineState jdbcEngineState, JdbcServerMonitorOutputExtension extension, IIconFactory iconFactory, IDialogFactory dialogFactory)
+    public ServerMonitorPanel(IConnectionContext connectionContext, IIconFactory iconFactory, IDialogFactory dialogFactory)
     {
-        this.jdbcEngineState = requireNonNull(jdbcEngineState, "jdbcEngineState");
-        this.extension = requireNonNull(extension, "extension");
-        this.iconFactory = requireNonNull(iconFactory, "iconFactory");
+        this.connectionContext = requireNonNull(connectionContext, "connectionContext");
         this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
+        requireNonNull(iconFactory, "iconFactory");
 
         setLayout(new BorderLayout());
 
@@ -96,8 +87,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, getBackground().darker()));
 
-        Icon refreshIcon = iconFactory.getIcon(Provider.FONTAWESOME, "REFRESH");
-        refreshButton = new JButton(refreshIcon);
+        refreshButton = new JButton(iconFactory.getIcon(Provider.FONTAWESOME, "REFRESH"));
         refreshButton.setToolTipText("Refresh now");
         refreshButton.addActionListener(e -> triggerRefresh());
 
@@ -123,57 +113,16 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
 
         add(toolbar, BorderLayout.NORTH);
 
-        // Tabs
         tabbedPane = new JTabbedPane();
         add(tabbedPane, BorderLayout.CENTER);
 
-        // Build tabs based on current dialect's monitor extension
         buildSectionTabs();
-
-        // Listen for connection state changes and rebuild sections if dialect changes
-        connectionChangeListener = () -> SwingUtilities.invokeLater(this::onConnectionChanged);
-        jdbcEngineState.addChangeListener(connectionChangeListener);
     }
 
-    // -----------------------------------------------------------------------
-    // IOutputComponent
-    // -----------------------------------------------------------------------
-
-    @Override
-    public String title()
-    {
-        return "Server Monitor";
-    }
-
-    @Override
-    public Icon icon()
-    {
-        return iconFactory.getIcon(Provider.FONTAWESOME, "HEARTBEAT");
-    }
-
-    @Override
-    public IOutputExtension getExtension()
-    {
-        return extension;
-    }
-
-    @Override
-    public Component getComponent()
-    {
-        return this;
-    }
-
-    @Override
-    public void clearState()
-    {
-        // Keep the monitor running across query executions
-    }
-
-    @Override
+    /** Stop timer and close the monitoring connection. Call when the dialog is closed. */
     public void dispose()
     {
         stopTimer();
-        jdbcEngineState.removeChangeListener(connectionChangeListener);
         closeMonitorConnection();
     }
 
@@ -185,14 +134,12 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
     {
         tabbedPane.removeAll();
         sectionTabs.clear();
-        refreshButton.setEnabled(false);
 
         IServerMonitorExtension monitor = getMonitor();
         if (monitor == null)
         {
-            String msg = jdbcEngineState.getJdbcConnection() == null ? "Not connected. Connect to a SQL Server to enable monitoring."
-                    : "Server monitoring is not supported for this connection type.";
-            tabbedPane.addTab("Not connected", new JLabel(msg, JLabel.CENTER));
+            refreshButton.setEnabled(false);
+            tabbedPane.addTab("Not supported", new JLabel("Server monitoring is not supported for this connection type.", JLabel.CENTER));
             return;
         }
         refreshButton.setEnabled(true);
@@ -213,13 +160,12 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
                 @Override
                 public void mouseClicked(MouseEvent e)
                 {
-                    Point point = e.getPoint();
-                    int row = table.rowAtPoint(point);
-                    int col = table.columnAtPoint(point);
-
                     if (e.getClickCount() == 2
                             && e.getButton() == MouseEvent.BUTTON1)
                     {
+                        Point point = e.getPoint();
+                        int row = table.rowAtPoint(point);
+                        int col = table.columnAtPoint(point);
                         if (row >= 0)
                         {
                             Object value = table.getValueAt(row, col);
@@ -242,30 +188,16 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
         }
     }
 
-    private void onConnectionChanged()
-    {
-        stopTimer();
-        closeMonitorConnection();
-        buildSectionTabs();
-        statusLabel.setText(" ");
-    }
-
     private IServerMonitorExtension getMonitor()
     {
-        if (jdbcEngineState.getJdbcConnection() == null)
-        {
-            return null;
-        }
-        return Optional.ofNullable(jdbcEngineState.getJdbcDialect())
+        return Optional.ofNullable(connectionContext.getJdbcDialect())
                 .map(JdbcDialect::getMonitorExtension)
                 .orElse(null);
     }
 
     private void triggerRefresh()
     {
-        IServerMonitorExtension monitor = getMonitor();
-        if (monitor == null
-                || sectionTabs.isEmpty())
+        if (sectionTabs.isEmpty())
         {
             return;
         }
@@ -366,11 +298,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
             closeMonitorConnection();
         }
 
-        con = jdbcEngineState.createConnection();
-        if (con == null)
-        {
-            throw new IllegalStateException("Not connected to any database");
-        }
+        con = connectionContext.createConnection();
         monitorConnection = con;
         return con;
     }
@@ -455,12 +383,10 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
             for (int col = 0; col < table.getColumnCount(); col++)
             {
                 int width = 80;
-                // Header width
                 Component header = table.getTableHeader()
                         .getDefaultRenderer()
                         .getTableCellRendererComponent(table, table.getColumnName(col), false, false, -1, col);
                 width = Math.max(width, header.getPreferredSize().width + 10);
-                // Cell width (sample up to 50 rows)
                 int maxRow = Math.min(table.getRowCount(), 50);
                 for (int row = 0; row < maxRow; row++)
                 {
@@ -472,7 +398,6 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
                         .getColumn(col)
                         .setPreferredWidth(Math.min(width, 300));
             }
-
         }
     }
 
