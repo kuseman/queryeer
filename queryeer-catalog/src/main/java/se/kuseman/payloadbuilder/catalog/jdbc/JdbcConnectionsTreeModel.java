@@ -74,9 +74,9 @@ class JdbcConnectionsTreeModel implements RegularNode
             this.jdbcDialect = dialectProvider.getDialect(connection.getJdbcURL());
         }
 
-        ConnectionState createState()
+        ConnectionContext createState()
         {
-            return new ConnectionState(connection, jdbcDialect);
+            return new ConnectionContext(connection, jdbcDialect);
         }
 
         JdbcConnection getJdbcConnection()
@@ -279,9 +279,9 @@ class JdbcConnectionsTreeModel implements RegularNode
             this.database = database;
         }
 
-        ConnectionState createState()
+        ConnectionContext createState()
         {
-            ConnectionState state = new ConnectionState(connectionNode.connection, jdbcDialect, database);
+            ConnectionContext state = new ConnectionContext(connectionNode.connection, jdbcDialect, database);
             return state;
         }
 
@@ -387,5 +387,7 @@ class JdbcConnectionsTreeModel implements RegularNode
                 dialog.setVisible(true);
             }
         };
+
     }
+
 }

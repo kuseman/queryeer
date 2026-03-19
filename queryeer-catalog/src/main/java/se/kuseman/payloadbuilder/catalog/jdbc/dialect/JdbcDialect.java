@@ -15,7 +15,8 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.ITextEditorDocumentParser;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
+import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.monitor.IServerMonitorExtension;
@@ -86,7 +87,7 @@ public interface JdbcDialect
     }
 
     /** Return document parser for this database */
-    default ITextEditorDocumentParser getParser(IConnectionState connectionState)
+    default ITextEditorDocumentParser getParser(IConnectionContext connectionContext)
     {
         return null;
     }
@@ -94,9 +95,9 @@ public interface JdbcDialect
     /**
      * Parse the provided query text and return all table source {@link ObjectName}s referenced in it. Returns an empty list if the dialect does not support ANTLR-based parsing.
      */
-    default List<ObjectName> getReferencedTableSources(String queryText, IConnectionState connectionState)
+    default List<ObjectName> getReferencedTableSources(String queryText, IConnectionContext connectionContext)
     {
-        ITextEditorDocumentParser docParser = getParser(connectionState);
+        ITextEditorDocumentParser docParser = getParser(connectionContext);
         if (!(docParser instanceof AntlrDocumentParser<?> antlrParser))
         {
             return Collections.emptyList();
@@ -113,13 +114,13 @@ public interface JdbcDialect
     }
 
     /** Return catalog meta data for provided database */
-    default Catalog getCatalog(IConnectionState connectionState, String database)
+    default Catalog getCatalog(IConnectionContext connectionContext, String database)
     {
         return null;
     }
 
     /** Called before query execution to let dialect perform init. operations like include query plans etc. */
-    default void beforeExecuteQuery(Connection connection, IConnectionState state) throws SQLException
+    default void beforeExecuteQuery(Connection connection, IJdbcEngineState engineState) throws SQLException
     {
         return;
     }
@@ -129,7 +130,7 @@ public interface JdbcDialect
      *
      * @return Return true if engine should proceed and write result set to output otherwise false. When false this result set is discarded.
      */
-    default boolean processResultSet(IQueryFile queryFile, IConnectionState state, ResultSet rs) throws SQLException
+    default boolean processResultSet(IQueryFile queryFile, IJdbcEngineState engineState, ResultSet rs) throws SQLException
     {
         return true;
     }

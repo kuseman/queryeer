@@ -36,13 +36,13 @@ class JdbcTextEditorKit implements ITextEditorKit
 
     void updateActionStatuses()
     {
-        includeQueryPlanAction.setEnabled(state.connectionState != null
-                && state.connectionState.getjdbcDialect()
+        includeQueryPlanAction.setEnabled(state.connectionContext != null
+                && state.connectionContext.getJdbcDialect()
                         .supportsIncludeQueryPlanAction() ? true
                                 : false);
 
-        showEstimatedQueryPlanAction.setEnabled(state.connectionState != null
-                && state.connectionState.getjdbcDialect()
+        showEstimatedQueryPlanAction.setEnabled(state.connectionContext != null
+                && state.connectionContext.getJdbcDialect()
                         .supportsShowEstimatedQueryPlanAction() ? true
                                 : false);
     }

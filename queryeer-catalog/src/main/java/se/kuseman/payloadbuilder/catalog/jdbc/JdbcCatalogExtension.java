@@ -101,7 +101,7 @@ class JdbcCatalogExtension implements ICatalogExtension
                     .valueAsString(0);
         }
 
-        return IConnectionState.getMetaParameters(url, database);
+        return IJdbcEngineState.getMetaParameters(url, database);
     }
 
     @Override

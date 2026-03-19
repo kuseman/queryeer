@@ -46,7 +46,7 @@ import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IIconFactory.Provider;
 
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
 /** Output component that displays live server monitoring data (sessions, waits, locks, etc.) */
@@ -62,7 +62,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
             .build());
 
     private final JdbcServerMonitorOutputExtension extension;
-    private final IConnectionState connectionState;
+    private final IJdbcEngineState jdbcEngineState;
     private final IIconFactory iconFactory;
 
     // UI
@@ -83,9 +83,9 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
     private final Runnable connectionChangeListener;
     private final IDialogFactory dialogFactory;
 
-    ServerMonitorOutputComponent(IConnectionState connectionState, JdbcServerMonitorOutputExtension extension, IIconFactory iconFactory, IDialogFactory dialogFactory)
+    ServerMonitorOutputComponent(IJdbcEngineState jdbcEngineState, JdbcServerMonitorOutputExtension extension, IIconFactory iconFactory, IDialogFactory dialogFactory)
     {
-        this.connectionState = requireNonNull(connectionState, "connectionState");
+        this.jdbcEngineState = requireNonNull(jdbcEngineState, "jdbcEngineState");
         this.extension = requireNonNull(extension, "extension");
         this.iconFactory = requireNonNull(iconFactory, "iconFactory");
         this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
@@ -132,7 +132,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
 
         // Listen for connection state changes and rebuild sections if dialect changes
         connectionChangeListener = () -> SwingUtilities.invokeLater(this::onConnectionChanged);
-        connectionState.addChangeListener(connectionChangeListener);
+        jdbcEngineState.addChangeListener(connectionChangeListener);
     }
 
     // -----------------------------------------------------------------------
@@ -173,7 +173,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
     public void dispose()
     {
         stopTimer();
-        connectionState.removeChangeListener(connectionChangeListener);
+        jdbcEngineState.removeChangeListener(connectionChangeListener);
         closeMonitorConnection();
     }
 
@@ -190,7 +190,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
         IServerMonitorExtension monitor = getMonitor();
         if (monitor == null)
         {
-            String msg = connectionState == null ? "Not connected. Connect to a SQL Server to enable monitoring."
+            String msg = jdbcEngineState.getJdbcConnection() == null ? "Not connected. Connect to a SQL Server to enable monitoring."
                     : "Server monitoring is not supported for this connection type.";
             tabbedPane.addTab("Not connected", new JLabel(msg, JLabel.CENTER));
             return;
@@ -252,11 +252,11 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
 
     private IServerMonitorExtension getMonitor()
     {
-        if (connectionState == null)
+        if (jdbcEngineState.getJdbcConnection() == null)
         {
             return null;
         }
-        return Optional.ofNullable(connectionState.getJdbcDialect())
+        return Optional.ofNullable(jdbcEngineState.getJdbcDialect())
                 .map(JdbcDialect::getMonitorExtension)
                 .orElse(null);
     }
@@ -366,7 +366,7 @@ class ServerMonitorOutputComponent extends JPanel implements IOutputComponent
             closeMonitorConnection();
         }
 
-        con = connectionState.createConnection();
+        con = jdbcEngineState.createConnection();
         if (con == null)
         {
             throw new IllegalStateException("Not connected to any database");

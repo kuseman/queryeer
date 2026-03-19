@@ -93,7 +93,7 @@ import com.queryeer.api.service.IIconFactory.Provider;
 
 import se.kuseman.payloadbuilder.api.expression.IExpression;
 import se.kuseman.payloadbuilder.catalog.jdbc.Constants;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectType;
 
 /**
@@ -1242,7 +1242,7 @@ class QueryActionsConfigurable implements IConfigurable
         message += "<h4>Payloadbuilder expression</h4>"
                 + "First override whos rule evaluates to true will be used.<br/>"
                 + "Parameters are accessiable via <b>@param</b>-notion:<br/>";
-        List<MetaParameter> meta = IConnectionState.getMetaParameters("", "");
+        List<MetaParameter> meta = IJdbcEngineState.getMetaParameters("", "");
         message += "<ul>";
         for (MetaParameter entry : meta)
         {

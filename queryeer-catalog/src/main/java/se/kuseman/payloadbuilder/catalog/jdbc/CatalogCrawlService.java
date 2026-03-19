@@ -33,14 +33,14 @@ public class CatalogCrawlService
     }
 
     /** Load catalog for provided */
-    public Catalog getCatalog(IConnectionState connectionState, String database)
+    public Catalog getCatalog(IConnectionContext connectionContext, String database)
     {
         if (isBlank(database))
         {
             return null;
         }
 
-        String jdbcURL = connectionState.getJdbcConnection()
+        String jdbcURL = connectionContext.getJdbcConnection()
                 .getJdbcURL();
         CacheKey key = new CacheKey(jdbcURL, database);
         return cache.compute(key, (k, v) ->
@@ -67,8 +67,8 @@ public class CatalogCrawlService
                 {
                     try
                     {
-                        entry.catalog = connectionState.getJdbcDialect()
-                                .getCatalog(connectionState, database);
+                        entry.catalog = connectionContext.getJdbcDialect()
+                                .getCatalog(connectionContext, database);
                         entry.expireTime = System.currentTimeMillis() + Duration.ofMinutes(10)
                                 .toMillis();
                     }

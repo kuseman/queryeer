@@ -30,7 +30,8 @@ import com.queryeer.api.service.ITemplateService;
 
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
+import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
@@ -137,15 +138,15 @@ class SqlServerJdbcDialect implements JdbcDialect
     }
 
     @Override
-    public ITextEditorDocumentParser getParser(IConnectionState connectionState)
+    public ITextEditorDocumentParser getParser(IConnectionContext connectionContext)
     {
-        return new SqlServerDocumentParser(icons, eventBus, queryActionsConfigurable, crawlerService, connectionState, templateService);
+        return new SqlServerDocumentParser(icons, eventBus, queryActionsConfigurable, crawlerService, connectionContext, templateService);
     }
 
     @Override
-    public Catalog getCatalog(IConnectionState connectionState, String database)
+    public Catalog getCatalog(IConnectionContext connectionContext, String database)
     {
-        try (Connection con = connectionState.createConnection(); PreparedStatement stm = con.prepareStatement(META_DATA_QUERY))
+        try (Connection con = connectionContext.createConnection(); PreparedStatement stm = con.prepareStatement(META_DATA_QUERY))
         {
             // CSOFF
             LOGGER.info("Fetching catalog metadata for: " + database);
@@ -272,14 +273,14 @@ class SqlServerJdbcDialect implements JdbcDialect
     }
 
     @Override
-    public void beforeExecuteQuery(Connection connection, IConnectionState connectionState) throws SQLException
+    public void beforeExecuteQuery(Connection connection, IJdbcEngineState engineState) throws SQLException
     {
         try (Statement stm = connection.createStatement())
         {
-            stm.execute("SET SHOWPLAN_XML " + (connectionState.isEstimateQueryPlan() ? "ON"
+            stm.execute("SET SHOWPLAN_XML " + (engineState.isEstimateQueryPlan() ? "ON"
                     : "OFF"));
-            stm.execute("SET STATISTICS XML " + (!connectionState.isEstimateQueryPlan()
-                    && connectionState.isIncludeQueryPlan() ? "ON"
+            stm.execute("SET STATISTICS XML " + (!engineState.isEstimateQueryPlan()
+                    && engineState.isIncludeQueryPlan() ? "ON"
                             : "OFF"));
         }
     }
@@ -306,10 +307,10 @@ class SqlServerJdbcDialect implements JdbcDialect
     }
 
     @Override
-    public boolean processResultSet(IQueryFile queryFile, IConnectionState connectionState, ResultSet rs) throws SQLException
+    public boolean processResultSet(IQueryFile queryFile, IJdbcEngineState engineState, ResultSet rs) throws SQLException
     {
-        if ((connectionState.isIncludeQueryPlan()
-                || connectionState.isEstimateQueryPlan())
+        if ((engineState.isIncludeQueryPlan()
+                || engineState.isEstimateQueryPlan())
                 && rs.getMetaData()
                         .getColumnCount() == 1
                 && CI.contains(rs.getMetaData()

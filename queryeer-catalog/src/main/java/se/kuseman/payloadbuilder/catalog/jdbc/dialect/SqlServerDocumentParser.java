@@ -35,7 +35,7 @@ import com.vmware.antlr4c3.CodeCompletionCore.CandidatesCollection;
 
 import se.kuseman.payloadbuilder.api.QualifiedName;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
-import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionState;
+import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
@@ -86,10 +86,10 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     private final Icons icons;
     private final Map<String, List<String>> temporaryTables = new HashMap<>();
 
-    SqlServerDocumentParser(Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionState connectionState,
+    SqlServerDocumentParser(Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionContext connectionContext,
             ITemplateService templateService)
     {
-        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionState, templateService);
+        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionContext, templateService);
         this.icons = icons;
     }
 
@@ -117,7 +117,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         temporaryTables.clear();
         if (context != null)
         {
-            ValidateVisitor visitor = new ValidateVisitor(temporaryTables, parseResult, connectionState, crawlService);
+            ValidateVisitor visitor = new ValidateVisitor(temporaryTables, parseResult, connectionContext, crawlService);
             context.accept(visitor);
         }
     }
@@ -144,8 +144,8 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     protected Map<String, Object> getTableSourceTooltipModel(ObjectName name)
     {
         // TODO: create model for temporary tables
-        String database = Objects.toString(name.getCatalog(), connectionState.getDatabase());
-        Catalog catalog = crawlService.getCatalog(connectionState, database);
+        String database = Objects.toString(name.getCatalog(), connectionContext.getDatabase());
+        Catalog catalog = crawlService.getCatalog(connectionContext, database);
         if (catalog == null)
         {
             return null;
@@ -224,7 +224,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
     private CompletionResult suggestColumns(ParseTree node)
     {
-        Set<TableAlias> aliases = TableSourceAliasCollector.collectTableSourceAliases(node, connectionState.getDatabase());
+        Set<TableAlias> aliases = TableSourceAliasCollector.collectTableSourceAliases(node, connectionContext.getDatabase());
 
         if (aliases.isEmpty())
         {
@@ -240,8 +240,8 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     || ta.type() == TableAliasType.TABLE_FUNCTION
                     || ta.type() == TableAliasType.CHANGETABLE)
             {
-                Catalog catalog = crawlService.getCatalog(connectionState, Objects.toString(ta.objectName()
-                        .getCatalog(), connectionState.getDatabase()));
+                Catalog catalog = crawlService.getCatalog(connectionContext, Objects.toString(ta.objectName()
+                        .getCatalog(), connectionContext.getDatabase()));
                 if (catalog == null)
                 {
                     partialResult = true;
@@ -345,7 +345,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
     private CompletionResult suggestTableSources()
     {
-        Catalog catalog = crawlService.getCatalog(connectionState, connectionState.getDatabase());
+        Catalog catalog = crawlService.getCatalog(connectionContext, connectionContext.getDatabase());
         List<CompletionItem> result = new ArrayList<>();
 
         boolean partialResult = false;
@@ -465,8 +465,8 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         }
 
         String database = Objects.toString(procRef.getValue()
-                .getCatalog(), connectionState.getDatabase());
-        Catalog catalog = crawlService.getCatalog(connectionState, database);
+                .getCatalog(), connectionContext.getDatabase());
+        Catalog catalog = crawlService.getCatalog(connectionContext, database);
         if (catalog == null)
         {
             return new CompletionResult(emptyList(), true);
@@ -593,7 +593,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
         if (candidates.rules.containsKey(TSqlParser.RULE_func_proc_name_server_database_schema))
         {
-            Catalog catalog = crawlService.getCatalog(connectionState, connectionState.getDatabase());
+            Catalog catalog = crawlService.getCatalog(connectionContext, connectionContext.getDatabase());
             if (catalog == null)
             {
                 return null;
@@ -808,13 +808,13 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         private final Map<String, List<String>> temporaryTables;
         private final List<ParseItem> parseResult;
         private final CatalogCrawlService crawlService;
-        private final IConnectionState connectionState;
+        private final IConnectionContext connectionContext;
 
-        ValidateVisitor(Map<String, List<String>> temporaryTables, List<ParseItem> parseResult, IConnectionState connectionState, CatalogCrawlService crawlService)
+        ValidateVisitor(Map<String, List<String>> temporaryTables, List<ParseItem> parseResult, IConnectionContext connectionContext, CatalogCrawlService crawlService)
         {
             this.temporaryTables = temporaryTables;
             this.parseResult = parseResult;
-            this.connectionState = connectionState;
+            this.connectionContext = connectionContext;
             this.crawlService = crawlService;
         }
 
@@ -952,10 +952,10 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             else if (ctx.server == null)
             {
                 String database = ctx.database != null ? ctx.database.getText()
-                        : connectionState.getDatabase();
+                        : connectionContext.getDatabase();
                 String schema = ctx.schema != null ? ctx.schema.getText()
                         : "";
-                Catalog catalog = crawlService.getCatalog(connectionState, database);
+                Catalog catalog = crawlService.getCatalog(connectionContext, database);
 
                 if (catalog != null
                         && catalog.getTableSources()

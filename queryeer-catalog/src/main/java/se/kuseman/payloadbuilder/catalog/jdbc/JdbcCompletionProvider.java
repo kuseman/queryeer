@@ -72,7 +72,7 @@ class JdbcCompletionProvider implements ICompletionProvider
         String database = querySession.getCatalogProperty(catalogAlias, JdbcCatalog.DATABASE)
                 .valueAsString(0);
 
-        IConnectionState state = new IConnectionState()
+        IConnectionContext state = new IConnectionContext()
         {
             @Override
             public JdbcDialect getJdbcDialect()
@@ -96,28 +96,6 @@ class JdbcCompletionProvider implements ICompletionProvider
             public Connection createConnection() throws SQLException
             {
                 return model.createConnection(jdbcConnection);
-            }
-
-            @Override
-            public boolean isIncludeQueryPlan()
-            {
-                return false;
-            }
-
-            @Override
-            public boolean isEstimateQueryPlan()
-            {
-                return false;
-            }
-
-            @Override
-            public void addChangeListener(Runnable listener)
-            {
-            }
-
-            @Override
-            public void removeChangeListener(Runnable listener)
-            {
             }
         };
 
