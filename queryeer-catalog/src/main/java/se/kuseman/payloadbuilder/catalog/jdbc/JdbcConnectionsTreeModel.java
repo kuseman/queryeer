@@ -397,7 +397,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<Action> getContextMenuActions()
         {
-            return asList(newQuery, importData, schemaDiagram);
+            return asList(newQuery, importData, schemaDiagram, routineCallGraph);
         }
 
         @Override
@@ -503,6 +503,71 @@ class JdbcConnectionsTreeModel implements RegularNode
                     {
                         Graph graph = DatabaseSchemaGraph.buildGraph(database, catalog);
                         graphVisualizationService.showGraph(graph);
+                    }
+                });
+            }
+        };
+
+        private Action routineCallGraph = new AbstractAction("Show Routine Call Graph ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                JdbcQueryEngine.EXECUTOR.execute(() ->
+                {
+                    ConnectionContext connectionContext = new ConnectionContext(connectionNode.connection, jdbcDialect, database);
+                    Catalog catalog = crawlService.getCatalog(connectionContext, database);
+
+                    if (catalog == null)
+                    {
+                        // Catalog is still loading — show a non-blocking loading dialog with a spinner
+                        ADialog[] loadingDialog = new ADialog[1];
+                        SwingUtilities.invokeLater(() ->
+                        {
+                            ADialog dlg = new ADialog((Frame) null, "Routine Call Graph", false);
+                            JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 12));
+                            panel.add(new JLabel(AnimatedIcon.createSmallSpinner()));
+                            panel.add(new JLabel("Loading schema, please wait…"));
+                            dlg.setContentPane(panel);
+                            dlg.pack();
+                            dlg.setLocationRelativeTo(null);
+                            dlg.setVisible(true);
+                            loadingDialog[0] = dlg;
+                        });
+
+                        try
+                        {
+                            while (catalog == null)
+                            {
+                                Thread.sleep(300);
+                                catalog = crawlService.getCatalog(connectionContext, database);
+                            }
+                        }
+                        catch (InterruptedException ex)
+                        {
+                            Thread.currentThread()
+                                    .interrupt();
+                        }
+                        finally
+                        {
+                            SwingUtilities.invokeLater(() ->
+                            {
+                                if (loadingDialog[0] != null)
+                                {
+                                    loadingDialog[0].dispose();
+                                }
+                            });
+                        }
+                    }
+
+                    if (catalog != null)
+                    {
+                        final Catalog finalCatalog = catalog;
+                        SwingUtilities.invokeLater(() ->
+                        {
+                            RoutineCallGraphDialog dialog = new RoutineCallGraphDialog(database, finalCatalog, jdbcDialect, connectionContext, graphVisualizationService);
+                            dialog.setVisible(true);
+                        });
                     }
                 });
             }

@@ -2,6 +2,7 @@ package se.kuseman.payloadbuilder.catalog.jdbc.dialect;
 
 import static java.util.Collections.emptyList;
 import static org.apache.commons.collections4.CollectionUtils.isEmpty;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.Strings.CI;
 
 import java.sql.Connection;
@@ -12,6 +13,7 @@ import java.sql.Statement;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiFunction;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
@@ -141,6 +143,45 @@ class SqlServerJdbcDialect implements JdbcDialect
     public ITextEditorDocumentParser getParser(IConnectionContext connectionContext)
     {
         return new SqlServerDocumentParser(icons, eventBus, queryActionsConfigurable, crawlerService, connectionContext, templateService);
+    }
+
+    //@formatter:off
+    private static final String ROUTINE_BODIES_QUERY =
+        "SELECT s.name AS objectSchema, o.name AS objectName, m.definition " +
+        "FROM sys.sql_modules m " +
+        "JOIN sys.objects o ON o.object_id = m.object_id " +
+        "JOIN sys.schemas s ON s.schema_id = o.schema_id " +
+        "WHERE o.type IN ('P','FN','IF','TF','AF','X')";
+    //@formatter:on
+
+    @Override
+    public Map<String, String> getRoutineBodies(IConnectionContext connectionContext, List<Routine> routines)
+    {
+        Map<String, String> result = new java.util.HashMap<>();
+        try (Connection con = connectionContext.createConnection())
+        {
+            con.setCatalog(connectionContext.getDatabase());
+            try (Statement stm = con.createStatement(); ResultSet rs = stm.executeQuery(ROUTINE_BODIES_QUERY))
+            {
+                while (rs.next())
+                {
+                    String schema = rs.getString("objectSchema");
+                    String name = rs.getString("objectName");
+                    String definition = rs.getString("definition");
+                    if (definition != null)
+                    {
+                        String key = isBlank(schema) ? name.toLowerCase()
+                                : schema.toLowerCase() + "." + name.toLowerCase();
+                        result.put(key, definition);
+                    }
+                }
+            }
+        }
+        catch (SQLException e)
+        {
+            LOGGER.warn("Could not fetch routine bodies", e);
+        }
+        return result;
     }
 
     @Override

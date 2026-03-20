@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 
@@ -19,6 +20,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.IJdbcEngineState;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
 import se.kuseman.payloadbuilder.catalog.jdbc.monitor.IServerMonitorExtension;
 
 /** Definition of a JDBC dialect. This is the glue that is missing from plain JDBC to do quirks and specials for different RDBMS:es */
@@ -111,6 +113,67 @@ public interface JdbcDialect
         {
             return Collections.emptyList();
         }
+    }
+
+    /**
+     * Parse the provided routine body and return all routine {@link ObjectName}s called in it. Returns an empty list if the dialect does not support ANTLR-based parsing.
+     */
+    default List<ObjectName> getReferencedRoutines(String routineBody, IConnectionContext connectionContext)
+    {
+        ITextEditorDocumentParser docParser = getParser(connectionContext);
+        if (!(docParser instanceof AntlrDocumentParser<?> antlrParser))
+        {
+            return Collections.emptyList();
+        }
+        try
+        {
+            antlrParser.parse(new StringReader(routineBody));
+            return antlrParser.getReferencedRoutines();
+        }
+        catch (Exception e)
+        {
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Extract all routine calls from every entry in {@code bodies} using a single parser instance and lightweight parsing (no code-completion init, no semantic validation). Returns a map from the
+     * same keys as {@code bodies} to the list of routine {@link ObjectName}s called by that routine.
+     */
+    default Map<String, List<ObjectName>> extractAllRoutineCalls(Map<String, String> bodies, IConnectionContext connectionContext)
+    {
+        ITextEditorDocumentParser docParser = getParser(connectionContext);
+        if (!(docParser instanceof AntlrDocumentParser<?> antlrParser))
+        {
+            return Collections.emptyMap();
+        }
+        Map<String, List<ObjectName>> result = new java.util.HashMap<>();
+        for (Map.Entry<String, String> entry : bodies.entrySet())
+        {
+            try
+            {
+                antlrParser.parseLight(new StringReader(entry.getValue()));
+                List<ObjectName> calls = antlrParser.getReferencedRoutines();
+                if (!calls.isEmpty())
+                {
+                    result.put(entry.getKey(), calls);
+                }
+            }
+            catch (Exception e)
+            {
+                // skip unparseable routine body
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Fetch the SQL source bodies for all provided routines in a single operation. Returns a map keyed by lower-case {@code schema.name} (or just {@code name} when schema is blank) to the routine
+     * definition. Routines with no retrievable body are omitted from the map.
+     */
+    default Map<String, String> getRoutineBodies(IConnectionContext connectionContext, List<Routine> routines)
+    {
+        return Collections.emptyMap();
     }
 
     /** Return catalog meta data for provided database */

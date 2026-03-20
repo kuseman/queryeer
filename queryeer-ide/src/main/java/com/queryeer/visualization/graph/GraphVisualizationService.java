@@ -2,6 +2,7 @@ package com.queryeer.visualization.graph;
 
 import java.awt.BorderLayout;
 
+import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
@@ -24,6 +25,12 @@ public class GraphVisualizationService implements IGraphVisualizationService
         {
             SwingUtilities.invokeLater(() -> openDialog(graph));
         }
+    }
+
+    @Override
+    public JComponent createGraphComponent(Graph graph)
+    {
+        return new GraphPanel(graph);
     }
 
     private void openDialog(Graph graph)

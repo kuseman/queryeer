@@ -49,6 +49,8 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlLexer;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Column_definitionContext;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Create_or_alter_functionContext;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Create_or_alter_procedureContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Create_tableContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Ddl_objectContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Declare_statementContext;
@@ -644,6 +646,13 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     protected Set<Integer> getProcedureFunctionsRuleIndices()
     {
         return Set.of(TSqlParser.RULE_func_proc_name_schema, TSqlParser.RULE_func_proc_name_database_schema, TSqlParser.RULE_func_proc_name_server_database_schema);
+    }
+
+    @Override
+    protected boolean isRoutineDefinitionContext(ParserRuleContext ctx)
+    {
+        return ctx instanceof Create_or_alter_procedureContext
+                || ctx instanceof Create_or_alter_functionContext;
     }
 
     @Override
