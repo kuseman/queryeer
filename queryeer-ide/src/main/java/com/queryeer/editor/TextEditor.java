@@ -834,96 +834,167 @@ class TextEditor implements ITextEditor, SearchListener
     {
         int lines = textEditor.getLineCount();
 
-        int selStart = textEditor.getSelectionStart();
-        int selEnd = textEditor.getSelectionEnd();
-        boolean caretSelection = selEnd - selStart == 0;
+        // Collect all carets (primary + secondary) to cover multicaret selections
+        List<int[]> allCarets = multiCaretSupport.buildAllCaretsSortedAsc();
+        boolean singleCaret = allCarets.size() == 1;
+
+        int primaryDot = textEditor.getCaretPosition();
+        int primaryMark = textEditor.getCaret()
+                .getMark();
+        boolean caretSelection = singleCaret
+                && primaryDot == primaryMark;
+
         Boolean addComments = null;
 
         try
         {
-            List<MutableInt> commentOffsets = new ArrayList<>();
-
-            for (int i = 0; i < lines; i++)
+            // Collect unique line indices covered by any caret, in document order
+            Set<Integer> coveredLines = new java.util.TreeSet<>();
+            for (int[] caret : allCarets)
             {
-                int startOffset = textEditor.getLineStartOffset(i);
-                int endOffset = textEditor.getLineEndOffset(i) - 1;
-
-                if (between(startOffset, endOffset, selStart)
-                        || (startOffset > selStart
-                                && endOffset <= selEnd)
-                        || between(startOffset, endOffset, selEnd))
+                int selStart = Math.min(caret[0], caret[1]);
+                int selEnd = Math.max(caret[0], caret[1]);
+                for (int i = 0; i < lines; i++)
                 {
-                    int lineLength = endOffset - startOffset;
-                    if (lineLength == 0)
+                    int startOffset = textEditor.getLineStartOffset(i);
+                    int endOffset = textEditor.getLineEndOffset(i) - 1;
+                    if (between(startOffset, endOffset, selStart)
+                            || (startOffset > selStart
+                                    && endOffset <= selEnd)
+                            || (selEnd > startOffset
+                                    && selEnd <= endOffset))
                     {
-                        continue;
+                        coveredLines.add(i);
                     }
+                }
+            }
 
-                    // Find first non-whitespace position on this line
-                    String lineText = textEditor.getText(startOffset, lineLength);
-                    int indent = 0;
-                    while (indent < lineLength
-                            && (lineText.charAt(indent) == ' '
-                                    || lineText.charAt(indent) == '\t'))
-                    {
-                        indent++;
-                    }
+            List<MutableInt> commentOffsets = new ArrayList<>();
+            for (int lineIndex : coveredLines)
+            {
+                int startOffset = textEditor.getLineStartOffset(lineIndex);
+                int endOffset = textEditor.getLineEndOffset(lineIndex) - 1;
+                int lineLength = endOffset - startOffset;
+                if (lineLength == 0)
+                {
+                    continue;
+                }
 
-                    if (indent == lineLength)
-                    {
-                        // Whitespace-only line, skip
-                        continue;
-                    }
+                // Find first non-whitespace position on this line
+                String lineText = textEditor.getText(startOffset, lineLength);
+                int indent = 0;
+                while (indent < lineLength
+                        && (lineText.charAt(indent) == ' '
+                                || lineText.charAt(indent) == '\t'))
+                {
+                    indent++;
+                }
 
-                    if (addComments == null)
-                    {
-                        addComments = !lineText.substring(indent)
-                                .startsWith("--");
-                    }
+                if (indent == lineLength)
+                {
+                    // Whitespace-only line, skip
+                    continue;
+                }
 
+                boolean lineIsCommented = lineText.substring(indent)
+                        .startsWith("--");
+                if (addComments == null)
+                {
+                    addComments = !lineIsCommented;
+                }
+
+                if (addComments
+                        || lineIsCommented)
+                {
                     commentOffsets.add(new MutableInt(startOffset + indent));
                 }
             }
 
             if (!commentOffsets.isEmpty())
             {
-                int modifier = 0;
-                for (MutableInt commentOffset : commentOffsets)
+                // Capture original offsets before the edit loop modifies them
+                List<Integer> originalOffsets = new ArrayList<>(commentOffsets.size());
+                for (MutableInt o : commentOffsets)
                 {
-                    if (addComments)
-                    {
-                        textEditor.getDocument()
-                                .insertString(commentOffset.intValue() + modifier, "--", null);
-                    }
-                    else
-                    {
-                        textEditor.getDocument()
-                                .remove(commentOffset.intValue() + modifier, 2);
-                    }
-                    commentOffset.setValue(Math.max(commentOffset.intValue() + modifier, 0));
-                    modifier += addComments ? 2
-                            : -2;
+                    originalOffsets.add(o.intValue());
                 }
 
-                selStart = commentOffsets.get(0)
-                        .intValue();
-                if (!caretSelection)
+                textEditor.beginAtomicEdit();
+                try
                 {
-                    selEnd = commentOffsets.get(commentOffsets.size() - 1)
+                    int modifier = 0;
+                    for (MutableInt commentOffset : commentOffsets)
+                    {
+                        if (addComments)
+                        {
+                            textEditor.getDocument()
+                                    .insertString(commentOffset.intValue() + modifier, "--", null);
+                        }
+                        else
+                        {
+                            textEditor.getDocument()
+                                    .remove(commentOffset.intValue() + modifier, 2);
+                        }
+                        commentOffset.setValue(Math.max(commentOffset.intValue() + modifier, 0));
+                        modifier += addComments ? 2
+                                : -2;
+                    }
+                }
+                finally
+                {
+                    textEditor.endAtomicEdit();
+                }
+
+                int delta = addComments ? 2
+                        : -2;
+                if (singleCaret)
+                {
+                    // Single-caret: move selection to span the toggled comment range
+                    int selStart = commentOffsets.get(0)
                             .intValue();
+                    int selEnd = caretSelection ? selStart
+                            : commentOffsets.get(commentOffsets.size() - 1)
+                                    .intValue();
+                    textEditor.setSelectionStart(selStart);
+                    textEditor.setSelectionEnd(selEnd);
                 }
                 else
                 {
-                    selEnd = selStart;
+                    // Multicaret: restore primary caret to its shifted position
+                    int newDot = shiftCaretPosition(primaryDot, originalOffsets, delta);
+                    int newMark = shiftCaretPosition(primaryMark, originalOffsets, delta);
+                    if (newDot == newMark)
+                    {
+                        textEditor.setCaretPosition(newDot);
+                    }
+                    else
+                    {
+                        textEditor.getCaret()
+                                .setDot(newMark);
+                        textEditor.getCaret()
+                                .moveDot(newDot);
+                    }
+                    // Shift all secondary carets by the same rule
+                    multiCaretSupport.shiftSecondaryCarets(originalOffsets, delta);
                 }
             }
         }
         catch (BadLocationException e)
         {
         }
+    }
 
-        textEditor.setSelectionStart(selStart);
-        textEditor.setSelectionEnd(selEnd);
+    private static int shiftCaretPosition(int pos, List<Integer> sortedPoints, int delta)
+    {
+        int shift = 0;
+        for (int p : sortedPoints)
+        {
+            if (p < pos)
+            {
+                shift += delta;
+            }
+        }
+        return Math.max(0, pos + shift);
     }
 
     private void publishCaret()

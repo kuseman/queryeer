@@ -21,6 +21,8 @@ import javax.swing.text.BadLocationException;
  * <pre>
  * Adds multi-caret/multi-selection support to a {@link org.fife.ui.rsyntaxtextarea.TextEditorPane}, similar to Monaco/VSCode.
  * Supports: Alt+Click (add/remove caret),
+ *           Shift+Alt+Click / Shift+Alt+Drag (column/block selection),
+ *           Shift+Alt+Arrow (extend block selection by keyboard),
  *           Ctrl/Cmd+Alt+Down/Up (add caret below/above),
  *           Ctrl/Cmd+D (select next occurrence),
  *           Escape (clear carets),
@@ -38,6 +40,13 @@ class MultiCaretSupport
     private final MultiCaretState state;
     private final MultiCaretEditHandler editHandler;
     private final KeyAdapter keyInterceptor;
+
+    // Keyboard block-selection anchor. Set on first Shift+Alt+Arrow; cleared when secondary carets
+    // are cleared or any non-block-selection key is handled.
+    private int blockAnchorLine = -1;
+    private int blockAnchorCol = -1;
+    private int blockCurrentLine = -1;
+    private int blockCurrentCol = -1;
 
     private static final int MENU_MASK = Toolkit.getDefaultToolkit()
             .getMenuShortcutKeyMaskEx();
@@ -58,6 +67,24 @@ class MultiCaretSupport
             @Override
             public void keyPressed(KeyEvent e)
             {
+                int code = e.getKeyCode();
+                boolean shift = e.isShiftDown();
+                boolean alt = e.isAltDown();
+
+                // Shift+Alt+Arrow: keyboard-driven block (column) selection
+                if (shift
+                        && alt
+                        && isBlockSelectionArrowKey(code))
+                {
+                    handleBlockSelectionArrow(code);
+                    e.consume();
+                    return;
+                }
+
+                // Any other key resets the keyboard block-selection anchor so that the next
+                // Shift+Alt+Arrow press starts a fresh block selection from the current position.
+                blockAnchorLine = -1;
+
                 editHandler.handleKeyPressed(e);
             }
 
@@ -66,6 +93,7 @@ class MultiCaretSupport
             {
                 if (!state.secondaryCarets.isEmpty())
                 {
+                    blockAnchorLine = -1;
                     editHandler.handleKeyTyped(e);
                 }
             }
@@ -159,6 +187,38 @@ class MultiCaretSupport
         return state.hasSecondaryCarets();
     }
 
+    List<int[]> buildAllCaretsSortedAsc()
+    {
+        return state.buildAllCaretsSortedAsc();
+    }
+
+    /**
+     * Shifts all secondary caret dot and mark positions based on a list of original insert/remove points. For each point strictly before a caret position, the caret is shifted by {@code delta} (+2
+     * when adding comments, -2 when removing).
+     */
+    void shiftSecondaryCarets(List<Integer> originalOffsets, int delta)
+    {
+        for (int[] caret : state.secondaryCarets)
+        {
+            caret[0] = shiftPosition(caret[0], originalOffsets, delta);
+            caret[1] = shiftPosition(caret[1], originalOffsets, delta);
+        }
+        state.updateHighlights();
+    }
+
+    private static int shiftPosition(int pos, List<Integer> sortedPoints, int delta)
+    {
+        int shift = 0;
+        for (int p : sortedPoints)
+        {
+            if (p < pos)
+            {
+                shift += delta;
+            }
+        }
+        return Math.max(0, pos + shift);
+    }
+
     void pasteToAllCarets()
     {
         editHandler.pasteToAllCarets();
@@ -167,6 +227,7 @@ class MultiCaretSupport
     void clearSecondaryCarets()
     {
         state.clearSecondaryCarets();
+        blockAnchorLine = -1;
     }
 
     /** Add a caret one line below the lowest current caret. */
@@ -429,6 +490,137 @@ class MultiCaretSupport
         {
             // Swallow
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Shift+Alt+Arrow — keyboard block selection
+    // -----------------------------------------------------------------------
+
+    private static boolean isBlockSelectionArrowKey(int code)
+    {
+        return code == KeyEvent.VK_LEFT
+                || code == KeyEvent.VK_RIGHT
+                || code == KeyEvent.VK_UP
+                || code == KeyEvent.VK_DOWN;
+    }
+
+    /**
+     * Extend (or start) the keyboard block selection one step in the given arrow direction. On the first call after the anchor was reset, the anchor and current corner are both initialised from the
+     * primary caret position so subsequent arrow presses grow the rectangle from there.
+     */
+    private void handleBlockSelectionArrow(int code)
+    {
+        try
+        {
+            if (blockAnchorLine < 0)
+            {
+                int primaryPos = textArea.getCaretPosition();
+                blockAnchorLine = textArea.getLineOfOffset(primaryPos);
+                blockAnchorCol = primaryPos - textArea.getLineStartOffset(blockAnchorLine);
+                blockCurrentLine = blockAnchorLine;
+                blockCurrentCol = blockAnchorCol;
+            }
+
+            int totalLines = textArea.getLineCount();
+            switch (code)
+            {
+                case KeyEvent.VK_LEFT:
+                    blockCurrentCol = Math.max(0, blockCurrentCol - 1);
+                    break;
+                case KeyEvent.VK_RIGHT:
+                    blockCurrentCol++;
+                    break;
+                case KeyEvent.VK_UP:
+                    blockCurrentLine = Math.max(0, blockCurrentLine - 1);
+                    break;
+                case KeyEvent.VK_DOWN:
+                    blockCurrentLine = Math.min(totalLines - 1, blockCurrentLine + 1);
+                    break;
+                default:
+                    break;
+            }
+
+            applyBlockSelectionByLineCol();
+        }
+        catch (BadLocationException e)
+        {
+            // Swallow
+        }
+    }
+
+    /**
+     * Rebuilds the block selection rectangle from the stored anchor/current line+column state. The anchor line gets the primary caret (dot = anchor col, mark = current col); every other line in the
+     * rectangle becomes a secondary caret with the same column span.
+     */
+    private void applyBlockSelectionByLineCol() throws BadLocationException
+    {
+        int fromLine = Math.min(blockAnchorLine, blockCurrentLine);
+        int toLine = Math.max(blockAnchorLine, blockCurrentLine);
+
+        state.secondaryCarets.clear();
+
+        for (int line = fromLine; line <= toLine; line++)
+        {
+            int lineStart = textArea.getLineStartOffset(line);
+            int lineEnd = textArea.getLineEndOffset(line);
+            boolean isLastLine = (line == textArea.getLineCount() - 1);
+            int lineLen = isLastLine ? (lineEnd - lineStart)
+                    : (lineEnd - lineStart - 1);
+
+            int dotPos = lineStart + Math.min(blockAnchorCol, lineLen);
+            int markPos = lineStart + Math.min(blockCurrentCol, lineLen);
+
+            // When the anchor column exceeds the line length the dot is clamped to end-of-line;
+            // record the intended pixel X so the caret indicator paints at the correct virtual column.
+            int dotVirtualX = (blockAnchorCol > lineLen) ? getPixelXForCol(line, blockAnchorCol)
+                    : -1;
+
+            if (line == blockAnchorLine)
+            {
+                textArea.getCaret()
+                        .setDot(markPos);
+                textArea.getCaret()
+                        .moveDot(dotPos);
+            }
+            else
+            {
+                state.secondaryCarets.add(new int[] { dotPos, markPos, dotVirtualX });
+            }
+        }
+
+        state.updateHighlights();
+    }
+
+    /**
+     * Returns the pixel X coordinate corresponding to character column {@code col} on {@code line}. When the column exceeds the actual line length the position is extrapolated using the font's
+     * space-character width, matching the behaviour used by the mouse-drag block selection.
+     */
+    private int getPixelXForCol(int line, int col) throws BadLocationException
+    {
+        int lineStart = textArea.getLineStartOffset(line);
+        int lineEnd = textArea.getLineEndOffset(line);
+        boolean isLastLine = (line == textArea.getLineCount() - 1);
+        int lineLen = isLastLine ? (lineEnd - lineStart)
+                : (lineEnd - lineStart - 1);
+
+        if (col <= lineLen)
+        {
+            Rectangle2D r = textArea.modelToView2D(lineStart + col);
+            return (r != null) ? (int) r.getX()
+                    : -1;
+        }
+
+        // Column is beyond end of line — extrapolate
+        Rectangle2D endRect = (lineLen >= 0) ? textArea.modelToView2D(lineStart + lineLen)
+                : null;
+        if (endRect == null)
+        {
+            return -1;
+        }
+        FontMetrics fm = textArea.getFontMetrics(textArea.getFont());
+        int charWidth = (fm != null) ? fm.charWidth(' ')
+                : 8;
+        return (int) endRect.getX() + (col - lineLen) * charWidth;
     }
 
     // -----------------------------------------------------------------------
