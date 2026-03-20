@@ -102,10 +102,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     class TableComponent extends JPanel
     {
         private final Table table;
+        private final boolean hasMetaData;
 
         TableComponent(Table table, Map<String, Object> resultMetaData)
         {
             this.table = table;
+            this.hasMetaData = !MapUtils.isEmpty(resultMetaData);
             setLayout(new BorderLayout());
 
             // Add meta data panel on top of table if present
@@ -784,7 +786,8 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 
                 // The least of 8 rows or actual rows in prev table
                 // CSOFF
-                prevTableHeight = Math.min((prevTable.table.getRowCount() + 1) * prevTable.table.getRowHeight() + 15 + prevTable.getHeight(), tablHeight);
+                prevTableHeight = Math.min((prevTable.table.getRowCount() + 1) * prevTable.table.getRowHeight() + 15 + (prevTable.hasMetaData ? 18
+                        : 0), tablHeight);
                 // CSON
                 if (horizontalScrollBar.isVisible())
                 {
@@ -839,15 +842,13 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 sp.getRightComponent()
                         .setPreferredSize(new Dimension(0, tablHeight));
 
-                JSplitPane topSp = new JSplitPane();
-                topSp.setOrientation(JSplitPane.VERTICAL_SPLIT);
-
                 // Replace the right component with the new split panel
                 prevSp.setRightComponent(sp);
             }
         }
         add(parent instanceof JSplitPane ? new JScrollPane(parent)
                 : parent, BorderLayout.CENTER);
+        revalidate();
 
         // Initalize font and row sizes when unset
         if (fontSize < 0)
