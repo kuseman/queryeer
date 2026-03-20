@@ -20,6 +20,23 @@ class MultiCaretEditHandler
     static final int MENU_MASK = Toolkit.getDefaultToolkit()
             .getMenuShortcutKeyMaskEx();
 
+    /** Fallback flavor for transferables (e.g. TableTransferable) that don't expose DataFlavor.stringFlavor. */
+    private static final DataFlavor PLAIN_TEXT_STRING_FLAVOR;
+
+    static
+    {
+        DataFlavor f;
+        try
+        {
+            f = new DataFlavor("text/plain;class=java.lang.String");
+        }
+        catch (Exception e)
+        {
+            f = null;
+        }
+        PLAIN_TEXT_STRING_FLAVOR = f;
+    }
+
     private final MultiCaretAwareEditorPane textArea;
     private final MultiCaretState state;
 
@@ -160,10 +177,13 @@ class MultiCaretEditHandler
             Transferable contents = Toolkit.getDefaultToolkit()
                     .getSystemClipboard()
                     .getContents(null);
-            if (contents != null
-                    && contents.isDataFlavorSupported(DataFlavor.stringFlavor))
+            if (contents != null)
             {
-                String text = (String) contents.getTransferData(DataFlavor.stringFlavor);
+                String text = getStringFromTransferable(contents);
+                if (text == null)
+                {
+                    return;
+                }
                 // Normalize line endings to \n so that \r\n clipboard content (Windows) does not
                 // introduce bare \r characters into the document. The document's EndOfLineStringProperty
                 // controls how \n is translated back to the original line ending on save/backup.
@@ -189,6 +209,29 @@ class MultiCaretEditHandler
         {
             // Swallow clipboard errors
         }
+    }
+
+    private String getStringFromTransferable(Transferable contents)
+    {
+        try
+        {
+            if (contents.isDataFlavorSupported(DataFlavor.stringFlavor))
+            {
+                return (String) contents.getTransferData(DataFlavor.stringFlavor);
+            }
+            else if (PLAIN_TEXT_STRING_FLAVOR != null
+                    && contents.isDataFlavorSupported(PLAIN_TEXT_STRING_FLAVOR))
+            {
+                // Fallback for transferables like TableTransferable that expose text/plain
+                // but not DataFlavor.stringFlavor (application/x-java-serialized-object)
+                return (String) contents.getTransferData(PLAIN_TEXT_STRING_FLAVOR);
+            }
+        }
+        catch (Exception e)
+        {
+            // ignore
+        }
+        return null;
     }
 
     /**
