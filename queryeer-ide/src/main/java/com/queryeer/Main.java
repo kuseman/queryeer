@@ -26,10 +26,12 @@ import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.ICryptoService;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IExpressionEvaluator;
+import com.queryeer.api.service.IGraphVisualizationService;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IPayloadbuilderService;
 import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.service.ITemplateService;
+import com.queryeer.visualization.graph.GraphVisualizationService;
 
 import io.github.classgraph.ClassGraph;
 import io.github.classgraph.ClassInfo;
@@ -204,6 +206,7 @@ public class Main
 
         PayloadbuilderService payloadbuilderService = new PayloadbuilderService();
         serviceLoader.register(IPayloadbuilderService.class, payloadbuilderService);
+        serviceLoader.register(IGraphVisualizationService.class, new GraphVisualizationService());
 
         // UI
         QueryeerModel queryeerModel = new QueryeerModel(config, backupFolder, watchService);

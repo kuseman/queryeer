@@ -5,6 +5,8 @@ import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 
+import java.awt.FlowLayout;
+import java.awt.Frame;
 import java.awt.event.ActionEvent;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -16,12 +18,20 @@ import java.util.function.Consumer;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
+import com.queryeer.api.component.AnimatedIcon;
+import com.queryeer.api.component.DialogUtils.ADialog;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
+import com.queryeer.api.extensions.visualization.graph.Graph;
+import com.queryeer.api.service.IGraphVisualizationService;
 import com.queryeer.api.service.IPayloadbuilderService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialectProvider;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 
 /** Tree model for jdbc query engine showing connections and child nodes like databases etc. */
 class JdbcConnectionsTreeModel implements RegularNode
@@ -31,14 +41,21 @@ class JdbcConnectionsTreeModel implements RegularNode
     private final Icons icons;
     private final JdbcDialectProvider dialectProvider;
     private final Consumer<RegularNode> newQueryConsumer;
+    private final CatalogCrawlService crawlService;
+    private final IGraphVisualizationService graphVisualizationService;
 
-    JdbcConnectionsTreeModel(IPayloadbuilderService payloadbuilderService, JdbcConnectionsModel model, Icons icons, JdbcDialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer)
+    //@formatter:off
+    JdbcConnectionsTreeModel(IPayloadbuilderService payloadbuilderService, JdbcConnectionsModel model, Icons icons, JdbcDialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer,
+            CatalogCrawlService crawlService, IGraphVisualizationService graphVisualizationService)
+    //@formatter:on
     {
         this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
         this.model = requireNonNull(model, "model");
         this.icons = requireNonNull(icons, "icons");
         this.dialectProvider = requireNonNull(dialectProvider, "dialectProvider");
         this.newQueryConsumer = requireNonNull(newQueryConsumer, "newQueryConsumer");
+        this.crawlService = requireNonNull(crawlService, "crawlService");
+        this.graphVisualizationService = requireNonNull(graphVisualizationService, "graphVisualizationService");
     }
 
     @Override
@@ -342,7 +359,7 @@ class JdbcConnectionsTreeModel implements RegularNode
         @Override
         public List<Action> getContextMenuActions()
         {
-            return asList(newQuery, importData);
+            return asList(newQuery, importData, schemaDiagram);
         }
 
         @Override
@@ -388,6 +405,70 @@ class JdbcConnectionsTreeModel implements RegularNode
             }
         };
 
+        private Action schemaDiagram = new AbstractAction("Show Schema Diagram ...")
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                JdbcQueryEngine.EXECUTOR.execute(() ->
+                {
+                    ConnectionContext connectionContext = new ConnectionContext(connectionNode.connection, jdbcDialect, database);
+                    Catalog catalog = crawlService.getCatalog(connectionContext, database);
+                    if (catalog != null)
+                    {
+                        Graph graph = DatabaseSchemaGraph.buildGraph(database, catalog);
+                        graphVisualizationService.showGraph(graph);
+                        return;
+                    }
+
+                    // Catalog is still loading — show a non-blocking loading dialog with a spinner
+                    ADialog[] loadingDialog = new ADialog[1];
+                    SwingUtilities.invokeLater(() ->
+                    {
+                        ADialog dlg = new ADialog((Frame) null, "Schema Diagram", false);
+                        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 12));
+                        panel.add(new JLabel(AnimatedIcon.createSmallSpinner()));
+                        panel.add(new JLabel("Loading schema, please wait…"));
+                        dlg.setContentPane(panel);
+                        dlg.pack();
+                        dlg.setLocationRelativeTo(null);
+                        dlg.setVisible(true);
+                        loadingDialog[0] = dlg;
+                    });
+
+                    // Poll until catalog is ready
+                    try
+                    {
+                        while (catalog == null)
+                        {
+                            Thread.sleep(300);
+                            catalog = crawlService.getCatalog(connectionContext, database);
+                        }
+                    }
+                    catch (InterruptedException ex)
+                    {
+                        Thread.currentThread()
+                                .interrupt();
+                    }
+                    finally
+                    {
+                        SwingUtilities.invokeLater(() ->
+                        {
+                            if (loadingDialog[0] != null)
+                            {
+                                loadingDialog[0].dispose();
+                            }
+                        });
+                    }
+
+                    if (catalog != null)
+                    {
+                        Graph graph = DatabaseSchemaGraph.buildGraph(database, catalog);
+                        graphVisualizationService.showGraph(graph);
+                    }
+                });
+            }
+        };
     }
 
 }
