@@ -96,6 +96,20 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     @Override
     public void parse(Reader documentReader)
     {
+        parseInternal(documentReader, true);
+    }
+
+    /**
+     * Lightweight parse that skips {@link CodeCompletionCore} initialisation and {@link #afterParse()}. Use this when only structural extraction (e.g. referenced routines) is needed, not completions
+     * or semantic validation.
+     */
+    void parseLight(Reader documentReader)
+    {
+        parseInternal(documentReader, false);
+    }
+
+    private void parseInternal(Reader documentReader, boolean full)
+    {
         parseResult.clear();
         try
         {
@@ -126,11 +140,13 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
             // TODO: index sql-clauses intervals
 
             context = parse(parser);
-            core = new CodeCompletionCore(parser, getCodeCompleteRuleIndices(), Set.of());
 
-            afterParse();
+            if (full)
+            {
+                core = new CodeCompletionCore(parser, getCodeCompleteRuleIndices(), Set.of());
+                afterParse();
+            }
         }
-
         catch (IOException e)
         {
             throw new RuntimeException(e);
@@ -181,6 +197,58 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         List<ObjectName> result = new ArrayList<>();
         collectTableSources(context, tableSourceIndices, result);
         return result;
+    }
+
+    /** Return all routine ObjectNames called in the last parsed document. */
+    List<ObjectName> getReferencedRoutines()
+    {
+        if (context == null)
+        {
+            return emptyList();
+        }
+        Set<Integer> routineIndices = getProcedureFunctionsRuleIndices();
+        if (routineIndices.isEmpty())
+        {
+            return emptyList();
+        }
+        List<ObjectName> result = new ArrayList<>();
+        collectRoutineCalls(context, routineIndices, result);
+        return result;
+    }
+
+    private void collectRoutineCalls(ParseTree tree, Set<Integer> indices, List<ObjectName> result)
+    {
+        if (tree instanceof ParserRuleContext ctx
+                && indices.contains(ctx.getRuleIndex()))
+        {
+            // Skip the procedure/function name appearing in its own CREATE/ALTER declaration
+            boolean isDefinition = ctx.parent instanceof ParserRuleContext parentCtx
+                    && isRoutineDefinitionContext(parentCtx);
+            if (!isDefinition)
+            {
+                Pair<Interval, ObjectName> routine = getProcedureFunction(ctx);
+                if (routine != null
+                        && routine.getValue() != null)
+                {
+                    result.add(routine.getValue());
+                    return;
+                }
+            }
+            return;
+        }
+        for (int i = 0; i < tree.getChildCount(); i++)
+        {
+            collectRoutineCalls(tree.getChild(i), indices, result);
+        }
+    }
+
+    /**
+     * Returns true if {@code ctx} is a routine-definition context (e.g. CREATE/ALTER PROCEDURE or FUNCTION) rather than a call site. Dialects that use the same grammar rule for both the declaration
+     * name and call sites must override this to prevent the routine's own name from appearing as a self-call.
+     */
+    protected boolean isRoutineDefinitionContext(ParserRuleContext ctx)
+    {
+        return false;
     }
 
     private void collectTableSources(ParseTree tree, Set<Integer> indices, List<ObjectName> result)

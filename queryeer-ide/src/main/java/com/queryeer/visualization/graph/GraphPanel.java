@@ -175,7 +175,7 @@ public class GraphPanel extends JPanel
         {
             stroke = Constants.DARK_THEME_LIGHT_COLOR_HEX;
         }
-        return "rounded=true;edgeStyle=entityRelationEdgeStyle;startArrow=open;endArrow=open;strokeColor=" + stroke + ";";
+        return "rounded=true;edgeStyle=entityRelationEdgeStyle;startArrow=none;endArrow=open;strokeColor=" + stroke + ";";
     }
 
     private String generateToolTip(String title, List<GraphProperty> props)

@@ -25,6 +25,7 @@ import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 
 /** Base dialect when database type is unkown */
@@ -64,6 +65,35 @@ class BaseDialect implements JdbcDialect
     public ITextEditorDocumentParser getParser(IConnectionContext connectionContext)
     {
         return new PrestoDocumentParser(eventBus, queryActionsConfigurable, crawlService, connectionContext, templateService);
+    }
+
+    @Override
+    public Map<String, String> getRoutineBodies(IConnectionContext connectionContext, List<Routine> routines)
+    {
+        Map<String, String> result = new HashMap<>();
+        try (Connection con = connectionContext.createConnection();
+                java.sql.Statement stm = con.createStatement();
+                ResultSet rs = stm.executeQuery("SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_DEFINITION FROM INFORMATION_SCHEMA.ROUTINES"))
+        {
+            while (rs.next())
+            {
+                String schema = rs.getString("ROUTINE_SCHEMA");
+                String name = rs.getString("ROUTINE_NAME");
+                String definition = rs.getString("ROUTINE_DEFINITION");
+                if (definition != null)
+                {
+                    String key = (schema == null
+                            || schema.isBlank()) ? name.toLowerCase()
+                                    : schema.toLowerCase() + "." + name.toLowerCase();
+                    result.put(key, definition);
+                }
+            }
+        }
+        catch (SQLException e)
+        {
+            LOGGER.warn("Could not fetch routine bodies", e);
+        }
+        return result;
     }
 
     @Override
