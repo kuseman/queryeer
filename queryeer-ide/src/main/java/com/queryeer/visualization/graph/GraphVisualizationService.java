@@ -7,12 +7,10 @@ import javax.swing.WindowConstants;
 
 import com.queryeer.Constants;
 import com.queryeer.api.component.DialogUtils;
-import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.extensions.visualization.graph.Graph;
 import com.queryeer.api.service.IGraphVisualizationService;
 
 /** Implementation of {@link IGraphVisualizationService} that opens a non-modal dialog containing a {@link GraphPanel}. */
-@Inject
 public class GraphVisualizationService implements IGraphVisualizationService
 {
     @Override

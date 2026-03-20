@@ -43,6 +43,7 @@ import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.QueryeerOutputWriter;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.IGraphVisualizationService;
 import com.queryeer.api.service.IPayloadbuilderService;
 import com.queryeer.api.service.IQueryFileProvider;
 
@@ -75,6 +76,7 @@ class JdbcQueryEngine implements IQueryEngine
     private final IQueryFileProvider queryFileProvider;
     private final JdbcDialectProvider dialectProvider;
     private final JdbcConnectionsTreeConfigurable connectionsTreeConfigurable;
+    private final IGraphVisualizationService graphVisualizationService;
     private JdbcEngineQuickPropertiesComponent quickProperties;
     private IPayloadbuilderService payloadbuilderService;
 
@@ -89,7 +91,8 @@ class JdbcQueryEngine implements IQueryEngine
             IEditorFactory editorFactory,
             DatasourcesQuickSearchModel datasourcesQuickSearchModel,
             JdbcConnectionsTreeConfigurable connectionsTreeConfigurable,
-            IPayloadbuilderService payloadbuilderService)
+            IPayloadbuilderService payloadbuilderService,
+            IGraphVisualizationService graphVisualizationService)
     {
         //@formatter:on
         this.crawlService = requireNonNull(crawlService, "crawlService");
@@ -102,6 +105,7 @@ class JdbcQueryEngine implements IQueryEngine
         this.datasourcesQuickSearchModel = requireNonNull(datasourcesQuickSearchModel, "datasourcesQuickSearchModel");
         this.connectionsTreeConfigurable = requireNonNull(connectionsTreeConfigurable, "connectionsTreeConfigurable");
         this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
+        this.graphVisualizationService = requireNonNull(graphVisualizationService, "graphVisualizationService");
     }
 
     @Override
@@ -119,7 +123,8 @@ class JdbcQueryEngine implements IQueryEngine
                     dialectProvider,
                     crawlService,
                     connectionsTreeConfigurable,
-                    payloadbuilderService);
+                    payloadbuilderService,
+                    graphVisualizationService);
             //@formatter:on
         }
         return quickProperties;

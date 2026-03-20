@@ -49,6 +49,7 @@ import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.IGraphVisualizationService;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IPayloadbuilderService;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -87,7 +88,8 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             JdbcDialectProvider dialectProvider,
             CatalogCrawlService crawlService,
             JdbcConnectionsTreeConfigurable connectionsTreeConfigurable,
-            IPayloadbuilderService payloadbuilderService)
+            IPayloadbuilderService payloadbuilderService,
+            IGraphVisualizationService graphVisualizationService)
     {
         //@formatter:on
         this.queryEngine = queryEngine;
@@ -269,7 +271,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
             }
         });
 
-        connectionsTreeModel = new JdbcConnectionsTreeModel(payloadbuilderService, connectionsModel, icons, dialectProvider, node -> newQuery(node));
+        connectionsTreeModel = new JdbcConnectionsTreeModel(payloadbuilderService, connectionsModel, icons, dialectProvider, node -> newQuery(node), crawlService, graphVisualizationService);
         treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
         connectionsModel.addListDataListener(new ListDataListener()
         {
