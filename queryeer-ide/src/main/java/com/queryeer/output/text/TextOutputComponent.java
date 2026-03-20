@@ -6,6 +6,10 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Font;
+import java.awt.Shape;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -19,10 +23,20 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.FocusManager;
 import javax.swing.Icon;
+import javax.swing.InputMap;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
@@ -33,8 +47,13 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.fife.rsta.ui.search.FindDialog;
+import org.fife.rsta.ui.search.SearchEvent;
+import org.fife.rsta.ui.search.SearchListener;
+import org.fife.ui.rtextarea.SearchContext;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 
+import com.queryeer.Constants;
 import com.queryeer.IconFactory;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.IEditor;
@@ -44,12 +63,13 @@ import com.queryeer.api.extensions.output.IOutputExtension;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
 
 /** Text output component */
-class TextOutputComponent extends JScrollPane implements ITextOutputComponent
+class TextOutputComponent extends JScrollPane implements ITextOutputComponent, SearchListener
 {
     private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(BasicThreadFactory.builder()
             .daemon(true)
             .namingPattern("TextOutputComponentAppender-%d")
             .build());
+    private static final String FIND = "FIND";
     private static final String WARNING_LOCATION = "warningLocation";
     private static final String LINK_ACTION = "linkAction";
     private static final Color HYPERLINK = new Color(0, 0, 238);
@@ -58,10 +78,13 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     private final Document document;
     private final PrintWriter printWriter;
     private final IOutputExtension extension;
+    private final TextFindDialog findDialog;
 
     private Future<?> currentAppender;
     private Queue<Chunk> chunkQueue = new ConcurrentLinkedQueue<>();
     private volatile boolean abortAppend;
+    private volatile int appendGeneration = 0;
+    private int findPos = 0;
 
     TextOutputComponent(IOutputExtension extension, IQueryFile queryFile)
     {
@@ -75,6 +98,23 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         this.text.addMouseListener(textMouseListener);
         this.text.addMouseMotionListener(textMouseListener);
         this.printWriter = createPrintWriter();
+
+        KeyStroke findKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_F, Toolkit.getDefaultToolkit()
+                .getMenuShortcutKeyMaskEx());
+        InputMap inputMap = getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+        inputMap.put(findKeyStroke, FIND);
+
+        ActionMap actionMap = getActionMap();
+        actionMap.put(FIND, new AbstractAction()
+        {
+            @Override
+            public void actionPerformed(ActionEvent e)
+            {
+                showFind();
+            }
+        });
+
+        findDialog = new TextFindDialog();
     }
 
     @Override
@@ -105,7 +145,12 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     public void clearState()
     {
         text.setText("");
-        abortAppend = true;
+        synchronized (TextOutputComponent.this)
+        {
+            appendGeneration++;
+            abortAppend = true;
+            chunkQueue.clear();
+        }
     }
 
     @Override
@@ -135,15 +180,111 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
         chunkQueue.add(new Chunk(message + System.lineSeparator(), link));
     }
 
+    @Override
+    public void searchEvent(SearchEvent e)
+    {
+        SearchContext context = e.getSearchContext();
+        String searchFor = context.getSearchFor();
+        if (searchFor == null
+                || searchFor.isEmpty())
+        {
+            return;
+        }
+
+        try
+        {
+            String content = document.getText(0, document.getLength());
+            int matchStart = -1;
+            int matchLength = searchFor.length();
+
+            if (context.isRegularExpression())
+            {
+                Pattern pattern = context.getMatchCase() ? Pattern.compile(searchFor)
+                        : Pattern.compile(searchFor, Pattern.CASE_INSENSITIVE);
+                Matcher matcher = pattern.matcher(content);
+                if (matcher.find(findPos))
+                {
+                    matchStart = matcher.start();
+                    matchLength = matcher.end() - matcher.start();
+                }
+                else if (context.getSearchWrap())
+                {
+                    matcher.reset();
+                    if (matcher.find())
+                    {
+                        matchStart = matcher.start();
+                        matchLength = matcher.end() - matcher.start();
+                    }
+                }
+            }
+            else
+            {
+                String searchContent = context.getMatchCase() ? content
+                        : content.toLowerCase();
+                String searchTerm = context.getMatchCase() ? searchFor
+                        : searchFor.toLowerCase();
+                matchStart = searchContent.indexOf(searchTerm, findPos);
+                if (matchStart == -1
+                        && context.getSearchWrap())
+                {
+                    matchStart = searchContent.indexOf(searchTerm);
+                }
+            }
+
+            if (matchStart >= 0)
+            {
+                text.setCaretPosition(matchStart);
+                text.moveCaretPosition(matchStart + matchLength);
+                text.getCaret()
+                        .setSelectionVisible(true);
+                findPos = matchStart + matchLength;
+                Shape viewShape = text.modelToView2D(matchStart);
+                if (viewShape != null)
+                {
+                    text.scrollRectToVisible(viewShape.getBounds());
+                }
+            }
+            else
+            {
+                JOptionPane.showMessageDialog(this, "No more hits", "Search", JOptionPane.INFORMATION_MESSAGE);
+            }
+        }
+        catch (BadLocationException ex)
+        {
+            // ignore
+        }
+    }
+
+    @Override
+    public String getSelectedText()
+    {
+        return text.getSelectedText() != null ? text.getSelectedText()
+                : "";
+    }
+
+    void showFind()
+    {
+        findDialog.setVisible(true);
+    }
+
+    @Override
+    public void dispose()
+    {
+        findDialog.setVisible(false);
+        findDialog.dispose();
+    }
+
     private Runnable textAppender = () ->
     {
+        final int generation = appendGeneration;
         List<Chunk> batch = new ArrayList<>();
         boolean done = false;
-        long lastValueStamp = 0;
+        long lastValueStamp = System.currentTimeMillis();
 
         while (!done)
         {
-            if (abortAppend)
+            if (abortAppend
+                    || generation != appendGeneration)
             {
                 chunkQueue.clear();
                 break;
@@ -160,10 +301,24 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
 
             // We reached batch size or we reached time threshold since last value
             if (batch.size() >= 500
-                    || (timeSinceLastValue > 50))
+                    || (!batch.isEmpty()
+                            && timeSinceLastValue > 50))
             {
-                appendBatch(batch);
+                appendBatch(batch, generation);
                 batch.clear();
+            }
+            else if (batch.isEmpty())
+            {
+                try
+                {
+                    Thread.sleep(5);
+                }
+                catch (InterruptedException e)
+                {
+                    Thread.currentThread()
+                            .interrupt();
+                    break;
+                }
             }
 
             // Keep thread awake a bit before ending
@@ -176,20 +331,21 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
     {
     }
 
-    private void appendBatch(List<Chunk> batch)
+    private void appendBatch(List<Chunk> batch, int generation)
     {
         if (batch.isEmpty())
         {
             return;
         }
+        List<Chunk> snapshot = new ArrayList<>(batch);
         Runnable r = () ->
         {
-            for (Chunk b : batch)
+            if (appendGeneration != generation)
             {
-                if (abortAppend)
-                {
-                    break;
-                }
+                return;
+            }
+            for (Chunk b : snapshot)
+            {
                 try
                 {
                     document.insertString(document.getLength(), b.text, b.attributes);
@@ -198,7 +354,6 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
                 {
                 }
             }
-            batch.clear();
         };
 
         if (SwingUtilities.isEventDispatchThread())
@@ -263,6 +418,43 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent
             {
             }
         };
+    }
+
+    private class TextFindDialog extends FindDialog
+    {
+        TextFindDialog()
+        {
+            super((JFrame) SwingUtilities.getWindowAncestor(TextOutputComponent.this), TextOutputComponent.this);
+            setIconImages(Constants.APPLICATION_ICONS);
+
+            context.setSearchWrap(true);
+            context.setMarkAll(false);
+
+            markAllCheckBox.setSelected(false);
+            markAllCheckBox.setEnabled(false);
+            wholeWordCheckBox.setEnabled(false);
+            upButton.setEnabled(false);
+            downButton.setEnabled(false);
+
+            refreshUIFromContext();
+            setLocationRelativeTo(getParent());
+        }
+
+        @Override
+        public void setVisible(boolean visible)
+        {
+            if (visible)
+            {
+                // Start search from current selection position
+                int selStart = text.getSelectionStart();
+                findPos = selStart > 0 ? selStart
+                        : 0;
+
+                setLocationRelativeTo(FocusManager.getCurrentManager()
+                        .getActiveWindow());
+            }
+            super.setVisible(visible);
+        }
     }
 
     private class TextMouseListener extends MouseAdapter
