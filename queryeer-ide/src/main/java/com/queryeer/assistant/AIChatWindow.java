@@ -40,6 +40,9 @@ import javax.swing.event.HyperlinkEvent;
 import javax.swing.event.HyperlinkListener;
 
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension;
+import org.commonmark.ext.gfm.tables.TablesExtension;
+import org.commonmark.ext.task.list.items.TaskListItemsExtension;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
@@ -80,8 +83,10 @@ class AIChatWindow extends DialogUtils.AFrame
     private static final String EMPTY_HTML = HTML_START + HTML_END;
 
     private static final Parser MARKDOWN_PARSER = Parser.builder()
+            .extensions(List.of(TablesExtension.create(), StrikethroughExtension.create(), TaskListItemsExtension.create()))
             .build();
     private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder()
+            .extensions(List.of(TablesExtension.create(), StrikethroughExtension.create(), TaskListItemsExtension.create()))
             .build();
 
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(BasicThreadFactory.builder()
