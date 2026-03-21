@@ -10,7 +10,9 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -29,6 +31,7 @@ import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.misc.Interval;
+import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.lang3.ObjectUtils;
@@ -41,7 +44,6 @@ import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.extensions.output.table.TableTransferable;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
-import com.vmware.antlr4c3.CodeCompletionCore;
 
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
@@ -50,11 +52,15 @@ import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionTarget;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.QueryActionResult;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.c3.CodeCompletionCore;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Constraint;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ForeignKey;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Index;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectType;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
 
 /** Parser for antlr based database implementations */
@@ -86,6 +92,11 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     protected CodeCompletionCore core;
 
     protected List<ParseItem> parseResult = new ArrayList<>();
+    /**
+     * All statement-level {@link ParserRuleContext} instances from the last full parse, collected in document order. Populated automatically when {@link #getStatementRuleIndex()} returns a
+     * non-negative value. Used for offset-based fallback lookup in completions.
+     */
+    protected final List<ParserRuleContext> statementContexts = new ArrayList<>();
 
     protected abstract Lexer createLexer(CharStream charStream);
 
@@ -140,10 +151,14 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
             // TODO: index sql-clauses intervals
 
             context = parse(parser);
-
             if (full)
             {
                 core = new CodeCompletionCore(parser, getCodeCompleteRuleIndices(), Set.of());
+                statementContexts.clear();
+                if (getStatementRuleIndex() >= 0)
+                {
+                    collectStatementContexts(context);
+                }
                 afterParse();
             }
         }
@@ -290,6 +305,169 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     protected int getInTokenId()
     {
         return -1;
+    }
+
+    /**
+     * Returns the ANTLR rule index for the grammar rule that represents a single top-level statement (e.g. {@code RULE_sql_clauses} for T-SQL). When non-negative, the base class automatically
+     * collects all matching nodes into {@link #statementContexts} after each full parse, enabling the offset-based fallback helpers. Return {@code -1} (default) to opt out.
+     */
+    protected int getStatementRuleIndex()
+    {
+        return -1;
+    }
+
+    /**
+     * Returns the ANTLR token type used as an explicit statement separator (e.g. SEMI), or {@code -1} if the grammar has no separator token. Used by {@link #findStatementContextByTokenScan}.
+     */
+    protected int getStatementSeparatorTokenType()
+    {
+        return -1;
+    }
+
+    /**
+     * Returns the set of ANTLR token types that unambiguously begin a new statement (e.g. SELECT, INSERT). Used by {@link #findStatementContextByTokenScan} as a last-resort boundary when no separator
+     * token is found. Return an empty set (default) to disable keyword scanning.
+     */
+    protected Set<Integer> getStatementStartTokenTypes()
+    {
+        return emptySet();
+    }
+
+    /**
+     * Re-parses the token range covered by {@code statementCtx} in isolation and returns the parse-tree node nearest to {@code caretCharOffset} in the fresh (error-free) tree. Implement this in
+     * dialect subclasses that have access to the dialect-specific lexer/parser types. The default returns {@code null} (no mini-parse fallback).
+     */
+    protected ParseTree miniParseStatementNode(ParserRuleContext statementCtx, int caretCharOffset)
+    {
+        return null;
+    }
+
+    /**
+     * Returns the effective tree node for completion context resolution. Prefers {@link TokenOffset#tree()} but falls back to {@link TokenOffset#prevTree()} when the current node is an EOF token, an
+     * {@link ErrorNode} (which happens when the caret is past the last real token or inside a parse-error recovery node), or a visible token whose start index is past the caret (which happens when
+     * the caret is in a hidden-channel gap between two statements — the next statement's first token is returned by findTokenFromOffset but is the wrong context anchor).
+     */
+    protected ParseTree resolveEffectiveNode(TokenOffset tokenOffset)
+    {
+        ParseTree node = tokenOffset.tree();
+        if ((node instanceof TerminalNode tn
+                && tn.getSymbol()
+                        .getType() == Token.EOF)
+                || node instanceof ErrorNode)
+        {
+            return tokenOffset.prevTree();
+        }
+        // When the caret is in a hidden-channel gap (whitespace/newline) before this token,
+        // the token's start index is past the caret. Use prevTree so that statement-context
+        // detection anchors to the preceding token (e.g. WHERE or FROM of the current statement)
+        // rather than the first token of the next statement.
+        if (node instanceof TerminalNode tn
+                && tn.getSymbol()
+                        .getStartIndex() > tokenOffset.caretOffset())
+        {
+            return tokenOffset.prevTree();
+        }
+        return node;
+    }
+
+    /**
+     * Walks up the parse tree from {@code tree} to find the nearest enclosing statement context (the rule identified by {@link #getStatementRuleIndex()}). Fast path: works correctly when the tree
+     * structure is intact. Returns {@code null} when error recovery has restructured the tree so that the node is not attached inside a statement context.
+     */
+    protected ParserRuleContext findEnclosingStatementCtx(ParseTree tree)
+    {
+        int ruleIndex = getStatementRuleIndex();
+        if (ruleIndex < 0)
+        {
+            return null;
+        }
+        ParseTree current = tree;
+        while (current != null)
+        {
+            if (current instanceof ParserRuleContext ctx
+                    && ctx.getRuleIndex() == ruleIndex)
+            {
+                return ctx;
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    /**
+     * Fallback for when {@link #findEnclosingStatementCtx} returns {@code null}. Searches {@link #statementContexts} — collected at parse time — for the statement context whose start character offset
+     * is the highest value that does not exceed {@code caretCharOffset}.
+     */
+    protected ParserRuleContext findNearestPrecedingStatementCtx(int caretCharOffset)
+    {
+        ParserRuleContext best = null;
+        for (ParserRuleContext ctx : statementContexts)
+        {
+            int start = ctx.start.getStartIndex();
+            if (start <= caretCharOffset
+                    && (best == null
+                            || start > best.start.getStartIndex()))
+            {
+                best = ctx;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Last-resort fallback when both tree-walking and the pre-collected list fail. Scans the token stream backwards from {@code caretTokenIndex} looking for a separator token
+     * ({@link #getStatementSeparatorTokenType()}) or a statement-start keyword ({@link #getStatementStartTokenTypes()}). Returns a synthetic {@link ParserRuleContext} whose {@code start} token is set
+     * to the found boundary, or {@code null} when neither hook returns useful values.
+     */
+    protected ParserRuleContext findStatementContextByTokenScan(int caretTokenIndex)
+    {
+        if (parser == null)
+        {
+            return null;
+        }
+        int separatorType = getStatementSeparatorTokenType();
+        Set<Integer> startTypes = getStatementStartTokenTypes();
+        if (separatorType < 0
+                && startTypes.isEmpty())
+        {
+            return null;
+        }
+        TokenStream tokenStream = parser.getInputStream();
+        int statementStartIdx = 0;
+        for (int i = caretTokenIndex - 1; i >= 0; i--)
+        {
+            int type = tokenStream.get(i)
+                    .getType();
+            if (separatorType >= 0
+                    && type == separatorType)
+            {
+                statementStartIdx = i + 1;
+                break;
+            }
+            if (startTypes.contains(type))
+            {
+                statementStartIdx = i;
+                break;
+            }
+        }
+        ParserRuleContext synth = new ParserRuleContext();
+        synth.start = tokenStream.get(statementStartIdx);
+        return synth;
+    }
+
+    private void collectStatementContexts(ParseTree tree)
+    {
+        int ruleIndex = getStatementRuleIndex();
+        if (tree instanceof ParserRuleContext ctx
+                && ctx.getRuleIndex() == ruleIndex
+                && ctx.start != null)
+        {
+            statementContexts.add(ctx);
+        }
+        for (int i = 0; i < tree.getChildCount(); i++)
+        {
+            collectStatementContexts(tree.getChild(i));
+        }
     }
 
     /**
@@ -579,39 +757,32 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
             return null;
         }
 
-        List<ParseTree> queue = new ArrayList<>();
+        Deque<ParseTree> queue = new ArrayDeque<>();
         queue.add(ctx);
+        // Only updated when offset is actually within the context, so the final value
+        // is always the deepest context that contains the offset (BUG FIX: was set
+        // unconditionally, causing siblings to overwrite the correct innermost context).
         ParserRuleContext prev = null;
         while (!queue.isEmpty())
         {
-            ParseTree current = queue.remove(0);
+            ParseTree current = queue.removeFirst();
 
             if (current instanceof ParserRuleContext cctx
                     && cctx.start != null
-                    && cctx.stop != null)
+                    && cctx.stop != null
+                    && offset >= cctx.start.getStartIndex()
+                    && offset < cctx.stop.getStopIndex())
             {
-                if (offset >= cctx.start.getStartIndex()
-                        && offset < cctx.stop.getStopIndex())
-                {
-                    int count = current.getChildCount();
-                    for (int i = 0; i < count; i++)
-                    {
-                        ParseTree child = current.getChild(i);
-                        queue.add(child);
-                    }
-                }
                 prev = cctx;
+                int count = current.getChildCount();
+                for (int i = 0; i < count; i++)
+                {
+                    queue.addLast(current.getChild(i));
+                }
             }
         }
 
-        if (prev != null
-                && offset >= prev.start.getStartIndex()
-                && offset < prev.stop.getStopIndex())
-        {
-            return prev;
-        }
-
-        return null;
+        return prev;
     }
 
     /** Finds a token offset in parse tree from provided caret offset. Used for code completions because caret can positioned at a non existent token */
@@ -621,14 +792,15 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         {
             return null;
         }
-        List<ParseTree> queue = new ArrayList<>();
+        // Use ArrayDeque for O(1) addFirst/removeFirst (ArrayList.add(0)/remove(0) are O(n))
+        Deque<ParseTree> queue = new ArrayDeque<>();
         queue.add(tree);
 
         TerminalNode prev = null;
 
         while (!queue.isEmpty())
         {
-            ParseTree current = queue.remove(0);
+            ParseTree current = queue.removeFirst();
             if (current instanceof TerminalNode)
             {
                 TerminalNode node = (TerminalNode) current;
@@ -670,8 +842,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
                 int childCount = current.getChildCount();
                 for (int i = childCount - 1; i >= 0; i--)
                 {
-                    ParseTree child = current.getChild(i);
-                    queue.add(0, child);
+                    queue.addFirst(current.getChild(i));
                 }
             }
         }
@@ -740,6 +911,141 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         return action;
     }
 
+    @Override
+    public SignatureHint getSignatureHint(int offset)
+    {
+        if (parser == null)
+        {
+            return null;
+        }
+        TokenStream ts = parser.getInputStream();
+        if (ts == null
+                || ts.size() == 0)
+        {
+            return null;
+        }
+
+        // Find the last default-channel token whose stop index is strictly before the caret.
+        // The '(' the user just typed is not yet in the token stream (parse reflects previous state).
+        int nameIdx = -1;
+        for (int i = ts.size() - 1; i >= 0; i--)
+        {
+            Token t = ts.get(i);
+            if (t.getType() == Token.EOF)
+            {
+                continue;
+            }
+            if (t.getStopIndex() < offset
+                    && t.getChannel() == Token.DEFAULT_CHANNEL)
+            {
+                nameIdx = i;
+                break;
+            }
+        }
+        if (nameIdx < 0)
+        {
+            return null;
+        }
+
+        String functionName = stripBrackets(ts.get(nameIdx)
+                .getText());
+
+        // 1. Dialect-specific built-in functions (e.g. ISNULL, CONVERT, DATEADD)
+        SignatureHint hint = getBuiltinSignatureHint(functionName);
+        if (hint != null)
+        {
+            return hint;
+        }
+
+        // 2. Check for schema qualification: scan for DOT + schema token before the name
+        String schema = null;
+        int dotIdx = prevDefaultChannelToken(ts, nameIdx - 1);
+        if (dotIdx >= 0
+                && ".".equals(ts.get(dotIdx)
+                        .getText()))
+        {
+            int schemaIdx = prevDefaultChannelToken(ts, dotIdx - 1);
+            if (schemaIdx >= 0)
+            {
+                schema = stripBrackets(ts.get(schemaIdx)
+                        .getText());
+            }
+        }
+
+        // 3. Look up in catalog (procedures and scalar functions)
+        Catalog catalog = crawlService.getCatalog(connectionContext, connectionContext.getDatabase());
+        if (catalog == null)
+        {
+            return null;
+        }
+
+        final String schemaFinal = schema;
+        Routine routine = catalog.getRoutines()
+                .stream()
+                .filter(r -> r.getName()
+                        .equalsIgnoreCase(functionName)
+                        && (schemaFinal == null
+                                || r.getSchema()
+                                        .equalsIgnoreCase(schemaFinal)))
+                .findFirst()
+                .orElse(null);
+
+        if (routine == null
+                || routine.getParameters()
+                        .isEmpty())
+        {
+            return null;
+        }
+
+        List<SignatureParam> params = routine.getParameters()
+                .stream()
+                .map(rp -> new SignatureParam(rp.getName(), Column.getDefinition(rp.getType(), rp.getMaxLength(), rp.getPrecision(), rp.getScale(), rp.isNullable())))
+                .collect(java.util.stream.Collectors.toList());
+
+        return new SignatureHint(routine.getName(), params, null);
+    }
+
+    /**
+     * Returns a {@link SignatureHint} for the given function name if it is a dialect-specific built-in, or {@code null} to fall through to catalog lookup. Subclasses that support built-in hints
+     * should override this method.
+     */
+    protected SignatureHint getBuiltinSignatureHint(String functionName)
+    {
+        return null;
+    }
+
+    /** Returns the index of the previous default-channel token at or before {@code fromIdx}, or {@code -1} if none. */
+    protected static int prevDefaultChannelToken(TokenStream ts, int fromIdx)
+    {
+        for (int i = fromIdx; i >= 0; i--)
+        {
+            if (ts.get(i)
+                    .getChannel() == Token.DEFAULT_CHANNEL)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Strips surrounding square-bracket or double-quote delimiters from an identifier token's text. */
+    protected static String stripBrackets(String text)
+    {
+        if (text == null
+                || text.isEmpty())
+        {
+            return text;
+        }
+        if ((text.startsWith("[")
+                && text.endsWith("]"))
+                || (text.startsWith("\"")
+                        && text.endsWith("\"")))
+        {
+            return text.substring(1, text.length() - 1);
+        }
+        return text;
+    }
+
     /** Result list with found aliases */
     record TableAlias(String alias, ObjectName objectName, List<String> extendedColumns, TableAliasType type)
     {
@@ -752,6 +1058,7 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         TABLEVARIABLE,
         TABLE_FUNCTION,
         SUBQUERY,
-        CHANGETABLE
+        CHANGETABLE,
+        BUILTIN
     }
 }

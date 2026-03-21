@@ -5,15 +5,20 @@ import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Frame;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.Clipboard;
@@ -51,6 +56,7 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JLayer;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -60,8 +66,10 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.UIManager;
 import javax.swing.event.HyperlinkEvent;
+import javax.swing.plaf.LayerUI;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
@@ -83,6 +91,7 @@ import org.fife.ui.autocomplete.BasicCompletion;
 import org.fife.ui.autocomplete.Completion;
 import org.fife.ui.autocomplete.CompletionCellRenderer;
 import org.fife.ui.autocomplete.CompletionProviderBase;
+import org.fife.ui.autocomplete.FunctionCompletion;
 import org.fife.ui.autocomplete.ParameterizedCompletion;
 import org.fife.ui.rsyntaxtextarea.ErrorStrip;
 import org.fife.ui.rsyntaxtextarea.FileLocation;
@@ -175,6 +184,7 @@ class TextEditor implements ITextEditor, SearchListener
     private EditorParser parser;
     private EditorCompleter completer;
     private MultiCaretSupport multiCaretSupport;
+    private ParsingIndicator parsingIndicator;
 
     TextEditor(ITextEditorKit editorKit)
     {
@@ -439,12 +449,17 @@ class TextEditor implements ITextEditor, SearchListener
 
             putClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS, actions);
 
-            add(scrollPane);
-            // Add error strip if have a parser installed
+            // Add error strip and parsing indicator if we have a parser installed
             if (parser != null)
             {
+                parsingIndicator = new ParsingIndicator(scrollPane);
+                add(parsingIndicator.getLayer());
                 errorStrip = new ErrorStrip(textEditor);
                 add(errorStrip, BorderLayout.LINE_END);
+            }
+            else
+            {
+                add(scrollPane);
             }
         }
     }
@@ -470,23 +485,30 @@ class TextEditor implements ITextEditor, SearchListener
             if (parser.supportsCompletions())
             {
                 completer = new EditorCompleter(this.parser);
-                AutoCompletion autoCompletion = new AutoCompletion(completer)
-                {
-                    @Override
-                    protected void insertCompletion(Completion c, boolean typedParamListStartChar)
-                    {
-                        // Never insert the parsing completion
-                        if (c == completer.parsingCompletion)
-                        {
-                            return;
-                        }
-                        super.insertCompletion(c, typedParamListStartChar);
-                    }
-                };
+                EditorAutoCompletion autoCompletion = new EditorAutoCompletion(completer);
                 autoCompletion.setListCellRenderer(new CompletionCellRenderer());
                 autoCompletion.setShowDescWindow(true);
                 autoCompletion.install(textEditor);
                 completer.setAutoCompletion(autoCompletion);
+                if (parser.supportsSignatureHints())
+                {
+                    autoCompletion.setParameterAssistanceEnabled(true);
+                    // Replace the '(' action installed by AutoCompletion.install() so that
+                    // signature hints trigger even when the autocomplete popup is not open.
+                    // The default ParameterizedCompletionStartAction only fires when a
+                    // ParameterizedCompletion is selected in the popup, which never happens
+                    // because getCompletionsImpl returns BasicCompletion items.
+                    textEditor.getActionMap()
+                            .put("AutoCompletion.FunctionStart", new AbstractAction()
+                            {
+                                @Override
+                                public void actionPerformed(ActionEvent e)
+                                {
+                                    autoCompletion.hideChildWindows();
+                                    autoCompletion.tryParameterizedCompletion();
+                                }
+                            });
+                }
                 this.parser.setParseCompleteListener(completer.parseCompleteRunner);
             }
 
@@ -537,6 +559,10 @@ class TextEditor implements ITextEditor, SearchListener
             {
                 session.cancel(true);
             }
+        }
+        if (parsingIndicator != null)
+        {
+            parsingIndicator.dispose();
         }
         UIManager.removePropertyChangeListener(uiManagerListener);
 
@@ -1262,7 +1288,7 @@ class TextEditor implements ITextEditor, SearchListener
     {
         private final EditorParser parser;
         private final BasicCompletion parsingCompletion = new BasicCompletion(this, "Parsing ...");
-        private AutoCompletion autoCompletion;
+        private EditorAutoCompletion autoCompletion;
 
         /**
          * Cached completions that is used as long as the document is dirty and user keeps typing and start offset is the same.
@@ -1286,13 +1312,21 @@ class TextEditor implements ITextEditor, SearchListener
         private List<CompletionItem> cachedCompletions;
 
         private volatile boolean doAutoCompleteWhenReady = false;
+        private volatile boolean doSignatureHintWhenReady = false;
+        private volatile int pendingSignatureHintOffset = -1;
+        /** True while the signature-hint retry (triggered by parseCompleteRunner) is executing. Prevents re-queueing another retry from within the retry itself. */
+        private volatile boolean isRetryingSignatureHint = false;
 
         EditorCompleter(EditorParser parser)
         {
             this.parser = parser;
+            if (parser.parser.supportsSignatureHints())
+            {
+                setParameterizedCompletionParams('(', ", ", ')');
+            }
         }
 
-        void setAutoCompletion(AutoCompletion autoCompletion)
+        void setAutoCompletion(EditorAutoCompletion autoCompletion)
         {
             this.autoCompletion = autoCompletion;
         }
@@ -1349,6 +1383,41 @@ class TextEditor implements ITextEditor, SearchListener
                         }
                     });
                 }
+                if (doSignatureHintWhenReady)
+                {
+                    doSignatureHintWhenReady = false;
+                    int offset = pendingSignatureHintOffset;
+                    pendingSignatureHintOffset = -1;
+                    isRetryingSignatureHint = true;
+                    SwingUtilities.invokeLater(() ->
+                    {
+                        try
+                        {
+                            JTextComponent tc = autoCompletion.getTextComponent();
+                            // Only retry if the caret is still right after the '(' we inserted
+                            if (tc != null
+                                    && tc.getCaretPosition() == offset + 1)
+                            {
+                                try
+                                {
+                                    // Remove the literal '(' so tryParameterizedCompletion can re-insert
+                                    // it properly together with the parameter hint tooltip.
+                                    tc.getDocument()
+                                            .remove(offset, 1);
+                                }
+                                catch (BadLocationException e)
+                                {
+                                    return;
+                                }
+                                autoCompletion.tryParameterizedCompletion();
+                            }
+                        }
+                        finally
+                        {
+                            isRetryingSignatureHint = false;
+                        }
+                    });
+                }
             }
         };
 
@@ -1361,7 +1430,19 @@ class TextEditor implements ITextEditor, SearchListener
         @Override
         public List<ParameterizedCompletion> getParameterizedCompletions(JTextComponent tc)
         {
-            return null;
+            ITextEditorDocumentParser.SignatureHint hint = parser.parser.getSignatureHint(tc.getCaretPosition());
+            if (hint == null)
+            {
+                return null;
+            }
+            FunctionCompletion fc = new FunctionCompletion(this, hint.functionName(), hint.returnType());
+            List<ParameterizedCompletion.Parameter> params = new ArrayList<>();
+            for (ITextEditorDocumentParser.SignatureParam sp : hint.params())
+            {
+                params.add(new ParameterizedCompletion.Parameter(sp.type(), sp.name()));
+            }
+            fc.setParams(params);
+            return List.of(fc);
         }
 
         @Override
@@ -1530,6 +1611,83 @@ class TextEditor implements ITextEditor, SearchListener
         }
     }
 
+    /**
+     * AutoCompletion subclass that supports triggering parameterized completion (signature hints) when {@code (} is typed, even without the autocomplete popup being open.
+     *
+     * <p>
+     * The default {@link AutoCompletion} only triggers signature hints when a {@link ParameterizedCompletion} is selected in the popup and {@code (} is pressed. Since
+     * {@link EditorCompleter#getCompletionsImpl} returns {@link BasicCompletion} items, that path never fires. This subclass replaces the {@code (} action to call
+     * {@link EditorCompleter#getParameterizedCompletions} directly and drive the hint through the protected {@link #insertCompletion} hook.
+     * </p>
+     */
+    private static class EditorAutoCompletion extends AutoCompletion
+    {
+        private final EditorCompleter completer;
+
+        EditorAutoCompletion(EditorCompleter completer)
+        {
+            super(completer);
+            this.completer = completer;
+        }
+
+        @Override
+        protected void insertCompletion(Completion c, boolean typedParamListStartChar)
+        {
+            if (c == completer.parsingCompletion)
+            {
+                return;
+            }
+            super.insertCompletion(c, typedParamListStartChar);
+        }
+
+        /**
+         * Called when {@code (} is typed. Tries to show a signature-hint popup via {@link EditorCompleter#getParameterizedCompletions}; falls back to inserting a literal {@code (} if no hint is
+         * available.
+         */
+        void tryParameterizedCompletion()
+        {
+            JTextComponent tc = getTextComponent();
+            List<ParameterizedCompletion> hints = completer.getParameterizedCompletions(tc);
+            if (hints != null
+                    && !hints.isEmpty())
+            {
+                FunctionCompletion originalFc = (FunctionCompletion) hints.get(0);
+                // Use the already-entered text as the replacement so insertCompletion
+                // replaces it in-place (effectively a no-op for document text) and then
+                // calls startParameterizedCompletionAssistance to insert "(params)".
+                String alreadyEntered = completer.getAlreadyEnteredText(tc);
+                FunctionCompletion fc = new FunctionCompletion(completer, alreadyEntered, originalFc.getType());
+                List<ParameterizedCompletion.Parameter> params = new ArrayList<>();
+                for (int i = 0; i < originalFc.getParamCount(); i++)
+                {
+                    params.add(originalFc.getParam(i));
+                }
+                fc.setParams(params);
+                insertCompletion(fc, true);
+            }
+            else
+            {
+                // Insert '(' now so the user's keystroke is not lost.
+                // If we're not already in a retry, schedule a retry once the next parse
+                // completes so the signature hint can still appear (covers both the case
+                // where the parser is currently running and the case where it hasn't
+                // started yet because the parse-delay timer hasn't fired).
+                if (!completer.isRetryingSignatureHint)
+                {
+                    completer.doSignatureHintWhenReady = true;
+                    completer.pendingSignatureHintOffset = tc.getCaretPosition();
+                    // Start the spinner from the EDT so it is reliably visible even when
+                    // the background parse completes in less than one timer interval.
+                    if (completer.parser.editor.parsingIndicator != null)
+                    {
+                        completer.parser.editor.parsingIndicator.startAnimation();
+                    }
+                }
+                tc.replaceSelection("(");
+            }
+        }
+    }
+
     /** Adapter for bridging {@link ITextEditorDocumentParser} and {@link Parser}, {@link ToolTipSupplier}, {@link LinkGenerator} */
     private static class EditorParser extends AbstractParser implements ToolTipSupplier, LinkGenerator
     {
@@ -1629,6 +1787,10 @@ class TextEditor implements ITextEditor, SearchListener
             state = State.PARSING;
             currentToolTip = null;
             currentLinkAction = null;
+            if (editor.parsingIndicator != null)
+            {
+                editor.parsingIndicator.startAnimation();
+            }
             try
             {
                 currentSession = EXECUTOR.submit(() ->
@@ -1680,7 +1842,14 @@ class TextEditor implements ITextEditor, SearchListener
                         {
                             parseCompleteListener.run();
                         }
-                        SwingUtilities.invokeLater(() -> editor.textEditor.forceReparsing(this));
+                        SwingUtilities.invokeLater(() ->
+                        {
+                            if (editor.parsingIndicator != null)
+                            {
+                                editor.parsingIndicator.stopAnimation();
+                            }
+                            editor.textEditor.forceReparsing(this);
+                        });
                     }
                 });
             }
@@ -1794,6 +1963,117 @@ class TextEditor implements ITextEditor, SearchListener
     {
         return value >= start
                 && value <= end;
+    }
+
+    /**
+     * Transparent overlay on top of the scroll pane that paints a small rotating arc next to the caret when parsing is in progress.
+     */
+    private class ParsingIndicator extends LayerUI<RTextScrollPane>
+    {
+        private static final int SIZE = 10;
+        private static final int GAP = 3;
+
+        private final JLayer<RTextScrollPane> layer;
+        private final Timer timer;
+        private int frame = 0;
+        private volatile boolean active = false;
+
+        ParsingIndicator(RTextScrollPane scrollPane)
+        {
+            this.layer = new JLayer<>(scrollPane, this);
+            this.timer = new Timer(80, e ->
+            {
+                frame++;
+                layer.repaint();
+            });
+            this.timer.setRepeats(true);
+        }
+
+        JLayer<RTextScrollPane> getLayer()
+        {
+            return layer;
+        }
+
+        /** Must be called on the EDT. */
+        void startAnimation()
+        {
+            active = true;
+            if (!timer.isRunning())
+            {
+                frame = 0;
+                timer.start();
+            }
+        }
+
+        /** Must be called on the EDT. */
+        void stopAnimation()
+        {
+            active = false;
+            timer.stop();
+            layer.repaint();
+        }
+
+        void dispose()
+        {
+            timer.stop();
+        }
+
+        @Override
+        public void paint(Graphics g, JComponent c)
+        {
+            super.paint(g, c);
+            if (!active)
+            {
+                return;
+            }
+            try
+            {
+                int caretPos = textEditor.getCaretPosition();
+                Rectangle2D caretRect = textEditor.modelToView2D(caretPos);
+                if (caretRect == null)
+                {
+                    return;
+                }
+                // Only draw when the caret line is within the visible viewport
+                Rectangle visible = textEditor.getVisibleRect();
+                if (caretRect.getY() < visible.y
+                        || caretRect.getY() >= visible.y + visible.height)
+                {
+                    return;
+                }
+                Point p = SwingUtilities.convertPoint(textEditor, (int) (caretRect.getX() + caretRect.getWidth()) + GAP, (int) caretRect.getY() + 1, c);
+
+                Graphics2D g2 = (Graphics2D) g.create();
+                try
+                {
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+                    // Faint full circle as track
+                    g2.setColor(new Color(128, 128, 128, 60));
+                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.drawOval(p.x, p.y, SIZE, SIZE);
+
+                    // Spinning arc using the theme's accent color if available
+                    Color base = UIManager.getColor("Component.accentColor");
+                    if (base == null)
+                    {
+                        base = new Color(64, 128, 255);
+                    }
+                    g2.setColor(new Color(base.getRed(), base.getGreen(), base.getBlue(), 210));
+                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    int startAngle = (frame * 36) % 360;
+                    g2.drawArc(p.x, p.y, SIZE, SIZE, startAngle, 270);
+                }
+                finally
+                {
+                    g2.dispose();
+                }
+            }
+            catch (BadLocationException e)
+            {
+                // ignore — caret position no longer valid
+            }
+        }
     }
 
     /** Paste special dialog */
