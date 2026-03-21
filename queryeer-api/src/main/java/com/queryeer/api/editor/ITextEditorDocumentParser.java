@@ -270,6 +270,36 @@ public interface ITextEditorDocumentParser
         }
     }
 
+    /** Returns true if signature hints are supported otherwise false. {@see #getSignatureHint(int)} */
+    default boolean supportsSignatureHints()
+    {
+        return false;
+    }
+
+    /**
+     * Return a {@link SignatureHint} for the callable whose open parenthesis is at or just before the given document offset, or null if no hint is available.
+     *
+     * <p>
+     * NOTE! No heavy calculations should be done here since this is executed on EDT
+     * </p>
+     *
+     * @param offset The offset in the parsed document, at the caret position when '(' was typed
+     */
+    default SignatureHint getSignatureHint(int offset)
+    {
+        return null;
+    }
+
+    /** A single parameter in a function/procedure signature hint */
+    record SignatureParam(String name, String type)
+    {
+    }
+
+    /** Signature of a callable (function or procedure) for display in a parameter-hint popup */
+    record SignatureHint(String functionName, List<SignatureParam> params, String returnType)
+    {
+    }
+
     /** Resulting item from a document parse */
     static class ParseItem
     {

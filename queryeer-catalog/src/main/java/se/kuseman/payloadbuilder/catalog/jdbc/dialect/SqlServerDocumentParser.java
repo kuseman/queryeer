@@ -7,7 +7,10 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.Strings.CI;
 
 import java.awt.Color;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -17,6 +20,8 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 import org.antlr.v4.runtime.CharStream;
+import org.antlr.v4.runtime.CharStreams;
+import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.ParserRuleContext;
@@ -24,19 +29,18 @@ import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.misc.Interval;
-import org.antlr.v4.runtime.tree.ErrorNode;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.lang3.tuple.Pair;
 
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.ITemplateService;
-import com.vmware.antlr4c3.CodeCompletionCore.CandidatesCollection;
 
 import se.kuseman.payloadbuilder.api.QualifiedName;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
 import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.c3.CodeCompletionCore.CandidatesCollection;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Constraint;
@@ -85,6 +89,156 @@ import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParserBaseVisitor;
 /** Document parser for Microsoft sql server */
 class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 {
+    private static final Map<String, SignatureHint> BUILTIN_HINTS = new HashMap<>();
+    /** Built-in table-valued functions with their output column names */
+    private static final Map<String, List<String>> BUILTIN_TABLE_FUNCTIONS = new HashMap<>();
+    /**
+     * Token types that can immediately precede an expression position. Used to detect when the caret sits right after an operator (e.g. after {@code =}, {@code AND}, {@code +}) so that the query-spec
+     * column-suggestion fallback is triggered, matching the behaviour already in place for COMMA.
+     */
+    private static final Set<Integer> EXPRESSION_PRECEDING_OPERATOR_TOKENS = Set.of(TSqlLexer.EQUAL, // =
+            TSqlLexer.LESS, // < (also part of <=, <>)
+            TSqlLexer.GREATER, // > (also part of >=, <>)
+            TSqlLexer.EXCLAMATION, // ! (part of !=, !<, !>)
+            TSqlLexer.PLUS, // +
+            TSqlLexer.MINUS, // -
+            TSqlLexer.STAR, // *
+            TSqlLexer.DIVIDE, // /
+            TSqlLexer.MODULE, // %
+            TSqlLexer.BIT_OR, // |
+            TSqlLexer.BIT_AND, // &
+            TSqlLexer.BIT_XOR, // ^
+            TSqlLexer.BIT_NOT, // ~ (unary bitwise NOT)
+            TSqlLexer.DOUBLE_BAR, // || (string concatenation)
+            TSqlLexer.PLUS_ASSIGN, // +=
+            TSqlLexer.MINUS_ASSIGN, // -=
+            TSqlLexer.MULT_ASSIGN, // *=
+            TSqlLexer.DIV_ASSIGN, // /=
+            TSqlLexer.MOD_ASSIGN, // %=
+            TSqlLexer.AND_ASSIGN, // &=
+            TSqlLexer.XOR_ASSIGN, // ^=
+            TSqlLexer.OR_ASSIGN, // |=
+            TSqlLexer.AND, // AND
+            TSqlLexer.OR, // OR
+            TSqlLexer.NOT // NOT
+    );
+
+    static
+    {
+        // Null / conditional
+        bh("ISNULL", "expression", p("check_expression", "expression"), p("replacement_value", "expression"));
+        bh("NULLIF", "expression", p("expression1", "expression"), p("expression2", "expression"));
+        bh("COALESCE", "expression", p("value_1", "expression"), p("...", "expression"));
+        bh("IIF", "expression", p("boolean_expression", "bit"), p("true_value", "expression"), p("false_value", "expression"));
+        bh("CHOOSE", "expression", p("index", "int"), p("val_1", "expression"), p("val_2, ...", "expression"));
+
+        // String
+        bh("LEN", "int", p("string_expression", "expression"));
+        bh("DATALENGTH", "int", p("expression", "expression"));
+        bh("LEFT", "varchar", p("character_expression", "expression"), p("integer_expression", "int"));
+        bh("RIGHT", "varchar", p("character_expression", "expression"), p("integer_expression", "int"));
+        bh("SUBSTRING", "varchar", p("expression", "expression"), p("start", "int"), p("length", "int"));
+        bh("CHARINDEX", "int", p("expressionToFind", "expression"), p("expressionToSearch", "expression"), p("start_location", "int"));
+        bh("PATINDEX", "int", p("pattern", "varchar"), p("expression", "expression"));
+        bh("REPLACE", "varchar", p("string_expression", "expression"), p("string_pattern", "expression"), p("string_replacement", "expression"));
+        bh("STUFF", "varchar", p("character_expression", "expression"), p("start", "int"), p("length", "int"), p("replaceWith_expression", "expression"));
+        bh("REPLICATE", "varchar", p("string_expression", "expression"), p("integer_expression", "int"));
+        bh("REVERSE", "varchar", p("string_expression", "expression"));
+        bh("SPACE", "varchar", p("integer_expression", "int"));
+        bh("STR", "char", p("float_expression", "float"), p("length", "int"), p("decimal", "int"));
+        bh("LTRIM", "varchar", p("character_expression", "expression"));
+        bh("RTRIM", "varchar", p("character_expression", "expression"));
+        bh("TRIM", "varchar", p("string", "expression"));
+        bh("UPPER", "varchar", p("character_expression", "expression"));
+        bh("LOWER", "varchar", p("character_expression", "expression"));
+        bh("CONCAT", "varchar", p("string_value_1", "expression"), p("string_value_n", "expression"));
+        bh("CONCAT_WS", "varchar", p("separator", "nvarchar"), p("argument_1", "expression"), p("argument_n", "expression"));
+        bh("STRING_AGG", "varchar", p("expression", "expression"), p("separator", "nvarchar"));
+        bh("STRING_SPLIT", "table", p("string", "nvarchar"), p("separator", "nvarchar"));
+        bh("FORMAT", "nvarchar", p("value", "expression"), p("format", "nvarchar"), p("culture", "nvarchar"));
+        bh("CHAR", "char", p("integer_expression", "int"));
+        bh("NCHAR", "nchar", p("integer_expression", "int"));
+        bh("ASCII", "int", p("character_expression", "expression"));
+        bh("UNICODE", "int", p("ncharacter_expression", "expression"));
+        bh("SOUNDEX", "char", p("character_expression", "expression"));
+        bh("DIFFERENCE", "int", p("character_expression_1", "expression"), p("character_expression_2", "expression"));
+        bh("QUOTENAME", "nvarchar", p("character_string", "nvarchar"), p("quote_character", "nchar"));
+
+        // Conversion
+        bh("CONVERT", "expression", p("data_type", "type"), p("expression", "expression"), p("style", "int"));
+        bh("CAST", "expression", p("expression AS data_type", "expression"));
+        bh("TRY_CONVERT", "expression", p("data_type", "type"), p("expression", "expression"), p("style", "int"));
+        bh("TRY_CAST", "expression", p("expression AS data_type", "expression"));
+        bh("PARSE", "expression", p("string_value", "nvarchar"), p("AS data_type", "type"), p("USING culture", "nvarchar"));
+        bh("TRY_PARSE", "expression", p("string_value", "nvarchar"), p("AS data_type", "type"), p("USING culture", "nvarchar"));
+
+        // Date and time
+        bh("DATEADD", "datetime", p("datepart", "datepart"), p("number", "int"), p("date", "datetime"));
+        bh("DATEDIFF", "int", p("datepart", "datepart"), p("startdate", "datetime"), p("enddate", "datetime"));
+        bh("DATEDIFF_BIG", "bigint", p("datepart", "datepart"), p("startdate", "datetime"), p("enddate", "datetime"));
+        bh("DATENAME", "nvarchar", p("datepart", "datepart"), p("date", "datetime"));
+        bh("DATEPART", "int", p("datepart", "datepart"), p("date", "datetime"));
+        bh("DAY", "int", p("date", "datetime"));
+        bh("MONTH", "int", p("date", "datetime"));
+        bh("YEAR", "int", p("date", "datetime"));
+        bh("EOMONTH", "date", p("start_date", "datetime"), p("month_to_add", "int"));
+        bh("DATEFROMPARTS", "date", p("year", "int"), p("month", "int"), p("day", "int"));
+        bh("DATETIMEFROMPARTS", "datetime", p("year", "int"), p("month", "int"), p("day", "int"), p("hour", "int"), p("minute", "int"), p("seconds", "int"), p("milliseconds", "int"));
+        bh("TIMEFROMPARTS", "time", p("hour", "int"), p("minute", "int"), p("seconds", "int"), p("fractions", "int"), p("precision", "int"));
+        bh("ISDATE", "int", p("expression", "expression"));
+        bh("SWITCHOFFSET", "datetimeoffset", p("datetimeoffset_expression", "expression"), p("timezoneoffset_expression", "expression"));
+        bh("TODATETIMEOFFSET", "datetimeoffset", p("expression", "expression"), p("time_zone", "expression"));
+
+        // Math
+        bh("ABS", "numeric", p("numeric_expression", "expression"));
+        bh("CEILING", "numeric", p("numeric_expression", "expression"));
+        bh("FLOOR", "numeric", p("numeric_expression", "expression"));
+        bh("ROUND", "numeric", p("numeric_expression", "expression"), p("length", "int"), p("function", "tinyint"));
+        bh("POWER", "float", p("float_expression", "float"), p("y", "float"));
+        bh("SQRT", "float", p("float_expression", "float"));
+        bh("SQUARE", "float", p("float_expression", "float"));
+        bh("SIGN", "numeric", p("numeric_expression", "expression"));
+        bh("EXP", "float", p("float_expression", "float"));
+        bh("LOG", "float", p("float_expression", "float"), p("base", "float"));
+        bh("LOG10", "float", p("float_expression", "float"));
+        bh("RAND", "float", p("seed", "int"));
+
+        // System / JSON / metadata
+        bh("HASHBYTES", "varbinary", p("algorithm", "varchar"), p("input", "expression"));
+        bh("ISJSON", "int", p("expression", "nvarchar"));
+        bh("JSON_VALUE", "nvarchar", p("expression", "nvarchar"), p("path", "nvarchar"));
+        bh("JSON_QUERY", "nvarchar", p("expression", "nvarchar"), p("path", "nvarchar"));
+        bh("JSON_MODIFY", "nvarchar", p("expression", "nvarchar"), p("path", "nvarchar"), p("newValue", "expression"));
+        bh("OBJECT_ID", "int", p("object_name", "nvarchar"), p("object_type", "char"));
+        bh("OBJECT_NAME", "sysname", p("object_id", "int"), p("database_id", "int"));
+        bh("SCHEMA_NAME", "sysname", p("schema_id", "int"));
+        bh("SCHEMA_ID", "int", p("schema_name", "sysname"));
+        bh("DB_ID", "int", p("database_name", "nvarchar"));
+        bh("DB_NAME", "nvarchar", p("database_id", "int"));
+        bh("CHECKSUM", "int", p("*|expression_n", "expression"));
+        bh("BINARY_CHECKSUM", "int", p("*|expression_n", "expression"));
+    }
+
+    private static void bh(String name, String returnType, SignatureParam... params)
+    {
+        BUILTIN_HINTS.put(name, new SignatureHint(name, List.of(params), returnType));
+    }
+
+    static
+    {
+        // Built-in TVFs with known output columns
+        BUILTIN_TABLE_FUNCTIONS.put("STRING_SPLIT", asList("value", "ordinal"));
+        BUILTIN_TABLE_FUNCTIONS.put("OPENJSON", asList("key", "value", "type"));
+        BUILTIN_TABLE_FUNCTIONS.put("GENERATE_SERIES", asList("value"));
+    }
+
+    // CSOFF
+    private static SignatureParam p(String name, String type)
+    {
+        return new SignatureParam(name, type);
+    }
+    // CSON
+
     private final Icons icons;
     private final Map<String, List<String>> temporaryTables = new HashMap<>();
 
@@ -114,6 +268,24 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
 
     @Override
+    protected int getStatementRuleIndex()
+    {
+        return TSqlParser.RULE_sql_clauses;
+    }
+
+    @Override
+    protected int getStatementSeparatorTokenType()
+    {
+        return TSqlParser.SEMI;
+    }
+
+    @Override
+    protected Set<Integer> getStatementStartTokenTypes()
+    {
+        return Set.of(TSqlParser.SELECT, TSqlParser.INSERT, TSqlParser.UPDATE, TSqlParser.DELETE, TSqlParser.EXECUTE, TSqlParser.WITH, TSqlParser.MERGE, TSqlParser.DECLARE);
+    }
+
+    @Override
     protected void afterParse()
     {
         temporaryTables.clear();
@@ -122,6 +294,59 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             ValidateVisitor visitor = new ValidateVisitor(temporaryTables, parseResult, connectionContext, crawlService);
             context.accept(visitor);
         }
+    }
+
+    @Override
+    protected ParseTree miniParseStatementNode(ParserRuleContext statementCtx, int caretCharOffset)
+    {
+        if (parser == null
+                || statementCtx == null
+                || statementCtx.start == null)
+        {
+            return null;
+        }
+        TokenStream tokenStream = parser.getInputStream();
+        int startTokenIdx = statementCtx.start.getTokenIndex();
+
+        // Collect tokens from statement start to SEMI or EOF, then extract their text.
+        // Using getText(Interval) captures hidden-channel whitespace tokens so spacing is preserved.
+        int endTokenIdx = startTokenIdx;
+        for (int i = startTokenIdx; i < tokenStream.size(); i++)
+        {
+            Token t = tokenStream.get(i);
+            if (t.getType() == Token.EOF)
+            {
+                break;
+            }
+            if (t.getType() == TSqlParser.SEMI)
+            {
+                endTokenIdx = i;
+                break;
+            }
+            endTokenIdx = i;
+        }
+
+        String text = tokenStream.getText(new Interval(startTokenIdx, endTokenIdx));
+
+        // Re-parse the isolated statement text (no error listeners — errors here are expected/ignored)
+        CharStream cs = CharStreams.fromString(text);
+        TSqlLexer lex = new TSqlLexer(cs);
+        lex.removeErrorListeners();
+        TokenStream miniTokenStream = new CommonTokenStream(lex);
+        TSqlParser miniParser = new TSqlParser(miniTokenStream);
+        miniParser.removeErrorListeners();
+        Tsql_fileContext miniFile = miniParser.tsql_file();
+
+        // Find the tree node at the equivalent caret position within the mini-document
+        int startCharOffset = statementCtx.start.getStartIndex();
+        int miniCaret = Math.max(0, caretCharOffset - startCharOffset);
+        TokenOffset miniOffset = findTokenFromOffset(miniParser, miniFile, miniCaret);
+        if (miniOffset == null)
+        {
+            return null;
+        }
+        return miniOffset.prevTree() != null ? miniOffset.prevTree()
+                : miniOffset.tree();
     }
 
     @Override
@@ -140,6 +365,18 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     public boolean supportsCompletions()
     {
         return true;
+    }
+
+    @Override
+    public boolean supportsSignatureHints()
+    {
+        return true;
+    }
+
+    @Override
+    protected SignatureHint getBuiltinSignatureHint(String functionName)
+    {
+        return BUILTIN_HINTS.get(functionName.toUpperCase());
     }
 
     @Override
@@ -184,6 +421,26 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                 .collect(toList());
 
         return Map.of(TABLE, table, CONSTRAINTS, constraints, FOREIGN_KEYS, foreignKeys, INDICES, indices);
+    }
+
+    /** BFS-scans the subtree rooted at {@code ctx} and returns the first (shallowest) {@link Query_specificationContext}, or {@code null} if none exists. */
+    private static Query_specificationContext findQuerySpecInSubtree(ParserRuleContext ctx)
+    {
+        Deque<ParseTree> queue = new ArrayDeque<>();
+        queue.add(ctx);
+        while (!queue.isEmpty())
+        {
+            ParseTree current = queue.removeFirst();
+            if (current instanceof Query_specificationContext qctx)
+            {
+                return qctx;
+            }
+            for (int i = 0; i < current.getChildCount(); i++)
+            {
+                queue.addLast(current.getChild(i));
+            }
+        }
+        return null;
     }
 
     private boolean isExpression(ParseTree tree)
@@ -235,6 +492,9 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
         List<CompletionItem> items = new ArrayList<>();
         boolean partialResult = false;
+        // Cache catalogs by database name to avoid redundant crawl calls for the same database
+        // (e.g., SELECT * FROM t a JOIN t b would otherwise fetch the catalog twice).
+        Map<String, Catalog> catalogCache = new HashMap<>();
         for (TableAlias ta : aliases)
         {
             String alias = ta.alias();
@@ -242,8 +502,9 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     || ta.type() == TableAliasType.TABLE_FUNCTION
                     || ta.type() == TableAliasType.CHANGETABLE)
             {
-                Catalog catalog = crawlService.getCatalog(connectionContext, Objects.toString(ta.objectName()
-                        .getCatalog(), connectionContext.getDatabase()));
+                String dbKey = Objects.toString(ta.objectName()
+                        .getCatalog(), connectionContext.getDatabase());
+                Catalog catalog = catalogCache.computeIfAbsent(dbKey, db -> crawlService.getCatalog(connectionContext, db));
                 if (catalog == null)
                 {
                     partialResult = true;
@@ -316,11 +577,13 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             }
             else if (ta.type() == TableAliasType.TABLEVARIABLE
                     || ta.type() == TableAliasType.TEMPTABLE
-                    || ta.type() == TableAliasType.SUBQUERY)
+                    || ta.type() == TableAliasType.SUBQUERY
+                    || ta.type() == TableAliasType.BUILTIN)
             {
-                List<String> list = ta.type() == TableAliasType.SUBQUERY ? ta.extendedColumns()
-                        : temporaryTables.getOrDefault(ta.objectName()
-                                .getName(), emptyList());
+                List<String> list = (ta.type() == TableAliasType.SUBQUERY
+                        || ta.type() == TableAliasType.BUILTIN) ? ta.extendedColumns()
+                                : temporaryTables.getOrDefault(ta.objectName()
+                                        .getName(), emptyList());
 
                 for (String c : list)
                 {
@@ -340,6 +603,11 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
                 }
             }
+        }
+
+        for (SignatureHint hint : BUILTIN_HINTS.values())
+        {
+            items.add(new CompletionItem(List.of(hint.functionName()), hint.functionName(), null, null, icons.boltIcon, -1));
         }
 
         return new CompletionResult(items, partialResult);
@@ -366,6 +634,11 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         result.addAll(temporaryTables.keySet()
                 .stream()
                 .map(t -> new CompletionItem(t, null, icons.table))
+                .collect(toList()));
+
+        result.addAll(BUILTIN_TABLE_FUNCTIONS.keySet()
+                .stream()
+                .map(f -> new CompletionItem(f, null, icons.wpformsIcon))
                 .collect(toList()));
 
         return new CompletionResult(result, partialResult);
@@ -452,6 +725,86 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             if (checkCaretInValuePosition(tree.getChild(i), caretOffset))
             {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the token at {@code tokenIndex} is an identifier (plain {@code ID}) whose effective preceding context is an open parenthesis {@code '('}, OR if the token itself is an open
+     * parenthesis {@code '('} preceded by any non-EOF token. The first case detects a partial identifier inside a function argument (e.g. {@code "left(t.c|"} or {@code "left(c|"}): the algorithm
+     * walks backwards through the alternating ID/DOT chain and stops at the first token that is neither an identifier nor a dot; if that token is {@code '('} the caret is in a function-argument
+     * position. The second case handles the caret sitting right after the opening {@code '('} before any argument is typed (e.g. {@code "left(|"}): any non-EOF preceding token is sufficient to
+     * conclude the caret is inside a parenthesised expression where column suggestions are appropriate.
+     */
+    private static boolean isInsideFunctionArg(Parser parser, int tokenIndex)
+    {
+        Token token = parser.getInputStream()
+                .get(tokenIndex);
+        if (token.getType() == TSqlLexer.ID)
+        {
+            for (int i = tokenIndex - 1; i >= 0; i--)
+            {
+                Token t = parser.getInputStream()
+                        .get(i);
+                if (t.getChannel() != Token.DEFAULT_CHANNEL)
+                {
+                    continue;
+                }
+                int type = t.getType();
+                if (type == TSqlLexer.DOT
+                        || type == TSqlLexer.ID)
+                {
+                    // Still inside a dotted identifier chain (e.g. "schema.table.col")
+                    continue;
+                }
+                // Found the first token that is not part of the chain
+                return type == TSqlLexer.LR_BRACKET;
+            }
+            return false;
+        }
+        // Caret IS the opening '(' — the caret sits right after '(' before any argument is typed.
+        // Any non-EOF preceding token is sufficient: column suggestions are appropriate for the
+        // first argument position regardless of whether this is a scalar function, a grouped
+        // condition, or any other parenthesised expression context.
+        if (token.getType() == TSqlLexer.LR_BRACKET)
+        {
+            for (int i = tokenIndex - 1; i >= 0; i--)
+            {
+                Token t = parser.getInputStream()
+                        .get(i);
+                if (t.getChannel() != Token.DEFAULT_CHANNEL)
+                {
+                    continue;
+                }
+                return t.getType() != Token.EOF;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if the token at {@code tokenIndex} is a COMMA or an expression-preceding operator (e.g. {@code =}, {@code AND}, {@code +}), or if the nearest preceding default-channel token is one
+     * of those. The latter handles the case where the caret lands exactly on the first character of a token that follows such a token (e.g. "LEFT(col, |)" where findTokenFromOffset returns the ")"
+     * token, or "col = |" where findTokenFromOffset returns EOF).
+     */
+    private boolean isPrecededByOrIsExpressionOperator(Parser parser, int tokenIndex)
+    {
+        Token token = parser.getInputStream()
+                .get(tokenIndex);
+        if (token.getType() == TSqlParser.COMMA
+                || EXPRESSION_PRECEDING_OPERATOR_TOKENS.contains(token.getType()))
+        {
+            return true;
+        }
+        for (int i = tokenIndex - 1; i >= 0; i--)
+        {
+            Token t = parser.getInputStream()
+                    .get(i);
+            if (t.getChannel() == Token.DEFAULT_CHANNEL)
+            {
+                return t.getType() == TSqlParser.COMMA
+                        || EXPRESSION_PRECEDING_OPERATOR_TOKENS.contains(t.getType());
             }
         }
         return false;
@@ -567,22 +920,173 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             }
         }
 
-        // Check found tokens parents if we can detect context
+        // Resolve the effective tree node for context detection and column suggestions.
+        // Prefer the current token, but fall back to prevTree when current is EOF or an ErrorNode
+        // (which happens when the caret is past the last real token or in a parse-error recovery node).
+        ParseTree effectiveNode = resolveEffectiveNode(tokenOffset);
+
+        // Check found tokens parents if we can detect context.
+        // Only return early when suggestColumns actually finds column items (returns non-null).
+        // If it returns null (parse errors disconnected the node from its Select_statementContext),
+        // fall through to the query-spec fallback or C3's mini-parse fallback.
+        //
+        // Track whether either tree node was identified as an expression. This flag extends the
+        // query-spec fallback (below) to cover cases where isExpression returns true but
+        // suggestColumns returns null because error recovery disconnected the caret token from the
+        // enclosing Query_specificationContext. A typical example is "WHERE left(t.c|" where the
+        // partial identifier 't.c' is inside a function call — isExpression fires on the 'c' node,
+        // but collectTableSourceAliases can't walk up to the SELECT's FROM clause.
+        boolean expressionContextDetected = false;
         if (isExpression(tokenOffset.tree()))
         {
-            return suggestColumns(tokenOffset.tree());
+            expressionContextDetected = true;
+            CompletionResult result = suggestColumns(tokenOffset.tree());
+            if (result != null)
+            {
+                return result;
+            }
         }
         else if (isExpression(tokenOffset.prevTree()))
         {
-            return suggestColumns(tokenOffset.prevTree());
+            expressionContextDetected = true;
+            CompletionResult result = suggestColumns(tokenOffset.prevTree());
+            if (result != null)
+            {
+                return result;
+            }
         }
         else if (isTableSourceItem(tokenOffset.tree()))
         {
             return suggestTableSources();
         }
 
+        // Find the statement context that contains the caret to limit C3 to the current statement.
+        // This isolates completion from parse errors in other statements and speeds up the ATN walk
+        // by starting from a token within the current statement rather than from the grammar root.
+        // When parse errors above the caret restructure the tree (making parent-chain walking fail),
+        // fall back to the pre-collected list and search by character offset.
+        ParserRuleContext statementCtx = findEnclosingStatementCtx(effectiveNode);
+        if (statementCtx == null)
+        {
+            statementCtx = findNearestPrecedingStatementCtx(tokenOffset.caretOffset());
+        }
+        if (statementCtx == null)
+        {
+            statementCtx = findStatementContextByTokenScan(tokenOffset.suggestTokenIndex());
+        }
+
+        // When ANTLR's panic-mode error recovery disconnects the caret token from the main
+        // parse tree (e.g., "LEFT(col, |)" causes the comma and close-paren to become error
+        // nodes in a separate BatchContext), isExpression above returns false even though the
+        // caret is logically inside a scalar function argument. In this case the SELECT part
+        // of the statement is still in a valid Query_specificationContext whose table_sources
+        // are intact. Search the statement-context subtrees for a Query_specificationContext
+        // and use it to collect aliases for column suggestions, bypassing the broken parent-chain walk.
+        //
+        // This fallback is guarded by an operator/comma check: a comma or an expression-preceding
+        // operator (=, AND, +, …) as the caret's matched token means the caret sits inside an
+        // expression context. Applying it unconditionally would intercept table-source positions
+        // (FROM, JOIN) where C3 should return RULE_table_source_item instead.
+        //
+        // Error recovery can create multiple small Sql_clausesContext nodes (e.g. one for just "(")
+        // close to the caret, hiding the real SELECT's context. Search all collected statement
+        // contexts (not only the nearest one) and try each in descending start-offset order so
+        // that the most-recent SELECT before the caret is preferred.
+        //
+        // The check also covers the case where the caret is positioned exactly at the first
+        // character of the token that follows the operator/comma (e.g. "LEFT(col, |)" where "|" is
+        // on the closing paren, or "col = |" where findTokenFromOffset returns EOF). Checking the
+        // nearest preceding default-channel token detects this situation and triggers the same
+        // query-spec fallback.
+        //
+        // expressionContextDetected extends the same fallback to the case where isExpression()
+        // returned true above but suggestColumns() returned null because error recovery detached
+        // the caret token from the enclosing Query_specificationContext.
+        //
+        // isInsideFunctionArg extends it further to the case where isExpression() returned FALSE
+        // (i.e. ANTLR's error recovery disconnected the caret's identifier entirely from any
+        // ExpressionContext) but the token stream clearly shows a function-argument position:
+        // an identifier preceded (through zero or more DOT+ID steps) by an open paren '('.
+        // Examples: "left(c|" (directly after paren) and "left(t.c|" (dotted qualifier).
+        // This check deliberately does NOT fire for bare WHERE-clause identifiers like "WHERE t.c|"
+        // (preceded by WHERE keyword, not '('), keeping table-source completions unaffected.
+        if (parser != null
+                && tokenOffset.suggestTokenIndex() >= 0
+                && (expressionContextDetected
+                        || isPrecededByOrIsExpressionOperator(parser, tokenOffset.suggestTokenIndex())
+                        || isInsideFunctionArg(parser, tokenOffset.suggestTokenIndex())))
+        {
+            Query_specificationContext querySpec = null;
+            if (statementCtx != null)
+            {
+                querySpec = findQuerySpecInSubtree(statementCtx);
+            }
+            if (querySpec == null)
+            {
+                // Normal statementCtx did not contain a query_spec; scan all collected contexts.
+                int caretOff = tokenOffset.caretOffset();
+                querySpec = statementContexts.stream()
+                        .filter(ctx -> ctx.start != null
+                                && ctx.start.getStartIndex() <= caretOff)
+                        .sorted(Comparator.<ParserRuleContext, Integer>comparing(ctx -> ctx.start.getStartIndex())
+                                .reversed())
+                        .map(SqlServerDocumentParser::findQuerySpecInSubtree)
+                        .filter(q -> q != null)
+                        .findFirst()
+                        .orElse(null);
+            }
+            if (querySpec != null)
+            {
+                CompletionResult result = suggestColumns(querySpec);
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+        }
+
+        // When findTokenFromOffset matched a token whose stop is before the caret offset, the caret
+        // is in the whitespace gap AFTER that token (e.g. after a comma: "LEFT(col, |)"). C3 uses
+        // caretTokenIndex as the position it should NOT yet consume, so with the comma as the index
+        // it only sees tokens before the comma and cannot suggest expressions for the next argument.
+        // Advance to the next default-channel token so C3 sees the comma as consumed and correctly
+        // suggests RULE_expression for the argument position.
+        //
+        // Exception: do NOT advance to EOF. When the caret is at the very end of the last real token
+        // (e.g. "LEFT(c|" at end-of-input), stop+1 == caretOffset so the condition fires, but the
+        // only next default-channel token is EOF. Advancing to EOF makes C3 ask "what follows the
+        // complete expression LEFT(c?" (answer: ")" or ",") instead of "what is expected at the
+        // position of c?" (answer: RULE_expression). Keep c3TokenIndex on the real token so C3
+        // correctly returns RULE_expression and column suggestions follow via the mini-parse path.
+        int c3TokenIndex = tokenOffset.suggestTokenIndex();
+        if (c3TokenIndex >= 0
+                && parser != null)
+        {
+            Token suggestToken = parser.getInputStream()
+                    .get(c3TokenIndex);
+            if (suggestToken.getStopIndex() < tokenOffset.caretOffset())
+            {
+                int nextIdx = c3TokenIndex + 1;
+                while (nextIdx < parser.getInputStream()
+                        .size())
+                {
+                    Token next = parser.getInputStream()
+                            .get(nextIdx);
+                    if (next.getChannel() == Token.DEFAULT_CHANNEL)
+                    {
+                        if (next.getType() != Token.EOF)
+                        {
+                            c3TokenIndex = nextIdx;
+                        }
+                        break;
+                    }
+                    nextIdx++;
+                }
+            }
+        }
+
         // Try antlr-c3
-        CandidatesCollection candidates = core.collectCandidates(tokenOffset.suggestTokenIndex(), null);
+        CandidatesCollection candidates = core.collectCandidates(c3TokenIndex, statementCtx);
         if (candidates.rules.isEmpty())
         {
             return null;
@@ -610,20 +1114,22 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                 || candidates.rules.containsKey(TSqlParser.RULE_search_condition)
                 || candidates.rules.containsKey(TSqlParser.RULE_full_column_name))
         {
-            // Use prev tree node if current is EOF
-            ParseTree node = tokenOffset.tree();
-            if (node instanceof TerminalNode
-                    && ((TerminalNode) node).getSymbol()
-                            .getType() == Token.EOF)
+            // When the main parse tree is broken (parse errors above the caret caused panic-mode
+            // recovery to attach statement tokens as error nodes at tsql_file level), effectiveNode
+            // has no Select_statementContext in its parent chain, so collectTableSourceAliases returns
+            // empty. Fall back to a mini-parse of the current statement for a clean tree.
+            ParseTree nodeForColumns = effectiveNode;
+            if (TableSourceAliasCollector.collectTableSourceAliases(nodeForColumns, connectionContext.getDatabase())
+                    .isEmpty()
+                    && statementCtx != null)
             {
-                node = tokenOffset.prevTree();
+                ParseTree miniNode = miniParseStatementNode(statementCtx, tokenOffset.caretOffset());
+                if (miniNode != null)
+                {
+                    nodeForColumns = miniNode;
+                }
             }
-            else if (node instanceof ErrorNode)
-            {
-                node = tokenOffset.prevTree();
-            }
-
-            return suggestColumns(node);
+            return suggestColumns(nodeForColumns);
         }
 
         return null;
@@ -1142,6 +1648,18 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     schema = schemaCtx != null ? schemaCtx.getText()
                             : "";
                     name = procedureCtx.getText();
+
+                    // If no schema/database qualifier and the name is a known built-in TVF, treat as BUILTIN
+                    if (databaseCtx == null
+                            && schemaCtx == null)
+                    {
+                        List<String> builtinColumns = BUILTIN_TABLE_FUNCTIONS.get(name.toUpperCase());
+                        if (builtinColumns != null)
+                        {
+                            type = TableAliasType.BUILTIN;
+                            extendedColumns = builtinColumns;
+                        }
+                    }
                 }
             }
             else if (ctx.change_table() != null)
@@ -1165,11 +1683,11 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                         .change_table_version() != null)
                 {
                     databaseCtx = ctx.change_table()
-                            .change_table_changes().changetable.database;
+                            .change_table_version().versiontable.database;
                     schemaCtx = ctx.change_table()
-                            .change_table_changes().changetable.schema;
+                            .change_table_version().versiontable.schema;
                     tableCtx = ctx.change_table()
-                            .change_table_changes().changetable.table;
+                            .change_table_version().versiontable.table;
                 }
 
                 if (tableCtx != null)

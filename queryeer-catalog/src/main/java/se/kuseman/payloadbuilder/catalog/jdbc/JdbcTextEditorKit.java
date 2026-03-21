@@ -109,6 +109,6 @@ class JdbcTextEditorKit implements ITextEditorKit
     @Override
     public ITextEditorDocumentParser getDocumentParser()
     {
-        return state.documentParser;
+        return state.documentParser.getParser();
     }
 }

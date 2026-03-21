@@ -3,7 +3,10 @@ package se.kuseman.payloadbuilder.catalog.jdbc;
 import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
-import java.io.Reader;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -186,75 +189,71 @@ class JdbcEngineState implements IJdbcEngineState
         return null;
     }
 
-    static class TextEditorDocumentParserProxy implements ITextEditorDocumentParser
+    /**
+     * A dynamic proxy for {@link ITextEditorDocumentParser} that forwards all calls to a swappable {@link #currentParser}.
+     *
+     * <p>
+     * Using {@link Proxy} instead of a manual per-method delegation means no code changes are needed here when new methods are added to {@link ITextEditorDocumentParser}: the proxy automatically
+     * delegates them to {@link #currentParser} (or falls back to the interface default when no parser is set).
+     * </p>
+     *
+     * <p>
+     * {@code supports*()} methods always return {@code true} so the editor sets up all features (auto-complete, tooltips, signature hints…) even before a connection is established. Individual
+     * dialects that don't implement a feature will simply return {@code null}/empty for the corresponding query methods.
+     * </p>
+     */
+    static class TextEditorDocumentParserProxy implements InvocationHandler
     {
         ITextEditorDocumentParser currentParser;
+        private final ITextEditorDocumentParser proxy;
+
+        TextEditorDocumentParserProxy()
+        {
+            this.proxy = (ITextEditorDocumentParser) Proxy.newProxyInstance(ITextEditorDocumentParser.class.getClassLoader(), new Class<?>[] { ITextEditorDocumentParser.class }, this);
+        }
+
+        ITextEditorDocumentParser getParser()
+        {
+            return proxy;
+        }
 
         @Override
-        public void parse(Reader documentReader)
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable
         {
+            // Object methods (equals, hashCode, toString) are handled on the handler itself
+            if (method.getDeclaringClass() == Object.class)
+            {
+                return method.invoke(this, args);
+            }
+
+            // supports*() always true: ensures editor infrastructure is configured at kit-install
+            // time even before a connection (and therefore a real parser) exists
+            if (method.getName()
+                    .startsWith("supports"))
+            {
+                return true;
+            }
+
+            // All other interface methods: delegate to the real parser when available
             if (currentParser != null)
             {
-                currentParser.parse(documentReader);
+                try
+                {
+                    return method.invoke(currentParser, args);
+                }
+                catch (InvocationTargetException e)
+                {
+                    throw e.getCause();
+                }
             }
-        }
 
-        @Override
-        public CompletionResult getCompletionItems(int offset)
-        {
-            if (currentParser != null)
+            // No parser yet — invoke the interface default (returns null / empty collection etc.)
+            if (method.isDefault())
             {
-                return currentParser.getCompletionItems(offset);
+                return InvocationHandler.invokeDefault(proxy, method, args);
             }
-            return ITextEditorDocumentParser.super.getCompletionItems(offset);
-        }
 
-        @Override
-        public LinkAction getLinkAction(int offset)
-        {
-            if (currentParser != null)
-            {
-                return currentParser.getLinkAction(offset);
-            }
-            return ITextEditorDocumentParser.super.getLinkAction(offset);
-        }
-
-        @Override
-        public List<ParseItem> getParseResult()
-        {
-            if (currentParser != null)
-            {
-                return currentParser.getParseResult();
-            }
-            return ITextEditorDocumentParser.super.getParseResult();
-        }
-
-        @Override
-        public ToolTipItem getToolTip(int offset)
-        {
-            if (currentParser != null)
-            {
-                return currentParser.getToolTip(offset);
-            }
-            return ITextEditorDocumentParser.super.getToolTip(offset);
-        }
-
-        @Override
-        public boolean supportsCompletions()
-        {
-            return true;
-        }
-
-        @Override
-        public boolean supportsLinkActions()
-        {
-            return true;
-        }
-
-        @Override
-        public boolean supportsToolTips()
-        {
-            return true;
+            return null;
         }
     }
 }
