@@ -274,7 +274,7 @@ class JdbcEngineQuickPropertiesComponent extends JPanel
         });
 
         connectionsTreeModel = new JdbcConnectionsTreeModel(payloadbuilderService, connectionsModel, icons, dialectProvider, node -> newQuery(node), crawlService, graphVisualizationService,
-                icons.getIconFactory(), dialogFactory);
+                icons.getIconFactory(), dialogFactory, queryEngine, eventBus);
         treeModel = new QueryeerTree.QueryeerTreeModel(connectionsTreeModel);
         connectionsModel.addListDataListener(new ListDataListener()
         {
