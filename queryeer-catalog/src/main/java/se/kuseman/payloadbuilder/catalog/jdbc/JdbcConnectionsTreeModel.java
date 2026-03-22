@@ -30,6 +30,7 @@ import com.queryeer.api.component.DialogUtils.ADialog;
 import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.component.QueryeerTree.RegularNode;
 import com.queryeer.api.extensions.visualization.graph.Graph;
+import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IGraphVisualizationService;
 import com.queryeer.api.service.IIconFactory;
 import com.queryeer.api.service.IPayloadbuilderService;
@@ -51,10 +52,13 @@ class JdbcConnectionsTreeModel implements RegularNode
     private final IGraphVisualizationService graphVisualizationService;
     private final IIconFactory iconFactory;
     private final IDialogFactory dialogFactory;
+    private final JdbcQueryEngine queryEngine;
+    private final IEventBus eventBus;
 
     //@formatter:off
-    JdbcConnectionsTreeModel(IPayloadbuilderService payloadbuilderService, JdbcConnectionsModel model, Icons icons, JdbcDialectProvider dialectProvider, Consumer<RegularNode> newQueryConsumer,
-            CatalogCrawlService crawlService, IGraphVisualizationService graphVisualizationService, IIconFactory iconFactory, IDialogFactory dialogFactory)
+    JdbcConnectionsTreeModel(IPayloadbuilderService payloadbuilderService, JdbcConnectionsModel model, Icons icons, JdbcDialectProvider dialectProvider,
+            Consumer<RegularNode> newQueryConsumer, CatalogCrawlService crawlService, IGraphVisualizationService graphVisualizationService, IIconFactory iconFactory,
+            IDialogFactory dialogFactory, JdbcQueryEngine queryEngine, IEventBus eventBus)
     //@formatter:on
     {
         this.payloadbuilderService = requireNonNull(payloadbuilderService, "payloadbuilderService");
@@ -66,6 +70,8 @@ class JdbcConnectionsTreeModel implements RegularNode
         this.graphVisualizationService = requireNonNull(graphVisualizationService, "graphVisualizationService");
         this.iconFactory = requireNonNull(iconFactory, "iconFactory");
         this.dialogFactory = requireNonNull(dialogFactory, "dialogFactory");
+        this.queryEngine = requireNonNull(queryEngine, "queryEngine");
+        this.eventBus = requireNonNull(eventBus, "eventBus");
     }
 
     @Override
@@ -565,7 +571,7 @@ class JdbcConnectionsTreeModel implements RegularNode
                         final Catalog finalCatalog = catalog;
                         SwingUtilities.invokeLater(() ->
                         {
-                            RoutineCallGraphDialog dialog = new RoutineCallGraphDialog(database, finalCatalog, jdbcDialect, connectionContext, graphVisualizationService);
+                            RoutineCallGraphDialog dialog = new RoutineCallGraphDialog(database, finalCatalog, jdbcDialect, connectionContext, graphVisualizationService, queryEngine, eventBus);
                             dialog.setVisible(true);
                         });
                     }

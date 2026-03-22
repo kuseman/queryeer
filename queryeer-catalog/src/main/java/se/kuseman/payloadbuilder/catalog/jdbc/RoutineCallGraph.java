@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import com.queryeer.api.extensions.visualization.graph.Graph;
 import com.queryeer.api.extensions.visualization.graph.GraphEdge;
@@ -23,10 +24,18 @@ import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
 /** Builds a visualization {@link Graph} showing the call hierarchy between stored procedures and functions. */
 class RoutineCallGraph
 {
+    /** Result of {@link #buildGraph}, bundling the rendered graph with the routine body texts keyed by vertex id. */
+    record Result(Graph graph, Map<String, String> bodiesByVertexId)
+    {
+    }
+
     //@formatter:off
-    private static final String STYLE_PROCEDURE = "fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=true;shadow=true;fontStyle=1;";
-    private static final String STYLE_FUNCTION   = "fillColor=#d5e8d4;strokeColor=#82b366;rounded=true;shadow=true;fontStyle=2;";
-    private static final String STYLE_GHOST      = "fillColor=#f5f5f5;strokeColor=#999999;fontColor=#999999;rounded=true;dashed=true;";
+    private static final String STYLE_PROCEDURE        = "fillColor=#dae8fc;strokeColor=#6c8ebf;rounded=true;shadow=true;fontStyle=1;";
+    private static final String STYLE_FUNCTION         = "fillColor=#d5e8d4;strokeColor=#82b366;rounded=true;shadow=true;fontStyle=2;";
+    private static final String STYLE_GHOST            = "fillColor=#f5f5f5;strokeColor=#999999;fontColor=#999999;rounded=true;dashed=true;";
+    /** Caller vertices found via regex text search — same fill as their type but amber border to signal possible inaccuracy. */
+    private static final String STYLE_CALLER_PROCEDURE = "fillColor=#dae8fc;strokeColor=#d6b656;rounded=true;shadow=true;fontStyle=1;";
+    private static final String STYLE_CALLER_FUNCTION  = "fillColor=#d5e8d4;strokeColor=#d6b656;rounded=true;shadow=true;fontStyle=2;";
     //@formatter:on
 
     private RoutineCallGraph()
@@ -36,7 +45,7 @@ class RoutineCallGraph
     /**
      * Build a call-graph starting from {@code selectedRoots}. Only the selected routines and their transitively reachable callees are parsed — not the entire catalog.
      */
-    static Graph buildGraph(String database, List<Routine> selectedRoots, Catalog catalog, JdbcDialect dialect, IConnectionContext connectionContext)
+    static Result buildGraph(String database, List<Routine> selectedRoots, Catalog catalog, JdbcDialect dialect, IConnectionContext connectionContext)
     {
         // Normalised key → Routine lookup for catalog boundary checks
         Map<String, Routine> routineByKey = new LinkedHashMap<>();
@@ -141,7 +150,56 @@ class RoutineCallGraph
             }
         }
 
-        return new Graph(database + " — Routine Call Graph", new ArrayList<>(vertexById.values()), edges);
+        // Reverse lookup: find potential direct callers of each selected root via regex text search.
+        // This is a best-effort scan — word-boundary matching avoids most false positives but cannot
+        // exclude comments or string literals, hence the "Inaccurate" note on these vertices.
+        Set<String> selectedKeys = new HashSet<>();
+        for (Routine r : selectedRoots)
+        {
+            selectedKeys.add(routineKey(r));
+        }
+        for (Routine selected : selectedRoots)
+        {
+            String selectedKey = routineKey(selected);
+            Pattern callerPattern = Pattern.compile("\\b" + Pattern.quote(selected.getName()) + "\\b", Pattern.CASE_INSENSITIVE);
+            for (Map.Entry<String, String> entry : allBodies.entrySet())
+            {
+                String callerKey = entry.getKey();
+                if (selectedKeys.contains(callerKey))
+                {
+                    continue;
+                }
+                if (callerPattern.matcher(entry.getValue())
+                        .find())
+                {
+                    if (!vertexById.containsKey(callerKey))
+                    {
+                        Routine callerRoutine = routineByKey.get(callerKey);
+                        if (callerRoutine != null)
+                        {
+                            vertexById.put(callerKey, new GraphVertex(callerKey, vertexLabel(callerRoutine), "", callerStyle(callerRoutine), List.of(), buildCallerProperties(callerRoutine)));
+                        }
+                    }
+                    String edgeId = callerKey + "->" + selectedKey;
+                    if (edgeIds.add(edgeId))
+                    {
+                        edges.add(new GraphEdge(edgeId, callerKey, selectedKey));
+                    }
+                }
+            }
+        }
+
+        // Build a vertex-id → body map for catalog routines (ghost vertices have no body)
+        Map<String, String> bodiesByVertexId = new LinkedHashMap<>();
+        for (Map.Entry<String, String> entry : allBodies.entrySet())
+        {
+            if (vertexById.containsKey(entry.getKey()))
+            {
+                bodiesByVertexId.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        return new Result(new Graph(database + " — Routine Call Graph", new ArrayList<>(vertexById.values()), edges), bodiesByVertexId);
     }
 
     private static String routineKey(ObjectName name)
@@ -179,6 +237,12 @@ class RoutineCallGraph
                 : STYLE_FUNCTION;
     }
 
+    private static String callerStyle(Routine r)
+    {
+        return r.getType() == Routine.Type.PROCEDURE ? STYLE_CALLER_PROCEDURE
+                : STYLE_CALLER_FUNCTION;
+    }
+
     private static List<GraphProperty> buildProperties(Routine r)
     {
         List<GraphProperty> properties = new ArrayList<>();
@@ -200,6 +264,13 @@ class RoutineCallGraph
             properties.add(new GraphProperty("Parameters", "Parameters", null, false, false, paramProps));
         }
 
+        return properties;
+    }
+
+    private static List<GraphProperty> buildCallerProperties(Routine r)
+    {
+        List<GraphProperty> properties = buildProperties(r);
+        properties.add(new GraphProperty("", "Note", "Caller detected by text search — may be inaccurate", true));
         return properties;
     }
 }

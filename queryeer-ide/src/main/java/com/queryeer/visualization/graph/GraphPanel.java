@@ -5,6 +5,7 @@ import static org.apache.commons.lang3.StringUtils.defaultIfBlank;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.awt.BorderLayout;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -15,10 +16,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JSplitPane;
+import javax.swing.SwingUtilities;
 
 import com.l2fprod.common.propertysheet.DefaultProperty;
 import com.l2fprod.common.propertysheet.Property;
@@ -381,10 +386,22 @@ public class GraphPanel extends JPanel
                     public void mouseClicked(MouseEvent e)
                     {
                         Object cell = graphComponent.getCellAt(e.getX(), e.getY());
-                        if (cell == null
-                                && e.getClickCount() == 2)
+                        if (e.getClickCount() == 2)
                         {
-                            graphComponent.zoomActual();
+                            if (cell instanceof mxCell mxcell
+                                    && mxcell.getValue() instanceof GraphVertex vertex)
+                            {
+                                vertex.actions()
+                                        .get()
+                                        .stream()
+                                        .filter(a -> Boolean.TRUE.equals(a.getValue(GraphVertex.ON_DOUBLE_CLICK)))
+                                        .findFirst()
+                                        .ifPresent(a -> a.actionPerformed(new ActionEvent(e.getSource(), ActionEvent.ACTION_PERFORMED, null)));
+                            }
+                            else if (cell == null)
+                            {
+                                graphComponent.zoomActual();
+                            }
                         }
                     }
 
@@ -396,6 +413,20 @@ public class GraphPanel extends JPanel
                                 && mxcell.getValue() instanceof GraphVertex vertex)
                         {
                             showProperties(vertex.label(), vertex.properties());
+                            if (SwingUtilities.isRightMouseButton(e))
+                            {
+                                List<Action> contextMenuActions = vertex.actions()
+                                        .get()
+                                        .stream()
+                                        .filter(a -> !Boolean.FALSE.equals(a.getValue(GraphVertex.SHOW_IN_CONTEXT_MENU)))
+                                        .toList();
+                                if (!contextMenuActions.isEmpty())
+                                {
+                                    JPopupMenu popup = new JPopupMenu();
+                                    contextMenuActions.forEach(a -> popup.add(new JMenuItem(a)));
+                                    popup.show(e.getComponent(), e.getX(), e.getY());
+                                }
+                            }
                         }
                         else if (cell instanceof mxCell mxcell
                                 && mxcell.getValue() instanceof GraphEdge edge)

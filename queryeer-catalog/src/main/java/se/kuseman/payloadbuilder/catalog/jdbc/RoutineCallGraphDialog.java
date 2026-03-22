@@ -7,6 +7,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
+import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import javax.swing.AbstractAction;
+import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -31,7 +34,10 @@ import javax.swing.SwingUtilities;
 import com.queryeer.api.component.ADocumentListenerAdapter;
 import com.queryeer.api.component.AnimatedIcon;
 import com.queryeer.api.component.DialogUtils.ADialog;
+import com.queryeer.api.event.NewQueryFileEvent;
 import com.queryeer.api.extensions.visualization.graph.Graph;
+import com.queryeer.api.extensions.visualization.graph.GraphVertex;
+import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IGraphVisualizationService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
@@ -46,8 +52,10 @@ class RoutineCallGraphDialog extends ADialog
     private final String database;
     private final Catalog catalog;
     private final JdbcDialect dialect;
-    private final IConnectionContext connectionContext;
+    private final ConnectionContext connectionContext;
     private final IGraphVisualizationService graphVisualizationService;
+    private final JdbcQueryEngine queryEngine;
+    private final IEventBus eventBus;
 
     private final List<Routine> allRoutines;
     private final Map<String, JCheckBox> checkboxByKey = new LinkedHashMap<>();
@@ -60,7 +68,8 @@ class RoutineCallGraphDialog extends ADialog
     private JPanel graphContainer;
 
     // CSOFF
-    RoutineCallGraphDialog(String database, Catalog catalog, JdbcDialect dialect, IConnectionContext connectionContext, IGraphVisualizationService graphVisualizationService)
+    RoutineCallGraphDialog(String database, Catalog catalog, JdbcDialect dialect, ConnectionContext connectionContext, IGraphVisualizationService graphVisualizationService,
+            JdbcQueryEngine queryEngine, IEventBus eventBus)
     {
         super((Frame) null, database + " — Routine Call Graph", false);
         this.database = database;
@@ -68,6 +77,8 @@ class RoutineCallGraphDialog extends ADialog
         this.dialect = dialect;
         this.connectionContext = connectionContext;
         this.graphVisualizationService = graphVisualizationService;
+        this.queryEngine = queryEngine;
+        this.eventBus = eventBus;
         this.allRoutines = catalog.getRoutines()
                 .stream()
                 .sorted(Comparator.comparing(RoutineCallGraphDialog::routineKey))
@@ -241,9 +252,10 @@ class RoutineCallGraphDialog extends ADialog
 
         JdbcQueryEngine.EXECUTOR.execute(() ->
         {
-            Graph graph = RoutineCallGraph.buildGraph(database, selected, catalog, dialect, connectionContext);
+            RoutineCallGraph.Result result = RoutineCallGraph.buildGraph(database, selected, catalog, dialect, connectionContext);
             SwingUtilities.invokeLater(() ->
             {
+                Graph graph = withActions(result);
                 JComponent graphComponent = graphVisualizationService.createGraphComponent(graph);
                 if (graphComponent != null)
                 {
@@ -261,6 +273,77 @@ class RoutineCallGraphDialog extends ADialog
                 updateBuildButton();
             });
         });
+    }
+
+    private Graph withActions(RoutineCallGraph.Result result)
+    {
+        List<GraphVertex> vertices = result.graph()
+                .vertices()
+                .stream()
+                .map(vertex ->
+                {
+                    String body = result.bodiesByVertexId()
+                            .get(vertex.id());
+                    boolean isKnownRoutine = allRoutines.stream()
+                            .anyMatch(r -> routineKey(r).equals(vertex.id()));
+                    if (body == null
+                            && !isKnownRoutine)
+                    {
+                        return vertex;
+                    }
+                    return vertex.withActions(() ->
+                    {
+                        List<Action> actions = new ArrayList<>();
+                        if (isKnownRoutine)
+                        {
+                            AbstractAction navigateAction = new AbstractAction("Show as root in new graph  [double-click]")
+                            {
+                                @Override
+                                public void actionPerformed(ActionEvent e)
+                                {
+                                    navigateTo(vertex.id());
+                                }
+                            };
+                            navigateAction.putValue(GraphVertex.ON_DOUBLE_CLICK, Boolean.TRUE);
+                            actions.add(navigateAction);
+                        }
+                        if (body != null)
+                        {
+                            actions.add(new AbstractAction("Open as new query")
+                            {
+                                @Override
+                                public void actionPerformed(ActionEvent e)
+                                {
+                                    JdbcEngineState engineState = new JdbcEngineState(queryEngine, connectionContext.cloneState());
+                                    eventBus.publish(new NewQueryFileEvent(queryEngine, engineState, body, false, vertex.label()));
+                                }
+                            });
+                        }
+                        return actions;
+                    });
+                })
+                .toList();
+        return new Graph(result.graph()
+                .title(),
+                result.graph()
+                        .layoutDirection(),
+                vertices, result.graph()
+                        .edges());
+    }
+
+    private void navigateTo(String vertexId)
+    {
+        // Clear filter so the target routine is always visible in the list
+        filterField.setText("");
+        // Deselect all, then select only the target routine
+        checkboxByKey.values()
+                .forEach(cb -> cb.setSelected(false));
+        JCheckBox cb = checkboxByKey.get(vertexId);
+        if (cb != null)
+        {
+            cb.setSelected(true);
+        }
+        buildGraph();
     }
 
     static String routineKey(Routine r)
