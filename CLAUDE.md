@@ -82,19 +82,28 @@ Core services are registered in `Main.wire()` and injected into plugins:
 
 ## ANTLR Parsing / Code Completion
 
-See [ANTLR_PARSING.md](./queryeer-catalog/ANTLR_PARSING.md) for the full architecture, completion flow, dialect
-extension pattern, and design decisions before modifying `AntlrDocumentParser` or any of its
-subclasses (`SqlServerDocumentParser`, `PrestoDocumentParser`, etc.).
+Read the relevant architecture document before modifying any parsing or completion code:
 
-**MANDATORY:** `ANTLR_PARSING.md` must be updated whenever changes are made to:
-- `AntlrDocumentParser` or any dialect subclass
-- `CodeCompletionCore` (c3 engine)
-- `ITextEditorDocumentParser` (public API)
-- Any completion-related data types (`CompletionItem`, `CompletionResult`, `TokenOffset`, etc.)
-- Test infrastructure in `AntlrDocumentParserTestBase`
+- [ANTLR_PARSING.md](./queryeer-catalog/ANTLR_PARSING.md) — generic base-class architecture
+  (`AntlrDocumentParser`, `CodeCompletionCore`, shared data types, dialect extension pattern)
+- [ANTLR_SQLSERVER_PARSING.md](./queryeer-catalog/ANTLR_SQLSERVER_PARSING.md) — T-SQL dialect
+  specifics (`SqlServerDocumentParser`, T-SQL design decisions, T-SQL failure signatures)
 
-**MANDATORY when fixing a parsing/completion bug:** after the fix, review the
-`Diagnosing Completion Bugs` section in `ANTLR_PARSING.md` and extend it with anything
-learned during diagnosis that would have made finding the root cause faster — new failure
-signatures, non-obvious ANTLR behaviors, useful debug patterns, etc. The goal is that each
-fix leaves the diagnostics section more useful than it was before.
+**MANDATORY — update the correct document whenever changes are made to:**
+
+| Changed code | Update this document |
+|---|---|
+| `AntlrDocumentParser` | `ANTLR_PARSING.md` |
+| `CodeCompletionCore` (c3 engine) | `ANTLR_PARSING.md` |
+| `ITextEditorDocumentParser` (public API) | `ANTLR_PARSING.md` |
+| `CompletionItem`, `CompletionResult`, `TokenOffset`, `TableAlias`, `JoinOnContext` | `ANTLR_PARSING.md` |
+| `AntlrDocumentParserTestBase` | `ANTLR_PARSING.md` |
+| `SqlServerDocumentParser` | `ANTLR_SQLSERVER_PARSING.md` |
+| `SqlServerDocumentParserTest` | `ANTLR_SQLSERVER_PARSING.md` |
+| `PrestoDocumentParser` / `PrestoDocumentParserTest` | create `ANTLR_PRESTO_PARSING.md` following the same pattern |
+
+**MANDATORY when fixing a parsing/completion bug:** after the fix, extend the
+`Diagnosing Completion Bugs` section of the appropriate document with anything learned during
+diagnosis that would have made finding the root cause faster — new failure signatures,
+non-obvious ANTLR behaviors, useful debug patterns, etc. The goal is that each fix leaves the
+diagnostics section more useful than it was before.
