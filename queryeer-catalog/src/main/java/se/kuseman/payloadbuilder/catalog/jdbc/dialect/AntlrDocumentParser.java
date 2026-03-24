@@ -17,9 +17,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.Icon;
 
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
@@ -49,14 +51,17 @@ import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
 import se.kuseman.payloadbuilder.catalog.jdbc.ExecuteQueryContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
+import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionTarget;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.ActionType;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.QueryActionsConfigurable.QueryActionResult;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.c3.CodeCompletionCore;
+import se.kuseman.payloadbuilder.catalog.jdbc.dialect.c3.CodeCompletionCore.CandidatesCollection;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Constraint;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ForeignKey;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.ForeignKeyColumn;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Index;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectType;
@@ -77,14 +82,17 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     protected final CatalogCrawlService crawlService;
     protected final IConnectionContext connectionContext;
     protected final ITemplateService templateService;
+    protected final Icons icons;
 
-    AntlrDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService crawlService, IConnectionContext connectionContext, ITemplateService templateService)
+    AntlrDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService crawlService, IConnectionContext connectionContext, ITemplateService templateService,
+            Icons icons)
     {
         this.eventBus = requireNonNull(eventBus, "eventBus");
         this.queryActionsConfigurable = requireNonNull(queryActionsConfigurable, "queryActionsConfigurable");
         this.crawlService = requireNonNull(crawlService, "crawlService");
         this.connectionContext = requireNonNull(connectionContext, "connectionContext");
         this.templateService = requireNonNull(templateService, "templateService");
+        this.icons = requireNonNull(icons, "icons");
     }
 
     protected T context;
@@ -486,8 +494,268 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         return null;
     }
 
-    /** Return completion items from provided token offset */
-    protected abstract CompletionResult getCompletionItems(TokenOffset tokenOffset);
+    /**
+     * Context returned by {@link #detectJoinOnContext} when the caret is positioned immediately after the {@code ON} keyword of a JOIN clause. Carries the right-hand-side table alias (the table being
+     * joined in the current JOIN) and the full set of all table aliases visible at the caret position.
+     */
+    record JoinOnContext(TableAlias rhsAlias, Set<TableAlias> allAliases)
+    {
+    }
+
+    /**
+     * Detects whether the caret is positioned immediately after the {@code ON} keyword of a JOIN clause. When detected, returns a {@link JoinOnContext} carrying the right-hand-side table alias and
+     * all table aliases visible at the caret. Returns {@code null} when the caret is not in this context.
+     *
+     * <p>
+     * The default implementation always returns {@code null}. Dialect subclasses that can detect this context should override this method.
+     * </p>
+     */
+    protected JoinOnContext detectJoinOnContext(TokenOffset tokenOffset, String database)
+    {
+        return null;
+    }
+
+    /**
+     * Generates FK/PK join-condition suggestions for the given {@link JoinOnContext}. For each foreign-key relationship that links the RHS table to any visible LHS table, produces one
+     * {@link CompletionItem} per FK: single-column FKs become {@code b.fkCol = a.pkCol}; composite FKs become {@code b.fkCol1 = a.pkCol1 AND b.fkCol2 = a.pkCol2}.
+     *
+     * <p>
+     * Returns an empty {@link CompletionResult} (not {@code null}) when no FK relationships are found, so callers can fall through to regular column suggestions.
+     * </p>
+     */
+    protected final CompletionResult suggestFkJoinConditions(JoinOnContext joinCtx, Catalog catalog, Icon icon)
+    {
+        TableAlias rhs = joinCtx.rhsAlias();
+        List<TableAlias> lhsAliases = joinCtx.allAliases()
+                .stream()
+                .filter(ta -> !ta.equals(rhs))
+                .collect(Collectors.toList());
+
+        List<CompletionItem> items = new ArrayList<>();
+        for (ForeignKey fk : catalog.getForeignKeys())
+        {
+            if (fk.getColumns()
+                    .isEmpty())
+            {
+                continue;
+            }
+            ObjectName constrainedName = fk.getColumns()
+                    .get(0)
+                    .getConstrainedObjectName();
+            ObjectName referencedName = fk.getColumns()
+                    .get(0)
+                    .getReferencedObjectName();
+
+            boolean rhsIsConstrained = joinTableNameMatches(constrainedName, rhs.objectName());
+            boolean rhsIsReferenced = !rhsIsConstrained
+                    && joinTableNameMatches(referencedName, rhs.objectName());
+
+            for (TableAlias lhs : lhsAliases)
+            {
+                if (rhsIsConstrained
+                        && joinTableNameMatches(referencedName, lhs.objectName()))
+                {
+                    // RHS has the FK column; LHS has the referenced PK: rhs.fkCol = lhs.pkCol
+                    String condition = buildJoinCondition(fk.getColumns(), rhs.alias(), lhs.alias());
+                    items.add(new CompletionItem(List.of(condition), condition, null, null, icon, 10));
+                }
+                else if (rhsIsReferenced
+                        && joinTableNameMatches(constrainedName, lhs.objectName()))
+                {
+                    // LHS has the FK column; RHS has the referenced PK: lhs.fkCol = rhs.pkCol
+                    String condition = buildJoinCondition(fk.getColumns(), lhs.alias(), rhs.alias());
+                    items.add(new CompletionItem(List.of(condition), condition, null, null, icon, 10));
+                }
+            }
+        }
+        return new CompletionResult(items, false);
+    }
+
+    /**
+     * Returns {@code true} when {@code fkName} and {@code aliasName} refer to the same table. Matches on table name (case-insensitive) and, when both sides have a non-blank schema, also on schema.
+     * Catalog is deliberately ignored to allow cross-database alias matching.
+     */
+    private static boolean joinTableNameMatches(ObjectName fkName, ObjectName aliasName)
+    {
+        if (!fkName.getName()
+                .equalsIgnoreCase(aliasName.getName()))
+        {
+            return false;
+        }
+        String fkSchema = fkName.getSchema();
+        String aliasSchema = aliasName.getSchema();
+        if (fkSchema != null
+                && !fkSchema.isEmpty()
+                && aliasSchema != null
+                && !aliasSchema.isEmpty())
+        {
+            return fkSchema.equalsIgnoreCase(aliasSchema);
+        }
+        return true;
+    }
+
+    /**
+     * Builds a join condition string from FK column mappings. The constrained side (FK column) is prefixed with {@code constrainedAlias} and the referenced side (PK column) with
+     * {@code referencedAlias}. Multi-column FKs are joined with {@code AND}.
+     */
+    private static String buildJoinCondition(List<ForeignKeyColumn> columns, String constrainedAlias, String referencedAlias)
+    {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < columns.size(); i++)
+        {
+            if (i > 0)
+            {
+                sb.append(" AND ");
+            }
+            ForeignKeyColumn col = columns.get(i);
+            String fkPart = constrainedAlias == null
+                    || constrainedAlias.isEmpty() ? col.getConstrainedColumnName()
+                            : constrainedAlias + "." + col.getConstrainedColumnName();
+            String pkPart = referencedAlias == null
+                    || referencedAlias.isEmpty() ? col.getReferencedColumnName()
+                            : referencedAlias + "." + col.getReferencedColumnName();
+            sb.append(fkPart)
+                    .append(" = ")
+                    .append(pkPart);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Return completion items from the provided token offset. The default implementation drives the common completion flow and delegates to protected hook methods. Subclasses may override individual
+     * hooks instead of replacing the whole flow, which makes it easy to support only the parts of completion that are relevant for a given dialect.
+     * <ol>
+     * <li>{@link #getDialectSpecificCompletionItems} — early dialect-specific exit (e.g. stored-procedure parameters)</li>
+     * <li>FK join-condition suggestions via {@link #detectJoinOnContext} + {@link #getFkJoinIcon}</li>
+     * <li>Expression / table-source context detection via {@link #isExpressionContext} / {@link #isTableSourceContext} → {@link #suggestColumns} / {@link #suggestTableSources}</li>
+     * <li>Statement-context resolution (base-class helpers)</li>
+     * <li>{@link #getExpressionFallbackColumns} — dialect-specific pre-C3 column fallback</li>
+     * <li>C3 candidate collection with token-index advancement</li>
+     * <li>{@link #getC3CompletionItems} — dispatch C3 candidates to dialect-specific suggestions</li>
+     * </ol>
+     */
+    protected CompletionResult getCompletionItems(TokenOffset tokenOffset)
+    {
+        // 1. Dialect-specific early completion (e.g. stored-procedure parameters)
+        CompletionResult dialectResult = getDialectSpecificCompletionItems(tokenOffset);
+        if (dialectResult != null)
+        {
+            return dialectResult;
+        }
+
+        // 2. JOIN ON FK suggestions (only when the dialect detects a JOIN ON context)
+        JoinOnContext joinOnCtx = detectJoinOnContext(tokenOffset, connectionContext.getDatabase());
+        if (joinOnCtx != null)
+        {
+            Catalog fkCatalog = crawlService.getCatalog(connectionContext, connectionContext.getDatabase());
+            if (fkCatalog != null)
+            {
+                CompletionResult fkResult = suggestFkJoinConditions(joinOnCtx, fkCatalog, icons.keyIcon);
+                if (!fkResult.getItems()
+                        .isEmpty())
+                {
+                    return fkResult;
+                }
+            }
+        }
+
+        // 3. Expression / table-source context detection → column / table suggestions
+        ParseTree effectiveNode = resolveEffectiveNode(tokenOffset);
+        boolean expressionContextDetected = false;
+        if (isExpressionContext(tokenOffset.tree()))
+        {
+            expressionContextDetected = true;
+            // Use effectiveNode rather than tokenOffset.tree() so that when the caret sits in
+            // a hidden-channel gap (e.g. "WHERE |)" inside an EXISTS subquery) and tree() is
+            // the closing ')' — which is a sibling of the SubqueryContext, not inside it —
+            // collectTableSourceAliases starts from the correct inner anchor (the WHERE keyword)
+            // and finds both inner and outer aliases. When tree() == effectiveNode (the common
+            // case) the behaviour is identical to before.
+            CompletionResult result = suggestColumns(effectiveNode);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        else if (isExpressionContext(tokenOffset.prevTree()))
+        {
+            expressionContextDetected = true;
+            CompletionResult result = suggestColumns(tokenOffset.prevTree());
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        else if (isTableSourceContext(tokenOffset.tree())
+                || isTableSourceContext(tokenOffset.prevTree()))
+        {
+            return suggestTableSources();
+        }
+
+        // 4. Find enclosing statement context (base-class helpers)
+        ParserRuleContext statementCtx = findEnclosingStatementCtx(effectiveNode);
+        if (statementCtx == null)
+        {
+            statementCtx = findNearestPrecedingStatementCtx(tokenOffset.caretOffset());
+        }
+        if (statementCtx == null)
+        {
+            statementCtx = findStatementContextByTokenScan(tokenOffset.suggestTokenIndex());
+        }
+
+        // 5. Dialect-specific expression fallback (e.g. query-spec column suggestions triggered by operators)
+        if (parser != null
+                && tokenOffset.suggestTokenIndex() >= 0)
+        {
+            CompletionResult exprFallback = getExpressionFallbackColumns(tokenOffset, statementCtx, expressionContextDetected);
+            if (exprFallback != null)
+            {
+                return exprFallback;
+            }
+        }
+
+        // 6. Advance C3 token index past whitespace gaps
+        int c3TokenIndex = tokenOffset.suggestTokenIndex();
+        if (c3TokenIndex >= 0
+                && parser != null)
+        {
+            Token suggestToken = parser.getInputStream()
+                    .get(c3TokenIndex);
+            if (suggestToken.getStopIndex() < tokenOffset.caretOffset())
+            {
+                int nextIdx = c3TokenIndex + 1;
+                while (nextIdx < parser.getInputStream()
+                        .size())
+                {
+                    Token next = parser.getInputStream()
+                            .get(nextIdx);
+                    if (next.getChannel() == Token.DEFAULT_CHANNEL)
+                    {
+                        if (next.getType() != Token.EOF)
+                        {
+                            c3TokenIndex = nextIdx;
+                        }
+                        break;
+                    }
+                    nextIdx++;
+                }
+            }
+        }
+
+        // 7. C3 candidate collection and dispatch
+        if (core == null
+                || c3TokenIndex < 0)
+        {
+            return null;
+        }
+        CandidatesCollection candidates = core.collectCandidates(c3TokenIndex, statementCtx);
+        if (candidates.rules.isEmpty())
+        {
+            return null;
+        }
+
+        return getC3CompletionItems(candidates, effectiveNode, statementCtx, tokenOffset);
+    }
 
     @Override
     public CompletionResult getCompletionItems(int offset)
@@ -512,6 +780,70 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         }
 
         return completionResult;
+    }
+
+    /**
+     * Called at the start of the completion flow. Return a non-{@code null} result to short-circuit the common flow with a dialect-specific suggestion (e.g. stored-procedure parameter names). Return
+     * {@code null} to continue with the standard flow.
+     */
+    protected CompletionResult getDialectSpecificCompletionItems(TokenOffset tokenOffset)
+    {
+        return null;
+    }
+
+    /**
+     * Returns {@code true} when {@code tree} (or any of its ancestors) is an expression context in the dialect's grammar. Used to decide whether column suggestions are appropriate at the caret
+     * position. The default returns {@code false}.
+     */
+    protected boolean isExpressionContext(ParseTree tree)
+    {
+        return false;
+    }
+
+    /**
+     * Returns {@code true} when {@code tree} (or any of its ancestors) is a table-source context in the dialect's grammar. Used to decide whether table-source suggestions are appropriate at the caret
+     * position. The default returns {@code false}.
+     */
+    protected boolean isTableSourceContext(ParseTree tree)
+    {
+        return false;
+    }
+
+    /**
+     * Returns column-completion suggestions for the given parse-tree node, or {@code null} when no column suggestions can be determined (e.g. no table-source aliases are visible). The default returns
+     * {@code null}.
+     */
+    protected CompletionResult suggestColumns(ParseTree node)
+    {
+        return null;
+    }
+
+    /**
+     * Returns table-source completion suggestions, or {@code null} when not supported by this dialect. The default returns {@code null}.
+     */
+    protected CompletionResult suggestTableSources()
+    {
+        return null;
+    }
+
+    /**
+     * Called before C3 when {@code parser != null} and a valid suggest-token index is available. Allows dialects to apply grammar-specific column-suggestion fallbacks triggered by operator context
+     * (e.g. the caret follows {@code =} or {@code AND}). Return a non-{@code null} result to short-circuit C3; return {@code null} to continue.
+     *
+     * @param expressionContextDetected {@code true} when {@link #isExpressionContext} fired above but {@link #suggestColumns} returned {@code null}
+     */
+    protected CompletionResult getExpressionFallbackColumns(TokenOffset tokenOffset, ParserRuleContext statementCtx, boolean expressionContextDetected)
+    {
+        return null;
+    }
+
+    /**
+     * Called after C3 candidate collection when {@code candidates.rules} is non-empty. Dispatches the candidates to dialect-specific suggestions (columns, tables, routines, etc.). Return {@code null}
+     * when no suggestions can be produced.
+     */
+    protected CompletionResult getC3CompletionItems(CandidatesCollection candidates, ParseTree effectiveNode, ParserRuleContext statementCtx, TokenOffset tokenOffset)
+    {
+        return null;
     }
 
     /** If we are positioned at an IN expression see if we have anything in Clipboard that can be completed at offset. */

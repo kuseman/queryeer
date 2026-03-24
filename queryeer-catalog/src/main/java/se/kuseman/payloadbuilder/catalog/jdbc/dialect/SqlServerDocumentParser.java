@@ -70,6 +70,7 @@ import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Func_proc_name_data
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Func_proc_name_schemaContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Func_proc_name_server_database_schemaContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Id_Context;
+import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Join_onContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Join_partContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.PredicateContext;
 import se.kuseman.payloadbuilder.jdbc.parser.tsql.TSqlParser.Query_specificationContext;
@@ -239,14 +240,12 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
     // CSON
 
-    private final Icons icons;
     private final Map<String, List<String>> temporaryTables = new HashMap<>();
 
     SqlServerDocumentParser(Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionContext connectionContext,
             ITemplateService templateService)
     {
-        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionContext, templateService);
-        this.icons = icons;
+        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionContext, templateService, icons);
     }
 
     @Override
@@ -328,8 +327,48 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
         String text = tokenStream.getText(new Interval(startTokenIdx, endTokenIdx));
 
+        // Find the equivalent caret position within the mini-document.
+        int startCharOffset = statementCtx.start.getStartIndex();
+        int miniCaret = Math.max(0, caretCharOffset - startCharOffset);
+
+        // If the caret lands immediately after a DOT (e.g. "SELECT a.|" or "WHERE t.|"),
+        // ANTLR's panic-mode recovery sees "a.<keyword>" and detaches the FROM clause from
+        // Query_specificationContext, making table-alias collection impossible. Injecting a
+        // synthetic placeholder identifier right at the caret turns "a." into "a.__x__" which
+        // is a valid SQL expression and prevents the error recovery from firing.
+        //
+        // When the token immediately after the caret is a closing paren (e.g. "WHERE b.|)" inside
+        // an EXISTS subquery), "a.__x__" alone is not a valid T-SQL predicate (predicate requires
+        // a comparison operator). ANTLR's error recovery then tries to complete the predicate by
+        // consuming the ")" — which is the EXISTS closing paren — and breaks the inner
+        // query_specification's structure so that collectTableSourceAliases cannot find the inner
+        // aliases. Injecting a complete predicate suffix ("__x__ = 1") makes the WHERE clause
+        // valid without consuming any surrounding tokens.
+        String miniText = text;
+        if (miniCaret > 0
+                && miniCaret <= text.length()
+                && text.charAt(miniCaret - 1) == '.')
+        {
+            String suffix = "__x__";
+            // Check if the next non-whitespace character after the caret is ')'. If so, inject a
+            // full predicate expression to avoid the invalid-predicate error recovery described above.
+            for (int i = miniCaret; i < text.length(); i++)
+            {
+                char c = text.charAt(i);
+                if (!Character.isWhitespace(c))
+                {
+                    if (c == ')')
+                    {
+                        suffix = "__x__ = 1";
+                    }
+                    break;
+                }
+            }
+            miniText = text.substring(0, miniCaret) + suffix + text.substring(miniCaret);
+        }
+
         // Re-parse the isolated statement text (no error listeners — errors here are expected/ignored)
-        CharStream cs = CharStreams.fromString(text);
+        CharStream cs = CharStreams.fromString(miniText);
         TSqlLexer lex = new TSqlLexer(cs);
         lex.removeErrorListeners();
         TokenStream miniTokenStream = new CommonTokenStream(lex);
@@ -337,9 +376,6 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         miniParser.removeErrorListeners();
         Tsql_fileContext miniFile = miniParser.tsql_file();
 
-        // Find the tree node at the equivalent caret position within the mini-document
-        int startCharOffset = statementCtx.start.getStartIndex();
-        int miniCaret = Math.max(0, caretCharOffset - startCharOffset);
         TokenOffset miniOffset = findTokenFromOffset(miniParser, miniFile, miniCaret);
         if (miniOffset == null)
         {
@@ -441,207 +477,6 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             }
         }
         return null;
-    }
-
-    private boolean isExpression(ParseTree tree)
-    {
-        if (tree == null)
-        {
-            return false;
-        }
-        ParseTree current = tree;
-        while (current != null)
-        {
-            if (current instanceof ExpressionContext
-                    || current instanceof Search_conditionContext
-                    || current instanceof PredicateContext)
-            {
-                return true;
-            }
-            current = current.getParent();
-        }
-        return false;
-    }
-
-    private boolean isTableSourceItem(ParseTree tree)
-    {
-        if (tree == null)
-        {
-            return false;
-        }
-        ParseTree current = tree;
-        while (current != null)
-        {
-            if (current instanceof Table_source_itemContext)
-            {
-                return true;
-            }
-            current = current.getParent();
-        }
-        return false;
-    }
-
-    private CompletionResult suggestColumns(ParseTree node)
-    {
-        Set<TableAlias> aliases = TableSourceAliasCollector.collectTableSourceAliases(node, connectionContext.getDatabase());
-
-        if (aliases.isEmpty())
-        {
-            return null;
-        }
-
-        List<CompletionItem> items = new ArrayList<>();
-        boolean partialResult = false;
-        // Cache catalogs by database name to avoid redundant crawl calls for the same database
-        // (e.g., SELECT * FROM t a JOIN t b would otherwise fetch the catalog twice).
-        Map<String, Catalog> catalogCache = new HashMap<>();
-        for (TableAlias ta : aliases)
-        {
-            String alias = ta.alias();
-            if (ta.type() == TableAliasType.TABLE
-                    || ta.type() == TableAliasType.TABLE_FUNCTION
-                    || ta.type() == TableAliasType.CHANGETABLE)
-            {
-                String dbKey = Objects.toString(ta.objectName()
-                        .getCatalog(), connectionContext.getDatabase());
-                Catalog catalog = catalogCache.computeIfAbsent(dbKey, db -> crawlService.getCatalog(connectionContext, db));
-                if (catalog == null)
-                {
-                    partialResult = true;
-                    continue;
-                }
-
-                boolean onlyPrimaryKey = ta.type() == TableAliasType.CHANGETABLE;
-
-                String schema = ta.objectName()
-                        .getSchema();
-                String name = ta.objectName()
-                        .getName();
-
-                for (TableSource ts : catalog.getTableSources())
-                {
-                    if (!isBlank(schema)
-                            && !CI.equals(schema, ts.getSchema()))
-                    {
-                        continue;
-                    }
-                    else if (!CI.equals(name, ts.getName()))
-                    {
-                        continue;
-                    }
-
-                    for (Column c : ts.getColumns())
-                    {
-                        if (onlyPrimaryKey
-                                && c.getPrimaryKeyName() == null)
-                        {
-                            continue;
-                        }
-
-                        QualifiedName match;
-                        String replacement;
-                        if (isBlank(alias))
-                        {
-                            match = QualifiedName.of(c.getName());
-                            replacement = c.getName();
-                        }
-                        else
-                        {
-                            match = QualifiedName.of(alias, c.getName());
-                            replacement = alias + "." + c.getName();
-                        }
-
-                        items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
-                    }
-                    // Change table
-                    for (String c : ta.extendedColumns())
-                    {
-                        QualifiedName match;
-                        String replacement;
-                        if (isBlank(alias))
-                        {
-                            match = QualifiedName.of(c);
-                            replacement = c;
-                        }
-                        else
-                        {
-                            match = QualifiedName.of(alias, c);
-                            replacement = alias + "." + c;
-                        }
-
-                        items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
-                    }
-                    break;
-                }
-
-            }
-            else if (ta.type() == TableAliasType.TABLEVARIABLE
-                    || ta.type() == TableAliasType.TEMPTABLE
-                    || ta.type() == TableAliasType.SUBQUERY
-                    || ta.type() == TableAliasType.BUILTIN)
-            {
-                List<String> list = (ta.type() == TableAliasType.SUBQUERY
-                        || ta.type() == TableAliasType.BUILTIN) ? ta.extendedColumns()
-                                : temporaryTables.getOrDefault(ta.objectName()
-                                        .getName(), emptyList());
-
-                for (String c : list)
-                {
-                    QualifiedName match;
-                    String replacement;
-                    if (isBlank(alias))
-                    {
-                        match = QualifiedName.of(c);
-                        replacement = c;
-                    }
-                    else
-                    {
-                        match = QualifiedName.of(alias, c);
-                        replacement = alias + "." + c;
-                    }
-
-                    items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
-                }
-            }
-        }
-
-        for (SignatureHint hint : BUILTIN_HINTS.values())
-        {
-            items.add(new CompletionItem(List.of(hint.functionName()), hint.functionName(), null, null, icons.boltIcon, -1));
-        }
-
-        return new CompletionResult(items, partialResult);
-    }
-
-    private CompletionResult suggestTableSources()
-    {
-        Catalog catalog = crawlService.getCatalog(connectionContext, connectionContext.getDatabase());
-        List<CompletionItem> result = new ArrayList<>();
-
-        boolean partialResult = false;
-        if (catalog != null)
-        {
-            result.addAll(catalog.getTableSources()
-                    .stream()
-                    .map(ts -> new CompletionItem(List.of(ts.getSchema(), ts.getName()), ts.getSchema() + "." + ts.getName(), null, null, icons.table, 0))
-                    .collect(toList()));
-        }
-        else
-        {
-            partialResult = true;
-        }
-
-        result.addAll(temporaryTables.keySet()
-                .stream()
-                .map(t -> new CompletionItem(t, null, icons.table))
-                .collect(toList()));
-
-        result.addAll(BUILTIN_TABLE_FUNCTIONS.keySet()
-                .stream()
-                .map(f -> new CompletionItem(f, null, icons.wpformsIcon))
-                .collect(toList()));
-
-        return new CompletionResult(result, partialResult);
     }
 
     /**
@@ -784,6 +619,69 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
 
     /**
+     * Returns true when the caret is positioned inside a dotted qualifier (e.g. after {@code "alias."} or {@code "schema."}) so that column completions are appropriate. Two cases are handled:
+     * <ol>
+     * <li><b>Token IS a DOT</b>: {@code suggestTokenIndex} points directly to the DOT token (caret sits right after the dot in the character stream). The preceding default-channel token must be an
+     * identifier.</li>
+     * <li><b>Token is hidden-channel, preceded by a DOT</b>: ANTLR's single-token-insertion error recovery inserts a synthetic identifier between the DOT and the next real token (e.g. {@code FROM}).
+     * The synthetic token is not in the character stream, so {@link AntlrDocumentParser#findTokenFromOffset} resolves the caret to a hidden-channel space token that comes before the synthetic ID.
+     * Here we detect that pattern by checking that the nearest preceding default-channel token is a DOT and the one before that is an identifier.</li>
+     * </ol>
+     * NOTE: this check fires AFTER {@link #isTableSourceContext} has already returned {@code false}, so table-source positions like {@code "FROM dbo."} are handled earlier in the flow and will not
+     * accidentally reach this check.
+     */
+    private static boolean isInsideDottedQualifier(Parser parser, int tokenIndex)
+    {
+        Token token = parser.getInputStream()
+                .get(tokenIndex);
+        // Case 1: the suggest token itself is a DOT
+        if (token.getType() == TSqlLexer.DOT)
+        {
+            for (int i = tokenIndex - 1; i >= 0; i--)
+            {
+                Token t = parser.getInputStream()
+                        .get(i);
+                if (t.getChannel() != Token.DEFAULT_CHANNEL)
+                {
+                    continue;
+                }
+                return t.getType() == TSqlLexer.ID;
+            }
+            return false;
+        }
+        // Case 2: hidden-channel token whose nearest preceding DEFAULT_CHANNEL token is a DOT.
+        // This happens when ANTLR's single-token-insertion error recovery inserts a synthetic
+        // identifier after the dot (e.g. "SELECT a. FROM" → synthetic ID inserted between "." and
+        // "FROM"), causing findTokenFromOffset to land on the space token rather than the dot.
+        for (int i = tokenIndex - 1; i >= 0; i--)
+        {
+            Token t = parser.getInputStream()
+                    .get(i);
+            if (t.getChannel() != Token.DEFAULT_CHANNEL)
+            {
+                continue;
+            }
+            if (t.getType() != TSqlLexer.DOT)
+            {
+                return false;
+            }
+            // Nearest preceding DEFAULT_CHANNEL token is a DOT; check the one before it is an ID
+            for (int j = i - 1; j >= 0; j--)
+            {
+                Token u = parser.getInputStream()
+                        .get(j);
+                if (u.getChannel() != Token.DEFAULT_CHANNEL)
+                {
+                    continue;
+                }
+                return u.getType() == TSqlLexer.ID;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    /**
      * Returns true if the token at {@code tokenIndex} is a COMMA or an expression-preceding operator (e.g. {@code =}, {@code AND}, {@code +}), or if the nearest preceding default-channel token is one
      * of those. The latter handles the case where the caret lands exactly on the first character of a token that follows such a token (e.g. "LEFT(col, |)" where findTokenFromOffset returns the ")"
      * token, or "col = |" where findTokenFromOffset returns EOF).
@@ -903,7 +801,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
 
     @Override
-    protected CompletionResult getCompletionItems(TokenOffset tokenOffset)
+    protected CompletionResult getDialectSpecificCompletionItems(TokenOffset tokenOffset)
     {
         // Check for stored procedure parameter context using offset-based tree traversal.
         // Parent-chain walking is unreliable after a trailing comma because ANTLR error recovery
@@ -913,71 +811,249 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                 : null;
         if (execBody != null)
         {
-            CompletionResult paramResult = suggestProcedureParameters(execBody);
-            if (paramResult != null)
+            return suggestProcedureParameters(execBody);
+        }
+        // Dotted qualifier (e.g. "a." or "b." inside an EXISTS subquery):
+        // The original broken tree may not correctly connect the DOT to the inner
+        // query_specification scope (ANTLR error recovery can detach the DOT or put it
+        // inside an error node). Use mini-parse to get a clean tree node properly anchored
+        // inside the current subquery, so collectTableSourceAliases finds the inner alias.
+        // Guard: skip table-source positions (e.g. "FROM dbo.") where isTableSourceContext fires.
+        if (parser != null
+                && tokenOffset.suggestTokenIndex() >= 0
+                && isInsideDottedQualifier(parser, tokenOffset.suggestTokenIndex())
+                && !isTableSourceContext(tokenOffset.tree())
+                && !isTableSourceContext(tokenOffset.prevTree()))
+        {
+            ParseTree effectiveNodeForCtx = resolveEffectiveNode(tokenOffset);
+            ParserRuleContext statementCtxForDot = findEnclosingStatementCtx(effectiveNodeForCtx);
+            if (statementCtxForDot == null)
             {
-                return paramResult;
+                statementCtxForDot = findNearestPrecedingStatementCtx(tokenOffset.caretOffset());
+            }
+            if (statementCtxForDot != null)
+            {
+                ParseTree miniNode = miniParseStatementNode(statementCtxForDot, tokenOffset.caretOffset());
+                if (miniNode != null)
+                {
+                    return suggestColumns(miniNode);
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
+    protected boolean isExpressionContext(ParseTree tree)
+    {
+        if (tree == null)
+        {
+            return false;
+        }
+        ParseTree current = tree;
+        while (current != null)
+        {
+            if (current instanceof ExpressionContext
+                    || current instanceof Search_conditionContext
+                    || current instanceof PredicateContext)
+            {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    @Override
+    protected boolean isTableSourceContext(ParseTree tree)
+    {
+        if (tree == null)
+        {
+            return false;
+        }
+        ParseTree current = tree;
+        while (current != null)
+        {
+            if (current instanceof Table_source_itemContext)
+            {
+                return true;
+            }
+            current = current.getParent();
+        }
+        return false;
+    }
+
+    @Override
+    protected CompletionResult suggestColumns(ParseTree node)
+    {
+        Set<TableAlias> aliases = TableSourceAliasCollector.collectTableSourceAliases(node, connectionContext.getDatabase());
+
+        if (aliases.isEmpty())
+        {
+            return null;
+        }
+
+        List<CompletionItem> items = new ArrayList<>();
+        boolean partialResult = false;
+        // Cache catalogs by database name to avoid redundant crawl calls for the same database
+        // (e.g., SELECT * FROM t a JOIN t b would otherwise fetch the catalog twice).
+        Map<String, Catalog> catalogCache = new HashMap<>();
+        for (TableAlias ta : aliases)
+        {
+            String alias = ta.alias();
+            if (ta.type() == TableAliasType.TABLE
+                    || ta.type() == TableAliasType.TABLE_FUNCTION
+                    || ta.type() == TableAliasType.CHANGETABLE)
+            {
+                String dbKey = Objects.toString(ta.objectName()
+                        .getCatalog(), connectionContext.getDatabase());
+                Catalog catalog = catalogCache.computeIfAbsent(dbKey, db -> crawlService.getCatalog(connectionContext, db));
+                if (catalog == null)
+                {
+                    partialResult = true;
+                    continue;
+                }
+
+                boolean onlyPrimaryKey = ta.type() == TableAliasType.CHANGETABLE;
+
+                String schema = ta.objectName()
+                        .getSchema();
+                String name = ta.objectName()
+                        .getName();
+
+                for (TableSource ts : catalog.getTableSources())
+                {
+                    if (!isBlank(schema)
+                            && !CI.equals(schema, ts.getSchema()))
+                    {
+                        continue;
+                    }
+                    else if (!CI.equals(name, ts.getName()))
+                    {
+                        continue;
+                    }
+
+                    for (Column c : ts.getColumns())
+                    {
+                        if (onlyPrimaryKey
+                                && c.getPrimaryKeyName() == null)
+                        {
+                            continue;
+                        }
+
+                        QualifiedName match;
+                        String replacement;
+                        if (isBlank(alias))
+                        {
+                            match = QualifiedName.of(c.getName());
+                            replacement = c.getName();
+                        }
+                        else
+                        {
+                            match = QualifiedName.of(alias, c.getName());
+                            replacement = alias + "." + c.getName();
+                        }
+
+                        items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
+                    }
+                    // Change table
+                    for (String c : ta.extendedColumns())
+                    {
+                        QualifiedName match;
+                        String replacement;
+                        if (isBlank(alias))
+                        {
+                            match = QualifiedName.of(c);
+                            replacement = c;
+                        }
+                        else
+                        {
+                            match = QualifiedName.of(alias, c);
+                            replacement = alias + "." + c;
+                        }
+
+                        items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
+                    }
+                    break;
+                }
+
+            }
+            else if (ta.type() == TableAliasType.TABLEVARIABLE
+                    || ta.type() == TableAliasType.TEMPTABLE
+                    || ta.type() == TableAliasType.SUBQUERY
+                    || ta.type() == TableAliasType.BUILTIN)
+            {
+                List<String> list = (ta.type() == TableAliasType.SUBQUERY
+                        || ta.type() == TableAliasType.BUILTIN) ? ta.extendedColumns()
+                                : temporaryTables.getOrDefault(ta.objectName()
+                                        .getName(), emptyList());
+
+                for (String c : list)
+                {
+                    QualifiedName match;
+                    String replacement;
+                    if (isBlank(alias))
+                    {
+                        match = QualifiedName.of(c);
+                        replacement = c;
+                    }
+                    else
+                    {
+                        match = QualifiedName.of(alias, c);
+                        replacement = alias + "." + c;
+                    }
+
+                    items.add(new CompletionItem(match.getParts(), replacement, null, null, icons.columns, 0));
+                }
             }
         }
 
-        // Resolve the effective tree node for context detection and column suggestions.
-        // Prefer the current token, but fall back to prevTree when current is EOF or an ErrorNode
-        // (which happens when the caret is past the last real token or in a parse-error recovery node).
-        ParseTree effectiveNode = resolveEffectiveNode(tokenOffset);
-
-        // Check found tokens parents if we can detect context.
-        // Only return early when suggestColumns actually finds column items (returns non-null).
-        // If it returns null (parse errors disconnected the node from its Select_statementContext),
-        // fall through to the query-spec fallback or C3's mini-parse fallback.
-        //
-        // Track whether either tree node was identified as an expression. This flag extends the
-        // query-spec fallback (below) to cover cases where isExpression returns true but
-        // suggestColumns returns null because error recovery disconnected the caret token from the
-        // enclosing Query_specificationContext. A typical example is "WHERE left(t.c|" where the
-        // partial identifier 't.c' is inside a function call — isExpression fires on the 'c' node,
-        // but collectTableSourceAliases can't walk up to the SELECT's FROM clause.
-        boolean expressionContextDetected = false;
-        if (isExpression(tokenOffset.tree()))
+        for (SignatureHint hint : BUILTIN_HINTS.values())
         {
-            expressionContextDetected = true;
-            CompletionResult result = suggestColumns(tokenOffset.tree());
-            if (result != null)
-            {
-                return result;
-            }
-        }
-        else if (isExpression(tokenOffset.prevTree()))
-        {
-            expressionContextDetected = true;
-            CompletionResult result = suggestColumns(tokenOffset.prevTree());
-            if (result != null)
-            {
-                return result;
-            }
-        }
-        else if (isTableSourceItem(tokenOffset.tree()))
-        {
-            return suggestTableSources();
+            items.add(new CompletionItem(List.of(hint.functionName()), hint.functionName(), null, null, icons.boltIcon, -1));
         }
 
-        // Find the statement context that contains the caret to limit C3 to the current statement.
-        // This isolates completion from parse errors in other statements and speeds up the ATN walk
-        // by starting from a token within the current statement rather than from the grammar root.
-        // When parse errors above the caret restructure the tree (making parent-chain walking fail),
-        // fall back to the pre-collected list and search by character offset.
-        ParserRuleContext statementCtx = findEnclosingStatementCtx(effectiveNode);
-        if (statementCtx == null)
+        return new CompletionResult(items, partialResult);
+    }
+
+    @Override
+    protected CompletionResult suggestTableSources()
+    {
+        Catalog catalog = crawlService.getCatalog(connectionContext, connectionContext.getDatabase());
+        List<CompletionItem> result = new ArrayList<>();
+
+        boolean partialResult = false;
+        if (catalog != null)
         {
-            statementCtx = findNearestPrecedingStatementCtx(tokenOffset.caretOffset());
+            result.addAll(catalog.getTableSources()
+                    .stream()
+                    .map(ts -> new CompletionItem(List.of(ts.getSchema(), ts.getName()), ts.getSchema() + "." + ts.getName(), null, null, icons.table, 0))
+                    .collect(toList()));
         }
-        if (statementCtx == null)
+        else
         {
-            statementCtx = findStatementContextByTokenScan(tokenOffset.suggestTokenIndex());
+            partialResult = true;
         }
 
+        result.addAll(temporaryTables.keySet()
+                .stream()
+                .map(t -> new CompletionItem(t, null, icons.table))
+                .collect(toList()));
+
+        result.addAll(BUILTIN_TABLE_FUNCTIONS.keySet()
+                .stream()
+                .map(f -> new CompletionItem(f, null, icons.wpformsIcon))
+                .collect(toList()));
+
+        return new CompletionResult(result, partialResult);
+    }
+
+    @Override
+    protected CompletionResult getExpressionFallbackColumns(TokenOffset tokenOffset, ParserRuleContext statementCtx, boolean expressionContextDetected)
+    {
         // When ANTLR's panic-mode error recovery disconnects the caret token from the main
         // parse tree (e.g., "LEFT(col, |)" causes the comma and close-paren to become error
-        // nodes in a separate BatchContext), isExpression above returns false even though the
+        // nodes in a separate BatchContext), isExpressionContext above returns false even though the
         // caret is logically inside a scalar function argument. In this case the SELECT part
         // of the statement is still in a valid Query_specificationContext whose table_sources
         // are intact. Search the statement-context subtrees for a Query_specificationContext
@@ -999,23 +1075,39 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         // nearest preceding default-channel token detects this situation and triggers the same
         // query-spec fallback.
         //
-        // expressionContextDetected extends the same fallback to the case where isExpression()
+        // expressionContextDetected extends the same fallback to the case where isExpressionContext()
         // returned true above but suggestColumns() returned null because error recovery detached
         // the caret token from the enclosing Query_specificationContext.
         //
-        // isInsideFunctionArg extends it further to the case where isExpression() returned FALSE
+        // isInsideFunctionArg extends it further to the case where isExpressionContext() returned FALSE
         // (i.e. ANTLR's error recovery disconnected the caret's identifier entirely from any
         // ExpressionContext) but the token stream clearly shows a function-argument position:
         // an identifier preceded (through zero or more DOT+ID steps) by an open paren '('.
         // Examples: "left(c|" (directly after paren) and "left(t.c|" (dotted qualifier).
         // This check deliberately does NOT fire for bare WHERE-clause identifiers like "WHERE t.c|"
         // (preceded by WHERE keyword, not '('), keeping table-source completions unaffected.
-        if (parser != null
-                && tokenOffset.suggestTokenIndex() >= 0
-                && (expressionContextDetected
-                        || isPrecededByOrIsExpressionOperator(parser, tokenOffset.suggestTokenIndex())
-                        || isInsideFunctionArg(parser, tokenOffset.suggestTokenIndex())))
+        if (expressionContextDetected
+                || isPrecededByOrIsExpressionOperator(parser, tokenOffset.suggestTokenIndex())
+                || isInsideFunctionArg(parser, tokenOffset.suggestTokenIndex())
+                || isInsideDottedQualifier(parser, tokenOffset.suggestTokenIndex()))
         {
+            // When the caret is right after a dot (e.g. "b." inside an EXISTS subquery),
+            // use miniParseStatementNode first so that collectTableSourceAliases starts from
+            // the correct inner position and finds the inner alias rather than only the outer
+            // query's aliases (which findQuerySpecInSubtree BFS would return first).
+            if (statementCtx != null
+                    && isInsideDottedQualifier(parser, tokenOffset.suggestTokenIndex()))
+            {
+                ParseTree miniNode = miniParseStatementNode(statementCtx, tokenOffset.caretOffset());
+                if (miniNode != null)
+                {
+                    CompletionResult miniResult = suggestColumns(miniNode);
+                    if (miniResult != null)
+                    {
+                        return miniResult;
+                    }
+                }
+            }
             Query_specificationContext querySpec = null;
             if (statementCtx != null)
             {
@@ -1037,61 +1129,31 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             }
             if (querySpec != null)
             {
-                CompletionResult result = suggestColumns(querySpec);
-                if (result != null)
+                CompletionResult colResult = suggestColumns(querySpec);
+                if (colResult != null)
                 {
-                    return result;
+                    return colResult;
                 }
-            }
-        }
-
-        // When findTokenFromOffset matched a token whose stop is before the caret offset, the caret
-        // is in the whitespace gap AFTER that token (e.g. after a comma: "LEFT(col, |)"). C3 uses
-        // caretTokenIndex as the position it should NOT yet consume, so with the comma as the index
-        // it only sees tokens before the comma and cannot suggest expressions for the next argument.
-        // Advance to the next default-channel token so C3 sees the comma as consumed and correctly
-        // suggests RULE_expression for the argument position.
-        //
-        // Exception: do NOT advance to EOF. When the caret is at the very end of the last real token
-        // (e.g. "LEFT(c|" at end-of-input), stop+1 == caretOffset so the condition fires, but the
-        // only next default-channel token is EOF. Advancing to EOF makes C3 ask "what follows the
-        // complete expression LEFT(c?" (answer: ")" or ",") instead of "what is expected at the
-        // position of c?" (answer: RULE_expression). Keep c3TokenIndex on the real token so C3
-        // correctly returns RULE_expression and column suggestions follow via the mini-parse path.
-        int c3TokenIndex = tokenOffset.suggestTokenIndex();
-        if (c3TokenIndex >= 0
-                && parser != null)
-        {
-            Token suggestToken = parser.getInputStream()
-                    .get(c3TokenIndex);
-            if (suggestToken.getStopIndex() < tokenOffset.caretOffset())
-            {
-                int nextIdx = c3TokenIndex + 1;
-                while (nextIdx < parser.getInputStream()
-                        .size())
+                // suggestColumns returned null — likely because table_sources is null on the
+                // querySpec due to ANTLR error recovery detaching the FROM clause (e.g. incomplete
+                // SELECT list like "SELECT a. FROM ..."). Re-parse the statement in isolation via
+                // miniParseStatementNode to obtain a clean tree where FROM is properly attached.
+                if (statementCtx != null)
                 {
-                    Token next = parser.getInputStream()
-                            .get(nextIdx);
-                    if (next.getChannel() == Token.DEFAULT_CHANNEL)
+                    ParseTree miniNode = miniParseStatementNode(statementCtx, tokenOffset.caretOffset());
+                    if (miniNode != null)
                     {
-                        if (next.getType() != Token.EOF)
-                        {
-                            c3TokenIndex = nextIdx;
-                        }
-                        break;
+                        return suggestColumns(miniNode);
                     }
-                    nextIdx++;
                 }
             }
         }
+        return null;
+    }
 
-        // Try antlr-c3
-        CandidatesCollection candidates = core.collectCandidates(c3TokenIndex, statementCtx);
-        if (candidates.rules.isEmpty())
-        {
-            return null;
-        }
-
+    @Override
+    protected CompletionResult getC3CompletionItems(CandidatesCollection candidates, ParseTree effectiveNode, ParserRuleContext statementCtx, TokenOffset tokenOffset)
+    {
         if (candidates.rules.containsKey(TSqlParser.RULE_table_source_item))
         {
             return suggestTableSources();
@@ -1165,6 +1227,68 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     protected int getInTokenId()
     {
         return TSqlLexer.IN;
+    }
+
+    @Override
+    protected JoinOnContext detectJoinOnContext(TokenOffset tokenOffset, String database)
+    {
+        // Trigger only when prevTree is the ON keyword of a join_on clause
+        if (!(tokenOffset.prevTree() instanceof TerminalNode prevTn)
+                || prevTn.getSymbol()
+                        .getType() != TSqlLexer.ON)
+        {
+            return null;
+        }
+
+        // Walk up to confirm the ON belongs to a join_on (not e.g. CREATE INDEX ... ON)
+        Join_onContext joinOn = null;
+        ParseTree current = prevTn;
+        while (current != null)
+        {
+            if (current instanceof Join_onContext joc)
+            {
+                joinOn = joc;
+                break;
+            }
+            current = current.getParent();
+        }
+        if (joinOn == null)
+        {
+            return null;
+        }
+
+        // Extract the RHS table alias from the join_on's table_source
+        if (joinOn.source == null)
+        {
+            return null;
+        }
+        Table_source_itemContext rhsItem = joinOn.source.table_source_item();
+        if (rhsItem == null
+                || rhsItem.full_table_name() == null)
+        {
+            // Subqueries, functions, etc. — no FK suggestion possible
+            return null;
+        }
+        Full_table_nameContext ftc = rhsItem.full_table_name();
+        String rhsAlias = rhsItem.as_table_alias() != null ? rhsItem.as_table_alias()
+                .getText()
+                : "";
+        String rhsDb = ftc.database != null ? unquote(ftc.database.getText())
+                : database;
+        String rhsSchema = ftc.schema != null ? unquote(ftc.schema.getText())
+                : "";
+        String rhsTable = ftc.table != null ? unquote(ftc.table.getText())
+                : "";
+        if (rhsTable.isEmpty())
+        {
+            return null;
+        }
+
+        ObjectName rhsObjName = new ObjectName(rhsDb, rhsSchema, rhsTable);
+        TableAlias rhsTableAlias = new TableAlias(rhsAlias, rhsObjName, emptyList(), TableAliasType.TABLE);
+        // Collect all visible aliases at the caret (includes both LHS and RHS tables)
+        Set<TableAlias> allAliases = TableSourceAliasCollector.collectTableSourceAliases(prevTn, database);
+        return new JoinOnContext(rhsTableAlias, allAliases);
     }
 
     @Override

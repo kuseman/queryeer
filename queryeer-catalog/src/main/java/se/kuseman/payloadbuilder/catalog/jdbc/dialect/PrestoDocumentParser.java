@@ -21,6 +21,7 @@ import com.queryeer.api.service.ITemplateService;
 
 import se.kuseman.payloadbuilder.catalog.jdbc.CatalogCrawlService;
 import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
+import se.kuseman.payloadbuilder.catalog.jdbc.Icons;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
@@ -34,9 +35,9 @@ import se.kuseman.payloadbuilder.jdbc.parser.presto.SqlBaseParser.TableNameConte
 class PrestoDocumentParser extends AntlrDocumentParser<SqlBaseParser.SingleStatementContext>
 {
     PrestoDocumentParser(IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionContext connectionContext,
-            ITemplateService templateService)
+            ITemplateService templateService, Icons icons)
     {
-        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionContext, templateService);
+        super(eventBus, queryActionsConfigurable, catalogCrawler, connectionContext, templateService, icons);
     }
 
     @Override
@@ -122,12 +123,6 @@ class PrestoDocumentParser extends AntlrDocumentParser<SqlBaseParser.SingleState
     protected Pair<Interval, ObjectName> getProcedureFunction(ParserRuleContext ctx)
     {
         return null;
-    }
-
-    @Override
-    protected CompletionResult getCompletionItems(TokenOffset tokenOffset)
-    {
-        return CompletionResult.EMPTY;
     }
 
     @Override

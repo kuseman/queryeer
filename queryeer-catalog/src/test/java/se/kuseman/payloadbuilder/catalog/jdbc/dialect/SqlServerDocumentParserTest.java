@@ -699,6 +699,90 @@ class SqlServerDocumentParserTest extends AntlrDocumentParserTestBase
     }
 
     // -----------------------------------------------------------------
+    // FK / PK join-condition autocomplete tests
+    // -----------------------------------------------------------------
+
+    @Test
+    void test_joinCondition_rhsHasFk_suggestsCondition()
+    {
+        // tableB has FK tableA_id -> tableA.id
+        // Caret is right after ON — should suggest "b.tableA_id = a.id"
+        when(crawlService.getCatalog(any(), anyString())).thenReturn(FK_CATALOG);
+        String query = "SELECT * FROM dbo.tableA a INNER JOIN dbo.tableB b ON ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        assertEquals(List.of("b.tableA_id = a.id"), replacements(result));
+    }
+
+    @Test
+    void test_joinCondition_lhsHasFk_suggestsCondition()
+    {
+        // tableB has FK tableA_id -> tableA.id.
+        // Here tableA is being joined onto tableB (RHS is tableA, LHS is tableB).
+        // Should suggest "b.tableA_id = a.id" (LHS alias is FK side, RHS alias is PK side).
+        when(crawlService.getCatalog(any(), anyString())).thenReturn(FK_CATALOG);
+        String query = "SELECT * FROM dbo.tableB b INNER JOIN dbo.tableA a ON ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        assertEquals(List.of("b.tableA_id = a.id"), replacements(result));
+    }
+
+    @Test
+    void test_joinCondition_noFk_fallsBackToColumnSuggestions()
+    {
+        // TABLE_CATALOG has no FK relationships — should fall back to regular column suggestions.
+        useTableCatalog();
+        String query = "SELECT * FROM dbo.tableA a INNER JOIN dbo.tableB b ON ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        // No FK items — regular column suggestions should be present
+        List<String> items = replacements(result);
+        assertTrue(items.stream()
+                .anyMatch(r -> r != null
+                        && r.startsWith("a.")),
+                "Expected column suggestions for alias a");
+        assertTrue(items.stream()
+                .anyMatch(r -> r != null
+                        && r.startsWith("b.")),
+                "Expected column suggestions for alias b");
+    }
+
+    @Test
+    void test_joinCondition_multipleJoins_suggestsAllRelevantFks()
+    {
+        // tableC has FK to tableA and FK to tableB.
+        // Query joins tableA, tableB, then tableC.
+        // Caret after third ON — should suggest both FK conditions.
+        when(crawlService.getCatalog(any(), anyString())).thenReturn(FK_CATALOG);
+        String query = "SELECT * FROM dbo.tableA a INNER JOIN dbo.tableB b ON b.tableA_id = a.id INNER JOIN dbo.tableC c ON ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        List<String> items = replacements(result);
+        assertTrue(items.contains("c.tableA_id = a.id"), "Expected FK condition c.tableA_id = a.id");
+        assertTrue(items.contains("c.tableB_id = b.id"), "Expected FK condition c.tableB_id = b.id");
+    }
+
+    @Test
+    void test_joinCondition_caretNotAfterOn_noFkSuggestions()
+    {
+        // Caret is after "=" (partial condition already typed) — FK suggestion must NOT fire.
+        // Regular column suggestions should be returned instead.
+        when(crawlService.getCatalog(any(), anyString())).thenReturn(FK_CATALOG);
+        String query = "SELECT * FROM dbo.tableA a INNER JOIN dbo.tableB b ON b.tableA_id = ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        // FK join condition items start with alias prefix; regular column suggestions also start with alias.
+        // The critical thing is that no "x = y" items are present — only single-column alias.col items.
+        List<String> items = replacements(result);
+        assertTrue(items.stream().noneMatch(r -> r != null && r.contains(" = ")), "FK join condition items must not appear when caret is after '='");
+    }
+
+    // -----------------------------------------------------------------
     // Private helper — parse with TSql grammar directly
     // -----------------------------------------------------------------
 

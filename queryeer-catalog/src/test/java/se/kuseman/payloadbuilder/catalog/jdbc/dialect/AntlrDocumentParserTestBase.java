@@ -31,6 +31,9 @@ import se.kuseman.payloadbuilder.catalog.jdbc.IConnectionContext;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.AntlrDocumentParser.TokenOffset;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Catalog;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Column;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.ForeignKey;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.ForeignKeyColumn;
+import se.kuseman.payloadbuilder.catalog.jdbc.model.ObjectName;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.Routine;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.RoutineParameter;
 import se.kuseman.payloadbuilder.catalog.jdbc.model.TableSource;
@@ -60,6 +63,46 @@ abstract class AntlrDocumentParserTestBase
             List.of(new Routine("", "dbo", "MyProc", Routine.Type.PROCEDURE,
                     List.of(new RoutineParameter("@param1", "varchar", 50, 0, 0, true, false), new RoutineParameter("@param2", "int", 0, 10, 0, false, false)))),
             emptyList(), emptyList(), emptyList());
+
+    /**
+     * Catalog with FK relationships:
+     * <ul>
+     * <li>dbo.tableA: id int PK, name varchar</li>
+     * <li>dbo.tableB: id int PK, tableA_id int (FK → tableA.id), value varchar</li>
+     * <li>dbo.tableC: id int PK, tableA_id int (FK → tableA.id), tableB_id int (FK → tableB.id)</li>
+     * </ul>
+     */
+    //@formatter:off
+    protected static final Catalog FK_CATALOG = new Catalog("testdb",
+            List.of(
+                new TableSource("testdb", "dbo", "tableA", TableSource.Type.TABLE,
+                    List.of(new Column("id", "int", 0, 10, 0, false, "PK_tableA"),
+                            new Column("name", "varchar", 100, 0, 0, true, null))),
+                new TableSource("testdb", "dbo", "tableB", TableSource.Type.TABLE,
+                    List.of(new Column("id", "int", 0, 10, 0, false, "PK_tableB"),
+                            new Column("tableA_id", "int", 0, 10, 0, true, null),
+                            new Column("value", "varchar", 50, 0, 0, true, null))),
+                new TableSource("testdb", "dbo", "tableC", TableSource.Type.TABLE,
+                    List.of(new Column("id", "int", 0, 10, 0, false, "PK_tableC"),
+                            new Column("tableA_id", "int", 0, 10, 0, true, null),
+                            new Column("tableB_id", "int", 0, 10, 0, true, null)))),
+            emptyList(),
+            emptyList(),
+            List.of(
+                new ForeignKey(new ObjectName("testdb", "dbo", "FK_tableB_tableA"),
+                    List.of(new ForeignKeyColumn(
+                        new ObjectName("testdb", "dbo", "tableB"), "tableA_id",
+                        new ObjectName("testdb", "dbo", "tableA"), "id"))),
+                new ForeignKey(new ObjectName("testdb", "dbo", "FK_tableC_tableA"),
+                    List.of(new ForeignKeyColumn(
+                        new ObjectName("testdb", "dbo", "tableC"), "tableA_id",
+                        new ObjectName("testdb", "dbo", "tableA"), "id"))),
+                new ForeignKey(new ObjectName("testdb", "dbo", "FK_tableC_tableB"),
+                    List.of(new ForeignKeyColumn(
+                        new ObjectName("testdb", "dbo", "tableC"), "tableB_id",
+                        new ObjectName("testdb", "dbo", "tableB"), "id")))),
+            emptyList());
+    //@formatter:on
 
     /** Factory method — subclasses create and return the parser under test. */
     protected abstract AntlrDocumentParser<?> createParser();
@@ -418,6 +461,138 @@ abstract class AntlrDocumentParserTestBase
     }
 
     // -----------------------------------------------------------------
+    // Dot-trigger tests (caret exactly after a dot)
+    // -----------------------------------------------------------------
+
+    @Test
+    void test_columnSuggestions_dotTrigger_whereClause_simpleWhere()
+    {
+        useTableCatalog();
+        // Caret is immediately after the dot when the WHERE clause contains only "a." with
+        // nothing after it — the user just typed the alias qualifier. ANTLR's error recovery
+        // for the incomplete expression must not prevent column completions from being produced.
+        String query = "SELECT * FROM dbo.tableA a WHERE a.";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result, "Expected column completions when caret is exactly after dot in WHERE");
+        List<String> cols = aliasedColumns(result, "a");
+        assertTrue(cols.contains("a.col1"), "Expected a.col1, got: " + cols + ", all: " + replacements(result));
+        assertTrue(cols.contains("a.col2"), "Expected a.col2");
+    }
+
+    @Test
+    void test_columnSuggestions_dotTrigger_selectList()
+    {
+        useTableCatalog();
+        // Caret is immediately after the dot in the SELECT list: "SELECT a. FROM ..."
+        // The expression context should be intact here (SELECT list is always an expression).
+        String query = "SELECT a. FROM dbo.tableA a";
+        int caretOffset = query.indexOf("a.") + 2; // right after the dot
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected column completions when caret is exactly after dot in SELECT list");
+        List<String> cols = aliasedColumns(result, "a");
+        assertTrue(cols.contains("a.col1"), "Expected a.col1, got: " + cols + ", all: " + replacements(result));
+        assertTrue(cols.contains("a.col2"), "Expected a.col2");
+    }
+
+    @Test
+    void test_columnSuggestions_dotTrigger_whereClause_multipleJoins()
+    {
+        useTableCatalog();
+        // Caret after the dot in WHERE with multiple joined tables in scope.
+        // All aliased columns from all tables in scope should be offered.
+        String query = "SELECT * FROM dbo.tableA a INNER JOIN dbo.tableB b ON a.col1 = b.id WHERE b.";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result, "Expected column completions when caret is exactly after dot in multi-join WHERE");
+        List<String> colsB = aliasedColumns(result, "b");
+        assertTrue(colsB.contains("b.id"), "Expected b.id, got: " + colsB + ", all: " + replacements(result));
+        assertTrue(colsB.contains("b.name"), "Expected b.name");
+    }
+
+    // -----------------------------------------------------------------
+    // EXISTS / NOT EXISTS subquery completion tests
+    // -----------------------------------------------------------------
+
+    @Test
+    void test_columnSuggestions_existsSubquery_whereKeyword()
+    {
+        useTableCatalog();
+        // Caret is in the whitespace right after WHERE inside an EXISTS subquery — the next
+        // visible token is ')' which closes the EXISTS. Before the fix, suggestColumns was
+        // called with ')' as the anchor; ')' is a sibling of SubqueryContext (not inside it),
+        // so collectTableSourceAliases only found outer aliases (a). The fix uses effectiveNode
+        // (the WHERE keyword, inside the inner subquery) so both inner (b) and outer (a) aliases
+        // are found.
+        //@formatter:off
+        String query = "select *\n"
+                + "from dbo.tableA a\n"
+                + "where exists\n"
+                + "(\n"
+                + "    select 1\n"
+                + "    from dbo.tableB b\n"
+                + "    where \n"
+                + ")\n";
+        //@formatter:on
+        int caretOffset = query.indexOf("    where \n") + "    where ".length();
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected column completions inside EXISTS subquery WHERE");
+        List<String> colsB = aliasedColumns(result, "b");
+        List<String> colsA = aliasedColumns(result, "a");
+        assertTrue(colsB.contains("b.id"), "Expected inner alias b.id inside EXISTS WHERE, got: " + colsB + ", all: " + replacements(result));
+        assertTrue(colsA.contains("a.col1"), "Expected outer alias a.col1 visible inside EXISTS WHERE");
+    }
+
+    @Test
+    void test_columnSuggestions_notExistsSubquery_whereKeyword()
+    {
+        useTableCatalog();
+        // Same scenario as EXISTS but with NOT EXISTS — inner and outer aliases must both be visible.
+        //@formatter:off
+        String query = "select *\n"
+                + "from dbo.tableA a\n"
+                + "where not exists\n"
+                + "(\n"
+                + "    select 1\n"
+                + "    from dbo.tableB b\n"
+                + "    where \n"
+                + ")\n";
+        //@formatter:on
+        int caretOffset = query.indexOf("    where \n") + "    where ".length();
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected column completions inside NOT EXISTS subquery WHERE");
+        List<String> colsB = aliasedColumns(result, "b");
+        assertTrue(colsB.contains("b.id"), "Expected inner alias b.id inside NOT EXISTS WHERE, got: " + colsB + ", all: " + replacements(result));
+    }
+
+    @Test
+    void test_columnSuggestions_existsSubquery_partialExpression()
+    {
+        useTableCatalog();
+        // Caret is at the end of a partial expression inside the EXISTS subquery WHERE clause —
+        // both inner and outer aliases must be visible.
+        //@formatter:off
+        String query = "select *\n"
+                + "from dbo.tableA a\n"
+                + "where exists\n"
+                + "(\n"
+                + "    select 1\n"
+                + "    from dbo.tableB b\n"
+                + "    where b.\n"
+                + ")\n";
+        //@formatter:on
+        int caretOffset = query.indexOf("    where b.") + "    where b.".length();
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected column completions after 'b.' inside EXISTS subquery");
+        List<String> colsB = aliasedColumns(result, "b");
+        assertTrue(colsB.contains("b.id"), "Expected b.id after dot inside EXISTS, got: " + colsB + ", all: " + replacements(result));
+    }
+
+    // -----------------------------------------------------------------
     // Table-source suggestion tests
     // -----------------------------------------------------------------
 
@@ -447,6 +622,36 @@ abstract class AntlrDocumentParserTestBase
         List<String> items = replacements(result);
         assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA in JOIN suggestions");
         assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB in JOIN suggestions");
+    }
+
+    @Test
+    void test_tableSuggestions_dotTrigger_fromClause()
+    {
+        useTableCatalog();
+        // Caret right after "dbo." — isTableSourceContext should detect the dot inside the
+        // table_source_item rule and return table completions.
+        String query = "SELECT * FROM dbo.";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result, "Expected table completions after 'FROM dbo.'");
+        List<String> items = replacements(result);
+        assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA, got: " + items);
+        assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB, got: " + items);
+    }
+
+    @Test
+    void test_tableSuggestions_dotTrigger_fromClause_withFollowingWhere()
+    {
+        useTableCatalog();
+        // Dot followed by a keyword — ANTLR error recovery must not detach the table_source_item.
+        String query = "SELECT * FROM dbo. WHERE col1 = 1";
+        int caretOffset = query.indexOf("dbo.") + 4;
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected table completions after 'FROM dbo.' followed by WHERE");
+        List<String> items = replacements(result);
+        assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA, got: " + items);
+        assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB, got: " + items);
     }
 
     // -----------------------------------------------------------------
