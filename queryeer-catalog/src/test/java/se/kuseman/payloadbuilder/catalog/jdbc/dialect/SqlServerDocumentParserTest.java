@@ -800,6 +800,38 @@ class SqlServerDocumentParserTest extends AntlrDocumentParserTestBase
     }
 
     // -----------------------------------------------------------------
+    // INSERT INTO table-source suggestion tests
+    // -----------------------------------------------------------------
+
+    @Test
+    void test_tableSuggestions_insertIntoDottedQualifier()
+    {
+        useTableCatalog();
+        // Caret after "dbo." in INSERT INTO — isInsideTableSourceDottedQualifier detects INTO before the identifier chain
+        String query = "insert into dbo.";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        List<String> items = replacements(result);
+        assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA in INSERT INTO dbo. suggestions");
+        assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB in INSERT INTO dbo. suggestions");
+    }
+
+    @Test
+    void test_tableSuggestions_insertIntoNoDot()
+    {
+        useTableCatalog();
+        // Caret right after "INSERT INTO " — no dot typed yet, should suggest table sources
+        String query = "insert into ";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result);
+        List<String> items = replacements(result);
+        assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA in INSERT INTO suggestions (no dot)");
+        assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB in INSERT INTO suggestions (no dot)");
+    }
+
+    // -----------------------------------------------------------------
     // Private helper — parse with TSql grammar directly
     // -----------------------------------------------------------------
 

@@ -1240,7 +1240,8 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     @Override
     protected CompletionResult getC3CompletionItems(CandidatesCollection candidates, ParseTree effectiveNode, ParserRuleContext statementCtx, TokenOffset tokenOffset)
     {
-        if (candidates.rules.containsKey(TSqlParser.RULE_table_source_item))
+        if (candidates.rules.containsKey(TSqlParser.RULE_table_source_item)
+                || candidates.rules.containsKey(TSqlParser.RULE_ddl_object))
         {
             return suggestTableSources();
         }
@@ -1287,7 +1288,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     protected Set<Integer> getCodeCompleteRuleIndices()
     {
         return Set.of(TSqlParser.RULE_expression, TSqlParser.RULE_search_condition, TSqlParser.RULE_full_column_name, TSqlParser.RULE_table_source_item,
-                TSqlParser.RULE_func_proc_name_server_database_schema);
+                TSqlParser.RULE_func_proc_name_server_database_schema, TSqlParser.RULE_ddl_object);
     }
 
     @Override

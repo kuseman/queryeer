@@ -1,9 +1,13 @@
 # ANTLR Parsing & Code Completion Architecture
 
-> **IMPORTANT:** This document must be kept up to date whenever changes are made to
-> `AntlrDocumentParser`, `SqlServerDocumentParser`, `PrestoDocumentParser`, or any class
-> in the `dialect/` or `dialect/c3/` packages. It is loaded by AI agents to avoid
-> expensive re-analysis of this complex code.
+> **IMPORTANT:** This document covers the generic `AntlrDocumentParser` base class and the
+> shared completion infrastructure. It must be kept up to date whenever changes are made to
+> `AntlrDocumentParser`, `CodeCompletionCore`, `ITextEditorDocumentParser`, shared data types,
+> or `AntlrDocumentParserTestBase`. It is loaded by AI agents to avoid expensive re-analysis
+> of this complex code.
+>
+> For dialect-specific design decisions see the per-dialect documents:
+> - [ANTLR_SQLSERVER_PARSING.md](./ANTLR_SQLSERVER_PARSING.md) — T-SQL / `SqlServerDocumentParser`
 
 ## Relevant Files
 
@@ -15,7 +19,6 @@
 | `queryeer-catalog/.../dialect/c3/CodeCompletionCore.java` | Forked antlr4-c3 engine |
 | `queryeer-api/.../editor/ITextEditorDocumentParser.java` | Public interface; defines `CompletionResult`, `CompletionItem` |
 | `queryeer-catalog/.../test/.../AntlrDocumentParserTestBase.java` | Shared test suite; all dialect tests inherit this |
-| `queryeer-catalog/.../test/.../SqlServerDocumentParserTest.java` | T-SQL specific tests |
 | `queryeer-ide/.../editor/TextEditor.java` | Triggers `getCompletionItems(offset)` from the editor |
 
 ---
@@ -115,8 +118,9 @@ Represents a resolved table reference collected by `TableSourceAliasCollector`:
 | Procedure parameters | 5 | After EXEC with known proc name |
 | Column (`alias.col`) | 0 | Expression / search-condition context |
 | Table / view | 0 | Table-source context |
-| Built-in functions | -1 | C3 expression rule, T-SQL BUILTIN_HINTS map |
 | Clipboard IN-list | — | Caret at IN operator + clipboard data |
+
+Dialect-specific completion item types are documented in the per-dialect files.
 
 ---
 
@@ -187,25 +191,6 @@ FK suggestions use `relevance: 10` (highest) so they sort to the top of the comp
 They only fire when `detectJoinOnContext()` confirms the caret is immediately after a
 `JOIN … ON` keyword — not other uses of ON (e.g. `CREATE INDEX … ON`).
 
-### Expression Preceding Operators (T-SQL)
-`SqlServerDocumentParser` maintains a set of ~20 operator tokens (`=`, `<`, `>`, `+`, `AND`,
-`OR`, …). When the token before the caret is one of these, the expression-fallback flow is
-activated even if the normal expression-context detection failed due to error recovery. This
-enables completions in `WHERE col = |` even with a broken parse tree.
-
-### Table-Source Dotted Qualifier Fallback (T-SQL)
-In multi-join queries like `SELECT … FROM t a INNER JOIN dbo.|`, ANTLR error recovery can
-detach the DOT from its `Table_source_itemContext` (e.g. when the ON clause is also missing,
-causing the recovery to insert a synthetic `ON` token that appears *before* the DOT in the
-DFS traversal order). `isTableSourceContext()` then returns false for both `tree` and
-`prevTree`, so the normal tree-walk path misses the table-source suggestion.
-
-`getDialectSpecificCompletionItems` handles this with `isInsideTableSourceDottedQualifier()`:
-a token-stream scan that walks backward past the identifier chain (ID/DOT tokens) and checks
-whether the preceding keyword is `FROM`, `JOIN`, `INTO`, `UPDATE`, `APPLY`, or `MERGE`. If
-so, `suggestTableSources()` is returned early, bypassing the (incorrect) column-suggestion
-path that `isInsideDottedQualifier` would otherwise trigger.
-
 ### Parse-Tree Checks vs Token-Stream Scans
 Two complementary techniques are used for context detection, with different reliability
 profiles under error recovery:
@@ -265,8 +250,8 @@ expressions, FK/PK join conditions, statement context resolution, parse validati
 ## Diagnosing Completion Bugs
 
 When a completion position returns wrong or empty results, the fastest path to the root cause
-is to add a temporary test in `SqlServerDocumentParserTest` (or the relevant dialect test)
-that prints the internal state at the failing offset:
+is to add a temporary test in the relevant dialect test class that prints the internal state
+at the failing offset:
 
 ```java
 documentParser.parse(new StringReader(query));
@@ -300,8 +285,5 @@ if (off.prevTree() instanceof TerminalNode tn)
 - Wrong items returned — trace which step in the flow fired by temporarily adding
   `System.out.println` before each `return` in `getCompletionItems(TokenOffset)` and in
   `getDialectSpecificCompletionItems`. The step that returns first is the culprit.
-- **Procedure parameters appear in a `FROM` clause after an EXEC statement** — `findExecuteBodyByOffset`
-  only has a lower-bound check (`caretOffset > procName.stop.getStopIndex()`) and no upper bound.
-  The whole-tree scan would match the earlier EXEC body even when the caret is in a later statement.
-  Fix: restrict the search root to `findNearestPrecedingStatementCtx(caretOffset)` so only the
-  statement that actually contains the caret is searched.
+
+For dialect-specific failure signatures see the per-dialect documents.
