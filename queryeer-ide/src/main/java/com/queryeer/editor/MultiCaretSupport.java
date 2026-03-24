@@ -192,6 +192,11 @@ class MultiCaretSupport
         return state.buildAllCaretsSortedAsc();
     }
 
+    String getSelectedText()
+    {
+        return editHandler.getAllSelections();
+    }
+
     /**
      * Shifts all secondary caret dot and mark positions based on a list of original insert/remove points. For each point strictly before a caret position, the caret is shifted by {@code delta} (+2
      * when adding comments, -2 when removing).
@@ -228,6 +233,16 @@ class MultiCaretSupport
     {
         state.clearSecondaryCarets();
         blockAnchorLine = -1;
+    }
+
+    List<int[]> snapshotSecondaryCarets()
+    {
+        return state.snapshotSecondaryCarets();
+    }
+
+    void restoreSecondaryCarets(List<int[]> snapshot)
+    {
+        state.restoreSecondaryCarets(snapshot);
     }
 
     /** Add a caret one line below the lowest current caret. */

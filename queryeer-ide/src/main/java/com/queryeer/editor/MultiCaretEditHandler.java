@@ -240,6 +240,23 @@ class MultiCaretEditHandler
      */
     void copyAllSelections(boolean cut)
     {
+        String allSelection = getAllSelections();
+        if (allSelection.length() > 0)
+        {
+            StringSelection sel = new StringSelection(allSelection);
+            Toolkit.getDefaultToolkit()
+                    .getSystemClipboard()
+                    .setContents(sel, null);
+        }
+        if (cut)
+        {
+            applyTextToAll("");
+        }
+    }
+
+    /** Return the block selection. */
+    String getAllSelections()
+    {
         List<int[]> allCarets = state.buildAllCaretsSortedAsc();
         StringBuilder sb = new StringBuilder();
         try
@@ -264,17 +281,7 @@ class MultiCaretEditHandler
         {
             // Swallow
         }
-        if (sb.length() > 0)
-        {
-            StringSelection sel = new StringSelection(sb.toString());
-            Toolkit.getDefaultToolkit()
-                    .getSystemClipboard()
-                    .setContents(sel, null);
-        }
-        if (cut)
-        {
-            applyTextToAll("");
-        }
+        return sb.toString();
     }
 
     // -----------------------------------------------------------------------

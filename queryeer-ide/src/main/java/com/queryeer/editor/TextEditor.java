@@ -25,6 +25,7 @@ import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -388,6 +389,7 @@ class TextEditor implements ITextEditor, SearchListener
                 if (parser != null)
                 {
                     parser.state = EditorParser.State.PARSING;
+                    parser.docRevision++;
                 }
 
                 int size = propertyChangeListeners.size();
@@ -509,6 +511,28 @@ class TextEditor implements ITextEditor, SearchListener
                                 }
                             });
                 }
+                // Trigger completion automatically when '.' is typed, just like Ctrl+Space.
+                // If the parser returns no items for the current context the popup won't appear.
+                textEditor.addKeyListener(new KeyAdapter()
+                {
+                    @Override
+                    public void keyTyped(KeyEvent e)
+                    {
+                        if (e.getKeyChar() == '.')
+                        {
+                            // Require the fresh parse (the one that will include the dot) before
+                            // showing the popup. docRevision is incremented by the document listener
+                            // when the dot is inserted, so dotDocRevision = current + 1 is exactly
+                            // the revision that the fresh-parse session must have captured.
+                            completer.doAutoCompleteWhenReady = true;
+                            completer.dotDocRevision = completer.parser.docRevision + 1;
+                            if (parsingIndicator != null)
+                            {
+                                parsingIndicator.startAnimation();
+                            }
+                        }
+                    }
+                });
                 this.parser.setParseCompleteListener(completer.parseCompleteRunner);
             }
 
@@ -591,6 +615,8 @@ class TextEditor implements ITextEditor, SearchListener
     @Override
     public void clearBeforeExecution()
     {
+        // Snapshot secondary carets before clearing so they can be restored after highlights are removed
+        final List<int[]> secondarySnapshot = multiCaretSupport.snapshotSecondaryCarets();
         multiCaretSupport.clearSecondaryCarets();
 
         int selStart = textEditor.getSelectionStart();
@@ -603,6 +629,11 @@ class TextEditor implements ITextEditor, SearchListener
         {
             textEditor.setSelectionStart(selStart);
             textEditor.setSelectionEnd(selEnd);
+        }
+
+        if (!secondarySnapshot.isEmpty())
+        {
+            multiCaretSupport.restoreSecondaryCarets(secondarySnapshot);
         }
     }
 
@@ -687,12 +718,6 @@ class TextEditor implements ITextEditor, SearchListener
         if (this.parser != null)
         {
             textEditor.forceReparsing(this.parser);
-            // Clear cached completions
-            if (completer != null)
-            {
-                completer.cachedCompletionsOffset = -1;
-                completer.cachedCompletions = null;
-            }
             if (parser != null)
             {
                 parser.currentLinkAction = null;
@@ -783,8 +808,16 @@ class TextEditor implements ITextEditor, SearchListener
             return textEditor.getText();
         }
 
-        // Default value for a text editor is the selected text if any else everything
-        String result = textEditor.getSelectedText();
+        String result = "";
+        if (multiCaretSupport.hasSecondaryCarets())
+        {
+            result = multiCaretSupport.getSelectedText();
+        }
+        else
+        {
+            // Default value for a text editor is the selected text if any else everything
+            result = textEditor.getSelectedText();
+        }
         if (isBlank(result))
         {
             result = textEditor.getText();
@@ -1287,7 +1320,6 @@ class TextEditor implements ITextEditor, SearchListener
     private static class EditorCompleter extends CompletionProviderBase
     {
         private final EditorParser parser;
-        private final BasicCompletion parsingCompletion = new BasicCompletion(this, "Parsing ...");
         private EditorAutoCompletion autoCompletion;
 
         /**
@@ -1308,11 +1340,17 @@ class TextEditor implements ITextEditor, SearchListener
          *
          * </pre>
          */
-        private int cachedCompletionsOffset = -1;
-        private List<CompletionItem> cachedCompletions;
-
         private volatile boolean doAutoCompleteWhenReady = false;
+        /**
+         * When completion was triggered by a dot keystroke, this holds the minimum docRevision the completed parse must have started with to be considered fresh (i.e. it actually contains the dot).
+         * -1 means the request came from Ctrl+Space (no freshness requirement).
+         */
+        private volatile int dotDocRevision = -1;
         private volatile boolean doSignatureHintWhenReady = false;
+        /** Last successfully fetched unfiltered completion items, used to re-filter while a new parse is in progress. */
+        private List<CompletionItem> cachedCompletionItems = null;
+        /** Token-start document offset for the cached items (caretOffset - enteredText.length() at the time of caching). */
+        private int cachedTokenStartOffset = -1;
         private volatile int pendingSignatureHintOffset = -1;
         /** True while the signature-hint retry (triggered by parseCompleteRunner) is executing. Prevents re-queueing another retry from within the retry itself. */
         private volatile boolean isRetryingSignatureHint = false;
@@ -1373,15 +1411,18 @@ class TextEditor implements ITextEditor, SearchListener
             {
                 if (doAutoCompleteWhenReady)
                 {
-                    doAutoCompleteWhenReady = false;
-                    SwingUtilities.invokeLater(() ->
+                    // For dot-triggered completion, skip if the parse that just completed was started
+                    // before the dot was inserted (stale parse). The next parse, started by
+                    // RSyntaxTextArea's timer after the dot's document change, will have a higher
+                    // sessionStartRevision and will correctly trigger the popup.
+                    if (dotDocRevision >= 0
+                            && parser.sessionStartRevision < dotDocRevision)
                     {
-                        if (autoCompletion.isPopupVisible())
-                        {
-                            autoCompletion.hideChildWindows();
-                            autoCompletion.doCompletion();
-                        }
-                    });
+                        return;
+                    }
+                    doAutoCompleteWhenReady = false;
+                    dotDocRevision = -1;
+                    SwingUtilities.invokeLater(() -> autoCompletion.doCompletion());
                 }
                 if (doSignatureHintWhenReady)
                 {
@@ -1450,49 +1491,115 @@ class TextEditor implements ITextEditor, SearchListener
         {
             int offset = comp.getCaretPosition();
             String enteredText = getAlreadyEnteredText(comp);
-            int enteredTextLength = StringUtils.length(enteredText);
 
-            // Filter and reuse cached completions
-            if (cachedCompletionsOffset >= 0
-                    && cachedCompletions != null
-                    && cachedCompletionsOffset == (offset - enteredTextLength))
-            {
-                return getCompletions(getCompletionByInputText(cachedCompletions, enteredText));
-            }
+            int tokenStartOffset = offset - (enteredText != null ? enteredText.length()
+                    : 0);
 
-            // Ongoing parsing, return null
+            // Ongoing parsing — if the popup is already visible and we have cached items for the
+            // same token start, re-filter and return them so the popup stays populated without a
+            // spinner. A refresh will happen automatically when the parse completes.
             if (parser.state == EditorParser.State.PARSING)
             {
-                // parser.editor.textEditor.forceReparsing(parser);
-                doAutoCompleteWhenReady = true;
-                cachedCompletionsOffset = -1;
-                cachedCompletions = null;
-                return new ArrayList<>(List.of(parsingCompletion));
+                if (autoCompletion != null
+                        && autoCompletion.isPopupVisible()
+                        && cachedCompletionItems != null
+                        && cachedTokenStartOffset == tokenStartOffset)
+                {
+                    doAutoCompleteWhenReady = true;
+                    // Fall through to filtering below using the cached items
+                }
+                else
+                {
+                    doAutoCompleteWhenReady = true;
+                    // Start the spinner immediately so it is visible even when Ctrl+Space is pressed
+                    // before RSyntaxTextArea's parse timer has fired and called startAnimation().
+                    if (parser.editor.parsingIndicator != null)
+                    {
+                        parser.editor.parsingIndicator.startAnimation();
+                    }
+                    return emptyList();
+                }
             }
 
-            CompletionResult result = parser.parser.getCompletionItems(offset);
-            if (result == null)
+            List<CompletionItem> completionItems;
+            if (parser.state == EditorParser.State.PARSING)
             {
-                cachedCompletionsOffset = -1;
-                cachedCompletions = null;
-                return emptyList();
-            }
-
-            List<CompletionItem> completionItems = result.getItems();
-            if (result.isPartialResult())
-            {
-                cachedCompletions = null;
-                cachedCompletionsOffset = -1;
+                // Use the cached items from the previous successful parse
+                completionItems = cachedCompletionItems;
             }
             else
             {
-                cachedCompletions = completionItems;
-                cachedCompletionsOffset = offset - enteredTextLength;
+                CompletionResult result = parser.parser.getCompletionItems(offset);
+                if (result == null)
+                {
+                    return emptyList();
+                }
+                completionItems = result.getItems();
+                // Cache the fresh unfiltered items for reuse while the next parse is in progress
+                cachedCompletionItems = completionItems;
+                cachedTokenStartOffset = tokenStartOffset;
             }
 
-            if (!isBlank(enteredText))
+            // When the entered text contains a dot (e.g. "ac." or "ac.col"), filter only by the
+            // segment after the last dot. The prefix ("ac") is the table/alias qualifier that the
+            // parser already uses via the caret offset; filtering by the full "ac.col" would skip
+            // matchParts whose individual parts are shorter than the combined input string, causing
+            // all column completions to be filtered out. Filtering by just "col" lets "column1" match
+            // while the replacement text ("ac.column1") still replaces the full entered text correctly.
+            String filterText = enteredText;
+            String dotQualifierPrefix = null;
+            if (enteredText != null
+                    && enteredText.contains("."))
             {
-                completionItems = getCompletionByInputText(completionItems, enteredText);
+                int lastDot = enteredText.lastIndexOf('.');
+                // "c." for "c.crea" — used to reject items from other aliases (e.g. "ac.createdAt")
+                dotQualifierPrefix = enteredText.substring(0, lastDot + 1);
+                filterText = enteredText.substring(lastDot + 1);
+            }
+
+            if (!isBlank(filterText))
+            {
+                // Pre-filter by qualifier: "c.crea" must not match "ac.createdAt" even though
+                // "crea" fuzzy-matches the column name. Only keep items whose replacement text
+                // starts with the typed qualifier prefix (e.g. "c.").
+                if (dotQualifierPrefix != null)
+                {
+                    final String prefix = dotQualifierPrefix;
+                    List<CompletionItem> qualified = null;
+                    for (CompletionItem item : completionItems)
+                    {
+                        if (Strings.CI.startsWith(item.getReplacementText(), prefix))
+                        {
+                            if (qualified == null)
+                            {
+                                qualified = new ArrayList<>();
+                            }
+                            qualified.add(item);
+                        }
+                    }
+                    completionItems = qualified == null ? emptyList()
+                            : qualified;
+                }
+                completionItems = getCompletionByInputText(completionItems, filterText);
+            }
+            else if (!isBlank(enteredText))
+            {
+                // enteredText ends with a dot (e.g. "ac.") — filter by full prefix on replacement text
+                // to avoid showing items from other aliases like "a.*" when "ac." was typed
+                List<CompletionItem> filtered = null;
+                for (CompletionItem item : completionItems)
+                {
+                    if (Strings.CI.startsWith(item.getReplacementText(), enteredText))
+                    {
+                        if (filtered == null)
+                        {
+                            filtered = new ArrayList<>();
+                        }
+                        filtered.add(item);
+                    }
+                }
+                completionItems = filtered == null ? emptyList()
+                        : filtered;
             }
 
             return getCompletions(completionItems);
@@ -1521,8 +1628,12 @@ class TextEditor implements ITextEditor, SearchListener
                     || ch == '#';
         }
 
+        private static final Logger LOGGER = LoggerFactory.getLogger(TextEditor.class);
+
         private List<CompletionItem> getCompletionByInputText(List<CompletionItem> completionItems, String inputText)
         {
+            LOGGER.debug("start: getCompletionByInputText. inputText: {}, completionItems: {}", inputText, completionItems);
+
             List<CompletionItem> result = null;
             int inputLength = inputText.length();
             for (CompletionItem item : completionItems)
@@ -1606,6 +1717,8 @@ class TextEditor implements ITextEditor, SearchListener
                 }
             }
 
+            LOGGER.debug("end: getCompletionByInputText. result: {}", result);
+
             return result == null ? emptyList()
                     : result;
         }
@@ -1628,16 +1741,6 @@ class TextEditor implements ITextEditor, SearchListener
         {
             super(completer);
             this.completer = completer;
-        }
-
-        @Override
-        protected void insertCompletion(Completion c, boolean typedParamListStartChar)
-        {
-            if (c == completer.parsingCompletion)
-            {
-                return;
-            }
-            super.insertCompletion(c, typedParamListStartChar);
         }
 
         /**
@@ -1705,6 +1808,13 @@ class TextEditor implements ITextEditor, SearchListener
 
         private volatile State state = null;
         private volatile DefaultParseResult parseResult = new DefaultParseResult(this);
+
+        /**
+         * Incremented on every document change (EDT only). Captured at session start so parseCompleteRunner can tell whether the completed parse reflects the document state that triggered a
+         * dot-completion request.
+         */
+        volatile int docRevision = 0;
+        private volatile int sessionStartRevision = 0;
 
         EditorParser(TextEditor editor, ITextEditorDocumentParser parser)
         {
@@ -1791,6 +1901,7 @@ class TextEditor implements ITextEditor, SearchListener
             {
                 editor.parsingIndicator.startAnimation();
             }
+            final int capturedRevision = docRevision;
             try
             {
                 currentSession = EXECUTOR.submit(() ->
@@ -1838,6 +1949,7 @@ class TextEditor implements ITextEditor, SearchListener
                     {
                         LOGGER.debug("Parse session completed {}", parseResult.getParseTime());
                         state = State.COMPLETE;
+                        sessionStartRevision = capturedRevision;
                         if (parseCompleteListener != null)
                         {
                             parseCompleteListener.run();
