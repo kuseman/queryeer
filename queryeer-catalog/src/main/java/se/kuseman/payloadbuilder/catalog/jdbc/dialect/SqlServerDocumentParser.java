@@ -682,6 +682,74 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
 
     /**
+     * Returns true when the dotted qualifier at {@code tokenIndex} is directly preceded (through an optional identifier chain) by a table-source keyword: {@code FROM}, {@code JOIN}, {@code INTO},
+     * {@code UPDATE}, {@code APPLY}, or {@code MERGE}. Used as a token-stream fallback when ANTLR error recovery detaches the DOT from a {@link Table_source_itemContext} and
+     * {@link #isTableSourceContext} returns false. Both cases from {@link #isInsideDottedQualifier} are handled:
+     * <ol>
+     * <li><b>Token IS a DOT</b>: walk backward past the identifier chain (ID/DOT tokens) to find the preceding keyword.</li>
+     * <li><b>Token is hidden-channel</b>: first locate the nearest preceding DOT on the default channel, then walk backward past the identifier chain.</li>
+     * </ol>
+     */
+    private static boolean isInsideTableSourceDottedQualifier(Parser parser, int tokenIndex)
+    {
+        Token token = parser.getInputStream()
+                .get(tokenIndex);
+        int dotIndex;
+        if (token.getType() == TSqlLexer.DOT)
+        {
+            dotIndex = tokenIndex;
+        }
+        else
+        {
+            // Hidden-channel token: find the nearest preceding DOT on the default channel
+            dotIndex = -1;
+            for (int i = tokenIndex - 1; i >= 0; i--)
+            {
+                Token t = parser.getInputStream()
+                        .get(i);
+                if (t.getChannel() != Token.DEFAULT_CHANNEL)
+                {
+                    continue;
+                }
+                if (t.getType() == TSqlLexer.DOT)
+                {
+                    dotIndex = i;
+                }
+                break;
+            }
+            if (dotIndex < 0)
+            {
+                return false;
+            }
+        }
+        // Walk backward past the identifier chain (ID/DOT tokens) before the DOT
+        for (int i = dotIndex - 1; i >= 0; i--)
+        {
+            Token t = parser.getInputStream()
+                    .get(i);
+            if (t.getChannel() != Token.DEFAULT_CHANNEL)
+            {
+                continue;
+            }
+            int type = t.getType();
+            if (type == TSqlLexer.DOT
+                    || type == TSqlLexer.ID)
+            {
+                // Still inside a dotted identifier chain (e.g. "server.database.schema")
+                continue;
+            }
+            // First non-identifier/non-dot token before the chain — check for table-source keywords
+            return type == TSqlParser.FROM
+                    || type == TSqlParser.JOIN
+                    || type == TSqlParser.INTO
+                    || type == TSqlParser.UPDATE
+                    || type == TSqlParser.APPLY
+                    || type == TSqlParser.MERGE;
+        }
+        return false;
+    }
+
+    /**
      * Returns true if the token at {@code tokenIndex} is a COMMA or an expression-preceding operator (e.g. {@code =}, {@code AND}, {@code +}), or if the nearest preceding default-channel token is one
      * of those. The latter handles the case where the caret lands exactly on the first character of a token that follows such a token (e.g. "LEFT(col, |)" where findTokenFromOffset returns the ")"
      * token, or "col = |" where findTokenFromOffset returns EOF).
@@ -807,11 +875,29 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         // Parent-chain walking is unreliable after a trailing comma because ANTLR error recovery
         // can set Execute_bodyContext.stop to the last successfully parsed token (before the comma),
         // leaving the comma token orphaned outside the context's subtree.
-        Execute_bodyContext execBody = context != null ? findExecuteBodyByOffset(context, tokenOffset.caretOffset())
+        // Restrict the search to the nearest preceding statement so that an EXEC in an earlier
+        // statement cannot match when the caret is in a later SELECT/UPDATE/etc. statement.
+        ParserRuleContext nearestStmtForExec = findNearestPrecedingStatementCtx(tokenOffset.caretOffset());
+        ParseTree execSearchRoot = nearestStmtForExec != null ? nearestStmtForExec
+                : context;
+        Execute_bodyContext execBody = execSearchRoot != null ? findExecuteBodyByOffset(execSearchRoot, tokenOffset.caretOffset())
                 : null;
         if (execBody != null)
         {
             return suggestProcedureParameters(execBody);
+        }
+        // Table-source dotted qualifier fallback: ANTLR error recovery can detach the DOT from
+        // Table_source_itemContext in complex queries (e.g. "INNER JOIN dbo." after an already-
+        // parsed table source), causing isTableSourceContext to return false. Detect the table-
+        // source position by scanning backward in the token stream for a table-source keyword
+        // (FROM, JOIN, INTO, UPDATE, APPLY, MERGE) before the identifier chain and suggest table
+        // sources directly, bypassing the column-suggestion path below.
+        if (parser != null
+                && tokenOffset.suggestTokenIndex() >= 0
+                && isInsideDottedQualifier(parser, tokenOffset.suggestTokenIndex())
+                && isInsideTableSourceDottedQualifier(parser, tokenOffset.suggestTokenIndex()))
+        {
+            return suggestTableSources();
         }
         // Dotted qualifier (e.g. "a." or "b." inside an EXISTS subquery):
         // The original broken tree may not correctly connect the DOT to the inner

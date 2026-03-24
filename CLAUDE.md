@@ -82,7 +82,7 @@ Core services are registered in `Main.wire()` and injected into plugins:
 
 ## ANTLR Parsing / Code Completion
 
-See [ANTLR_PARSING.md](./ANTLR_PARSING.md) for the full architecture, completion flow, dialect
+See [ANTLR_PARSING.md](./queryeer-catalog/ANTLR_PARSING.md) for the full architecture, completion flow, dialect
 extension pattern, and design decisions before modifying `AntlrDocumentParser` or any of its
 subclasses (`SqlServerDocumentParser`, `PrestoDocumentParser`, etc.).
 
@@ -92,3 +92,9 @@ subclasses (`SqlServerDocumentParser`, `PrestoDocumentParser`, etc.).
 - `ITextEditorDocumentParser` (public API)
 - Any completion-related data types (`CompletionItem`, `CompletionResult`, `TokenOffset`, etc.)
 - Test infrastructure in `AntlrDocumentParserTestBase`
+
+**MANDATORY when fixing a parsing/completion bug:** after the fix, review the
+`Diagnosing Completion Bugs` section in `ANTLR_PARSING.md` and extend it with anything
+learned during diagnosis that would have made finding the root cause faster — new failure
+signatures, non-obvious ANTLR behaviors, useful debug patterns, etc. The goal is that each
+fix leaves the diagnostics section more useful than it was before.
