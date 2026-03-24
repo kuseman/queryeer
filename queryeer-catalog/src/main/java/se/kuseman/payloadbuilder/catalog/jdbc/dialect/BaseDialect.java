@@ -39,9 +39,11 @@ class BaseDialect implements JdbcDialect
     private final QueryActionsConfigurable queryActionsConfigurable;
     private final CatalogCrawlService crawlService;
     private final ITemplateService templateService;
+    private final Icons icons;
 
     BaseDialect(Icons icons, CatalogCrawlService crawlService, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, ITemplateService templateService, ITreeConfig treeConfig)
     {
+        this.icons = icons;
         this.treeNodeSupplier = new JdbcTreeNodeSupplier(this, icons, eventBus, queryActionsConfigurable, templateService, treeConfig);
         this.crawlService = crawlService;
         this.eventBus = eventBus;
@@ -64,7 +66,7 @@ class BaseDialect implements JdbcDialect
     @Override
     public ITextEditorDocumentParser getParser(IConnectionContext connectionContext)
     {
-        return new PrestoDocumentParser(eventBus, queryActionsConfigurable, crawlService, connectionContext, templateService);
+        return new PrestoDocumentParser(eventBus, queryActionsConfigurable, crawlService, connectionContext, templateService, icons);
     }
 
     @Override
