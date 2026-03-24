@@ -136,6 +136,23 @@ class SqlServerDocumentParserTest extends AntlrDocumentParserTestBase
                 "Expected no parameter suggestions when all params are already provided");
     }
 
+    @Test
+    void test_procedureParameters_noSuggestionInLaterSelectStatement()
+    {
+        // EXEC in first statement, caret in FROM clause of a second statement.
+        // Should suggest table sources, NOT procedure parameters.
+        String query = "exec dbo.MyProc @param1 = '#t_table'\n\nselect *\nfrom ";
+        CompletionResult result = complete(query, query.length());
+
+        // Must not return procedure-parameter suggestions (@param = )
+        assertTrue(result == null
+                || result.getItems()
+                        .stream()
+                        .noneMatch(i -> i.getReplacementText()
+                                .endsWith(" = ")),
+                "Expected no procedure parameter suggestions in a FROM clause after a preceding EXEC statement");
+    }
+
     // -----------------------------------------------------------------
     // TableSourceAliasCollector — T-SQL specific features
     // -----------------------------------------------------------------
@@ -807,4 +824,5 @@ class SqlServerDocumentParserTest extends AntlrDocumentParserTestBase
 
         return TableSourceAliasCollector.collectTableSourceAliases(node, "myDb");
     }
+
 }

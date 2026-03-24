@@ -654,6 +654,22 @@ abstract class AntlrDocumentParserTestBase
         assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB, got: " + items);
     }
 
+    @Test
+    void test_tableSuggestions_dotTrigger_joinClause()
+    {
+        useTableCatalog();
+        // Caret after "dbo." in a JOIN — ANTLR error recovery can detach the DOT from
+        // Table_source_itemContext in a multi-table query; the token-stream fallback must still
+        // return table completions.
+        String query = "select *\nfrom dbo.tableA a\ninner join dbo.";
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result, "Expected table completions after 'INNER JOIN dbo.'");
+        List<String> items = replacements(result);
+        assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA, got: " + items);
+        assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB, got: " + items);
+    }
+
     // -----------------------------------------------------------------
     // Validation tests (afterParse semantic validation)
     // -----------------------------------------------------------------
