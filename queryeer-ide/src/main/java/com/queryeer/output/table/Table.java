@@ -8,7 +8,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.AbstractAction;
@@ -32,6 +34,12 @@ class Table extends JTable
     private final List<Integer> adjustedWidths = new ArrayList<>();
     final JPopupMenu tablePopupMenu = new JPopupMenu();
     final AtomicBoolean columnsAdjusted = new AtomicBoolean();
+
+    /**
+     * Tracks individually CTRL-clicked cells to avoid JTable's cross-product selection. JTable stores row/column selections in separate models, so CTRL-clicking (r1,c1) then (r2,c2) would select all
+     * 4 intersecting cells. This set lets us track exact cells and override isCellSelected/getSelectedRows/getSelectedColumns accordingly.
+     */
+    private final Set<Point> ctrlSelectedCells = new LinkedHashSet<>();
 
     Table(List<ITableContextMenuAction> actions)
     {
@@ -89,14 +97,178 @@ class Table extends JTable
     }
 
     @Override
+    public void changeSelection(int rowIndex, int columnIndex, boolean toggle, boolean extend)
+    {
+        if (ctrlSelectedCells == null)
+        {
+            super.changeSelection(rowIndex, columnIndex, toggle, extend);
+            return;
+        }
+        if (toggle
+                && !extend)
+        {
+            // CTRL-click: toggle individual cell to avoid JTable's cross-product selection.
+            // Call super with toggle=false to keep JTable's anchor/focus in sync.
+            if (ctrlSelectedCells.isEmpty())
+            {
+                // First CTRL-click while no individual cells are tracked yet: seed the set from
+                // the underlying model so any existing plain/shift selection stays visible.
+                for (int r : super.getSelectedRows())
+                {
+                    for (int c : super.getSelectedColumns())
+                    {
+                        ctrlSelectedCells.add(new Point(r, c));
+                    }
+                }
+            }
+            Point cell = new Point(rowIndex, columnIndex);
+            if (ctrlSelectedCells.contains(cell))
+            {
+                ctrlSelectedCells.remove(cell);
+            }
+            else
+            {
+                ctrlSelectedCells.add(cell);
+            }
+            super.changeSelection(rowIndex, columnIndex, false, false);
+            return;
+        }
+        if (toggle
+                && extend)
+        {
+            // CTRL+SHIFT+click: extend from the current anchor to the clicked cell, adding the
+            // rectangle of cells to ctrlSelectedCells while keeping previously selected cells.
+            int anchorRow = getSelectionModel().getAnchorSelectionIndex();
+            int anchorCol = getColumnModel().getSelectionModel()
+                    .getAnchorSelectionIndex();
+            if (anchorRow >= 0
+                    && anchorCol >= 0)
+            {
+                int r0 = Math.min(anchorRow, rowIndex);
+                int r1 = Math.max(anchorRow, rowIndex);
+                int c0 = Math.min(anchorCol, columnIndex);
+                int c1 = Math.max(anchorCol, columnIndex);
+                for (int r = r0; r <= r1; r++)
+                {
+                    for (int c = c0; c <= c1; c++)
+                    {
+                        ctrlSelectedCells.add(new Point(r, c));
+                    }
+                }
+            }
+            else
+            {
+                ctrlSelectedCells.add(new Point(rowIndex, columnIndex));
+            }
+            // Keep JTable's anchor at its current position; only move the lead.
+            super.changeSelection(rowIndex, columnIndex, toggle, extend);
+            repaint();
+            return;
+        }
+        if (!extend)
+        {
+            // Plain click or CTRL+SHIFT: clear the individual cell set.
+            // Drag/shift-only (extend=true, toggle=false) does NOT clear: a tiny mouse movement
+            // between press and release fires mouseDragged (extend=true) and must not wipe out
+            // the CTRL selection. We still call super so JTable's anchor stays valid.
+            boolean hadCtrlCells = !ctrlSelectedCells.isEmpty();
+            ctrlSelectedCells.clear();
+            if (hadCtrlCells)
+            {
+                // JTable's selection-change events only repaint rows/cols that changed in the
+                // underlying model (which only tracked the last CTRL+clicked cell). Cells that
+                // were in ctrlSelectedCells but not in the underlying model won't get a repaint
+                // event and would remain visually highlighted. Force a full repaint to fix this.
+                repaint();
+            }
+        }
+        super.changeSelection(rowIndex, columnIndex, toggle, extend);
+    }
+
+    @Override
     public boolean isCellSelected(int row, int column)
     {
+        if (!ctrlSelectedCells.isEmpty())
+        {
+            // If cell 0 is selected then select whole row (preserve existing row-select behavior)
+            if (ctrlSelectedCells.contains(new Point(row, 0)))
+            {
+                return true;
+            }
+            return ctrlSelectedCells.contains(new Point(row, column));
+        }
         // If cell 0 is selected then select whole row
         if (super.isCellSelected(row, 0))
         {
             return true;
         }
         return super.isCellSelected(row, column);
+    }
+
+    @Override
+    public int[] getSelectedRows()
+    {
+        if (!ctrlSelectedCells.isEmpty())
+        {
+            return ctrlSelectedCells.stream()
+                    .mapToInt(p -> p.x)
+                    .distinct()
+                    .sorted()
+                    .toArray();
+        }
+        return super.getSelectedRows();
+    }
+
+    @Override
+    public int[] getSelectedColumns()
+    {
+        if (!ctrlSelectedCells.isEmpty())
+        {
+            return ctrlSelectedCells.stream()
+                    .mapToInt(p -> p.y)
+                    .distinct()
+                    .sorted()
+                    .toArray();
+        }
+        return super.getSelectedColumns();
+    }
+
+    @Override
+    public void setRowSelectionInterval(int index0, int index1)
+    {
+        if (ctrlSelectedCells != null
+                && !ctrlSelectedCells.isEmpty())
+        {
+            ctrlSelectedCells.clear();
+            repaint();
+        }
+        super.setRowSelectionInterval(index0, index1);
+    }
+
+    @Override
+    public void setColumnSelectionInterval(int index0, int index1)
+    {
+        if (ctrlSelectedCells != null
+                && !ctrlSelectedCells.isEmpty())
+        {
+            ctrlSelectedCells.clear();
+            repaint();
+        }
+        super.setColumnSelectionInterval(index0, index1);
+    }
+
+    @Override
+    public void clearSelection()
+    {
+        // ctrlSelectedCells may be null when called from JTable's own constructor
+        // (via setModel → tableChanged → clearSelectionAndLeadAnchor) before our field initializes
+        if (ctrlSelectedCells != null
+                && !ctrlSelectedCells.isEmpty())
+        {
+            ctrlSelectedCells.clear();
+            repaint();
+        }
+        super.clearSelection();
     }
 
     void adaptToLookAndFeel()

@@ -20,11 +20,13 @@ public class TableTransferable implements Transferable
     public static final String PLAIN_TEXT = "text/plain";
 
     private static final DataFlavor[] FLAVORS;
+    private static final DataFlavor[] FLAVORS_NO_HTML;
 
     static
     {
         // CSOFF
         FLAVORS = new DataFlavor[9];
+        FLAVORS_NO_HTML = new DataFlavor[6];
         try
         {
             FLAVORS[0] = new DataFlavor("text/html;class=java.lang.String", "Html");
@@ -38,6 +40,9 @@ public class TableTransferable implements Transferable
             FLAVORS[6] = new DataFlavor(MIME_TYPE_SQL_IN + ";class=java.lang.String", SQL_IN);
             FLAVORS[7] = new DataFlavor(MIME_TYPE_SQL_IN_NEW_LINE + ";class=java.lang.String", SQL_IN_NEW_LINE);
             FLAVORS[8] = new DataFlavor("queryeer/sql-union-all;class=java.lang.String", "SQL UNION ALL");
+
+            // Same as FLAVORS but without the three HTML entries at index 0-2
+            System.arraycopy(FLAVORS, 3, FLAVORS_NO_HTML, 0, 6);
             // CSON
         }
         catch (Exception e)
@@ -58,9 +63,10 @@ public class TableTransferable implements Transferable
     @Override
     public boolean isDataFlavorSupported(DataFlavor flavor)
     {
-        for (int i = 0; i < FLAVORS.length; i++)
+        DataFlavor[] flavors = getTransferDataFlavors();
+        for (int i = 0; i < flavors.length; i++)
         {
-            if (FLAVORS[i].equals(flavor))
+            if (flavors[i].equals(flavor))
             {
                 return true;
             }
@@ -71,14 +77,20 @@ public class TableTransferable implements Transferable
     @Override
     public DataFlavor[] getTransferDataFlavors()
     {
-        return FLAVORS;
+        // Don't advertise HTML when single column — chat apps (Slack, Teams) prefer HTML
+        // but would receive plain text, causing newlines to be ignored by the HTML renderer.
+        return headerNames.length > 1 ? FLAVORS
+                : FLAVORS_NO_HTML;
     }
 
     @Override
     public Object getTransferData(DataFlavor flavor) throws UnsupportedFlavorException, IOException
     {
         String mimeType = flavor.getMimeType();
-        if (mimeType.contains("html"))
+        // We only generate html when we have more than one column this avoid
+        // messy tables when pasting one/many single column values in chats etc.
+        if (headerNames.length > 1
+                && mimeType.contains("html"))
         {
             return toHtml();
         }
@@ -119,7 +131,7 @@ public class TableTransferable implements Transferable
         StringBuilder sqlIn = new StringBuilder().append('(');
         if (newLines)
         {
-            sqlIn.append(System.lineSeparator());
+            sqlIn.append('\n');
             sqlIn.append("  ");
         }
         for (int row = 0; row < rows; row++)
@@ -129,7 +141,7 @@ public class TableTransferable implements Transferable
                 sqlIn.append(",");
                 if (newLines)
                 {
-                    sqlIn.append(System.lineSeparator());
+                    sqlIn.append('\n');
                     sqlIn.append("  ");
                 }
             }
@@ -154,7 +166,7 @@ public class TableTransferable implements Transferable
         }
         if (newLines)
         {
-            sqlIn.append(System.lineSeparator());
+            sqlIn.append('\n');
         }
         sqlIn.append(')');
         return sqlIn.toString();
@@ -183,7 +195,7 @@ public class TableTransferable implements Transferable
         {
             if (row > 0)
             {
-                buf.append(System.lineSeparator());
+                buf.append('\n');
                 buf.append("    UNION ALL SELECT ");
             }
             else
@@ -217,7 +229,7 @@ public class TableTransferable implements Transferable
             }
         }
 
-        buf.append(System.lineSeparator());
+        buf.append('\n');
         buf.append(") x (");
 
         int cols = headerNames.length;
@@ -232,7 +244,7 @@ public class TableTransferable implements Transferable
                     .append('\"');
         }
         buf.append(')')
-                .append(System.lineSeparator());
+                .append('\n');
 
         return buf.toString();
     }
@@ -247,15 +259,16 @@ public class TableTransferable implements Transferable
         for (int col = 0; col < cols; col++)
         {
             String columnName = headerNames[col];
-            htmlBuf.append("  <th>")
+            htmlBuf.append("  <td><strong>")
                     .append(columnName)
-                    .append("</th>\n");
+                    .append("</strong></td>\n");
         }
         htmlBuf.append("</tr>\n");
 
         int rows = rowsValues.size();
         for (int row = 0; row < rows; row++)
         {
+            htmlBuf.append("<tr>\n");
             Object[] values = rowsValues.get(row);
             for (int col = 0; col < cols; col++)
             {
@@ -293,7 +306,7 @@ public class TableTransferable implements Transferable
             }
             if (row < rows - 1)
             {
-                plainBuf.append(System.lineSeparator());
+                plainBuf.append('\n');
             }
         }
         return plainBuf.toString();

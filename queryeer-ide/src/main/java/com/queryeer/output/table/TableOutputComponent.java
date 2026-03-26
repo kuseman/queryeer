@@ -21,6 +21,7 @@ import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -407,9 +408,36 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     }
 
     @Override
-    public SelectedRow getSelectedRow()
+    public List<SelectedCell> getSelectedCells()
     {
-        return new TableSelectedRow(lastClickedTable, lastClickedTableRow, lastClickedTableColumn);
+        if (lastClickedTable == null)
+        {
+            return List.of();
+        }
+        return computeSelectedCells(lastClickedTable);
+    }
+
+    static List<SelectedCell> computeSelectedCells(Table table)
+    {
+        int[] selectedRows = table.getSelectedRows();
+        int[] selectedCols = table.getSelectedColumns();
+        if (selectedRows.length == 0
+                || selectedCols.length == 0)
+        {
+            return List.of();
+        }
+        List<SelectedCell> result = new ArrayList<>();
+        for (int row : selectedRows)
+        {
+            for (int col : selectedCols)
+            {
+                if (table.isCellSelected(row, col))
+                {
+                    result.add(new TableSelectedCell(table, row, col));
+                }
+            }
+        }
+        return result;
     }
 
     @Override
@@ -455,14 +483,15 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         return Strings.CI.contains(value, context.getSearchFor());
     }
 
-    private ITableContextMenuAction getAction(Object value)
+    private ITableContextMenuAction getAction(Table table, int row, int col)
     {
+        TableSelectedCell selectedCell = new TableSelectedCell(table, row, col);
         int actionsSize = contextMenuActions.size();
         for (int i = 0; i < actionsSize; i++)
         {
             ITableContextMenuAction action = contextMenuActions.get(i);
             if (action.supportsLinks()
-                    && action.showLink(value))
+                    && action.showContextMenu(selectedCell))
             {
                 return action;
             }
@@ -499,21 +528,21 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     if (row >= 0
                             && col >= 0)
                     {
+                        // We need to set the context row/column for external actions to have correct values returned
+                        lastClickedTable = table;
+                        lastClickedTableRow = row;
+                        lastClickedTableColumn = col;
 
-                        Object value = table.getValueAt(row, col);
-                        String header = table.getColumnName(col);
-                        ITableContextMenuAction action = getAction(value);
+                        ITableContextMenuAction action = getAction(table, row, col);
                         if (action != null)
                         {
-                            // We need to set the context row/column for external actions to have correct values returned
-                            lastClickedTable = table;
-                            lastClickedTableRow = row;
-                            lastClickedTableColumn = col;
                             action.getAction()
                                     .actionPerformed(new ActionEvent(table, -1, ""));
                         }
                         else
                         {
+                            Object value = table.getValueAt(row, col);
+                            String header = table.getColumnName(col);
                             dialogFactory.showValueDialog("Value viewer - " + header, value, IDialogFactory.Format.UNKOWN);
                         }
                     }
@@ -534,18 +563,15 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 lastClickedTableRow = row;
                 lastClickedTableColumn = col;
 
-                Object value = table.getValueAt(row, col);
-
                 if (e.getClickCount() == 2
                         && e.getButton() == MouseEvent.BUTTON1)
                 {
                     if (row >= 0)
                     {
-                        ITableContextMenuAction action = getAction(value);
                         // Don't trigger link actions on double click
-                        if (action == null)
+                        if (getAction(table, row, col) == null)
                         {
-                            dialogFactory.showValueDialog("Value viewer - " + table.getColumnName(col), value, IDialogFactory.Format.UNKOWN);
+                            dialogFactory.showValueDialog("Value viewer - " + table.getColumnName(col), table.getValueAt(row, col), IDialogFactory.Format.UNKOWN);
                         }
                     }
                 }
@@ -567,7 +593,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     else
                     {
                         // Single click then see if there are any link actions for current value
-                        ITableContextMenuAction action = getAction(value);
+                        ITableContextMenuAction action = getAction(table, row, col);
                         if (action != null)
                         {
                             action.getAction()
@@ -599,53 +625,65 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     if (row >= 0
                             && col >= 0)
                     {
-                        table.setRowSelectionInterval(row, row);
-                        table.setColumnSelectionInterval(col, col);
-                    }
+                        int[] selectedColsBefore = table.getSelectedColumns();
+                        int[] selectedRowsBefore = table.getSelectedRows();
+                        boolean isMultiCellSelection = (selectedRowsBefore.length > 1
+                                || selectedColsBefore.length > 1)
+                                && Arrays.stream(selectedRowsBefore)
+                                        .anyMatch(r -> r == row)
+                                && Arrays.stream(selectedColsBefore)
+                                        .anyMatch(c -> c == col);
 
-                    int count = table.tablePopupMenu.getComponentCount();
-
-                    TableSelectedRow selectedRow = new TableSelectedRow(table, row, col);
-                    for (ITableContextMenuAction action : contextMenuActions)
-                    {
-                        if (action.showContextMenu(selectedRow))
+                        if (!isMultiCellSelection)
                         {
-                            JMenuItem item = new JMenuItem(action.getAction());
-                            contextPopupItems.add(item);
-                            table.tablePopupMenu.insert(item, action.order());
+                            table.setRowSelectionInterval(row, row);
+                            table.setColumnSelectionInterval(col, col);
                         }
-                    }
 
-                    // TODO: if action count exceeds a limit, wrap in a sub menu
-                    List<Action> tableActions = tableActionsConfigurable.getActions(TableOutputComponent.this, selectedRow);
-                    for (Action tableAction : tableActions)
-                    {
-                        JMenuItem item = new JMenuItem(tableAction);
-                        contextPopupItems.add(item);
-                        table.tablePopupMenu.add(item);
-                    }
+                        int count = table.tablePopupMenu.getComponentCount();
 
-                    Object value = table.getValueAt(row, col);
-                    String header = table.getColumnName(col);
-                    // Only show quick filter for small values
-                    if (String.valueOf(value)
-                            .length() <= 100)
-                    {
+                        TableSelectedCell selectedCell = new TableSelectedCell(table, row, col);
+                        for (ITableContextMenuAction action : contextMenuActions)
+                        {
+                            if (action.showContextMenu(selectedCell))
+                            {
+                                JMenuItem item = new JMenuItem(action.getAction());
+                                contextPopupItems.add(item);
+                                table.tablePopupMenu.insert(item, action.order());
+                            }
+                        }
+
+                        // TODO: if action count exceeds a limit, wrap in a sub menu
+                        List<Action> tableActions = tableActionsConfigurable.getActions(TableOutputComponent.this, selectedCell);
+                        for (Action tableAction : tableActions)
+                        {
+                            JMenuItem item = new JMenuItem(tableAction);
+                            contextPopupItems.add(item);
+                            table.tablePopupMenu.add(item);
+                        }
+
+                        Object value = table.getValueAt(row, col);
+                        String header = table.getColumnName(col);
+                        // Only show quick filter for small values
+                        if (String.valueOf(value)
+                                .length() <= 100)
+                        {
+                            if (table.tablePopupMenu.getComponentCount() != count)
+                            {
+                                addSeparator(table.tablePopupMenu.getComponentCount());
+                            }
+
+                            JMenu filter = createFilterContextMenu(col, value, header);
+
+                            contextPopupItems.add(filter);
+                            table.tablePopupMenu.add(filter);
+                        }
+
+                        // Insert a separator on top if we added any items
                         if (table.tablePopupMenu.getComponentCount() != count)
                         {
-                            addSeparator(table.tablePopupMenu.getComponentCount());
+                            addSeparator(count);
                         }
-
-                        JMenu filter = createFilterContextMenu(col, value, header);
-
-                        contextPopupItems.add(filter);
-                        table.tablePopupMenu.add(filter);
-                    }
-
-                    // Insert a separator on top if we added any items
-                    if (table.tablePopupMenu.getComponentCount() != count)
-                    {
-                        addSeparator(count);
                     }
                 }
             }
@@ -880,13 +918,13 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
     }
 
-    private static class TableSelectedRow implements SelectedRow
+    private static class TableSelectedCell implements SelectedCell
     {
         private final Table table;
         private final int tableRow;
         private final int tableColumn;
 
-        TableSelectedRow(Table table, int tableRow, int tableColumn)
+        TableSelectedCell(Table table, int tableRow, int tableColumn)
         {
             this.table = table;
             this.tableRow = tableRow;
@@ -894,7 +932,19 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         }
 
         @Override
-        public String getCellHeader()
+        public int getRowIndex()
+        {
+            return tableRow;
+        }
+
+        @Override
+        public int getColumnIndex()
+        {
+            return tableColumn;
+        }
+
+        @Override
+        public String getColumnHeader()
         {
             if (table == null)
             {
@@ -930,23 +980,21 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             {
                 return 0;
             }
-
             return table.getColumnCount();
         }
 
         @Override
-        public String getHeader(int columnIndex)
+        public String getRowHeader(int columnIndex)
         {
             if (table == null)
             {
                 return null;
             }
-
             return table.getColumnName(columnIndex);
         }
 
         @Override
-        public Object getValue(int columnIndex)
+        public Object getRowValue(int columnIndex)
         {
             if (table == null
                     || tableRow < 0
@@ -954,7 +1002,6 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             {
                 return null;
             }
-
             return table.getValueAt(tableRow, columnIndex);
         }
     }

@@ -202,8 +202,8 @@ class TableActionsConfigurable implements IConfigurable
         }
     }
 
-    /** Return actions matching provided row. */
-    List<Action> getActions(ITableOutputComponent outputComponent, ITableOutputComponent.SelectedRow selectedRow)
+    /** Return actions matching provided cell. */
+    List<Action> getActions(ITableOutputComponent outputComponent, ITableOutputComponent.SelectedCell selectedRow)
     {
         IQueryFile queryFile = outputComponent.getQueryFile();
         IState engineState = queryFile.getEngineState();
@@ -458,7 +458,7 @@ class TableActionsConfigurable implements IConfigurable
         return StringUtils.trimToEmpty(sb.toString());
     }
 
-    private Map<String, Object> getModel(IQueryEngine engine, IQueryEngine.IState state, ITableOutputComponent.SelectedRow selectedRow, boolean testData)
+    private Map<String, Object> getModel(IQueryEngine engine, IQueryEngine.IState state, ITableOutputComponent.SelectedCell selectedRow, boolean testData)
     {
         // - Build a variables map to use
         Map<String, Object> variables = testData ? new LinkedHashMap<String, Object>()
@@ -469,13 +469,13 @@ class TableActionsConfigurable implements IConfigurable
         //@formatter:off
         variables.put("tableRow", Map.of(
                 "cell", MapUtils.ofEntries(
-                        MapUtils.entry("header", selectedRow.getCellHeader()),
+                        MapUtils.entry("header", selectedRow.getColumnHeader()),
                         MapUtils.entry("value", selectedRow.getCellValue())
-                ), 
+                ),
                 "columns", IntStream.range(0, selectedRow.getColumnCount()).mapToObj(i ->
                         MapUtils.ofEntries(
-                            MapUtils.entry("header", selectedRow.getHeader(i)),
-                            MapUtils.entry("value", selectedRow.getValue(i))
+                            MapUtils.entry("header", selectedRow.getRowHeader(i)),
+                            MapUtils.entry("value", selectedRow.getRowValue(i))
                         )).toList()
                 ));
         //@formatter:on
@@ -489,10 +489,22 @@ class TableActionsConfigurable implements IConfigurable
 
     private String getTestModelJson(IQueryEngine queryEngine)
     {
-        ITableOutputComponent.SelectedRow selectedRow = new ITableOutputComponent.SelectedRow()
+        ITableOutputComponent.SelectedCell selectedRow = new ITableOutputComponent.SelectedCell()
         {
             @Override
-            public Object getValue(int columnIndex)
+            public int getRowIndex()
+            {
+                return 0;
+            }
+
+            @Override
+            public int getColumnIndex()
+            {
+                return 0;
+            }
+
+            @Override
+            public Object getRowValue(int columnIndex)
             {
                 return switch (columnIndex)
                 {
@@ -504,7 +516,7 @@ class TableActionsConfigurable implements IConfigurable
             }
 
             @Override
-            public String getHeader(int columnIndex)
+            public String getRowHeader(int columnIndex)
             {
                 return switch (columnIndex)
                 {
@@ -528,7 +540,7 @@ class TableActionsConfigurable implements IConfigurable
             }
 
             @Override
-            public String getCellHeader()
+            public String getColumnHeader()
             {
                 return "columnName";
             }

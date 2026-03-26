@@ -7,9 +7,10 @@ import com.queryeer.api.extensions.output.IOutputComponent;
 public interface ITableOutputComponent extends IOutputComponent
 {
     /**
-     * Returns the selected row if the table component. Or null if no row is selected. This can be used to get the value of a clicked cell in actions etc.
+     * Returns all selected cells in the active table. Returns one entry per actually-selected cell, correctly handling sparse CTRL+click, contiguous block, and single-cell selections. Returns an
+     * empty list if no selection exists.
      */
-    SelectedRow getSelectedRow();
+    java.util.List<SelectedCell> getSelectedCells();
 
     /** Return this query files associated query file. */
     IQueryFile getQueryFile();
@@ -17,22 +18,28 @@ public interface ITableOutputComponent extends IOutputComponent
     /** Select row in a table in this component. */
     void selectRow(int tableIndex, int row);
 
-    /** Definition of a selected row. */
-    interface SelectedRow
+    /** A single selected cell with access to its full row's data. */
+    interface SelectedCell
     {
-        /** Get the column header of the selected cell */
-        String getCellHeader();
+        /** Row index of this cell (view index) */
+        int getRowIndex();
 
-        /** Get value of the selected cell */
+        /** Column index of this cell */
+        int getColumnIndex();
+
+        /** Column header of this cell */
+        String getColumnHeader();
+
+        /** Value at this cell */
         Object getCellValue();
 
-        /** Return column count of the selected row. */
+        /** Total number of columns in the table */
         int getColumnCount();
 
-        /** Get value at provided column index. */
-        Object getValue(int columnIndex);
+        /** Value at any column in this row */
+        Object getRowValue(int columnIndex);
 
-        /** Get column header at provided column index. */
-        String getHeader(int columnIndex);
+        /** Column header at any column index */
+        String getRowHeader(int columnIndex);
     }
 }
