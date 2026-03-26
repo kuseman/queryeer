@@ -9,6 +9,7 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.AdjustmentListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
@@ -31,6 +32,7 @@ import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
@@ -47,6 +49,7 @@ import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
 import com.queryeer.Constants;
+import com.queryeer.UiUtils;
 import com.queryeer.api.IQueryFile;
 import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.event.ShowOptionsEvent;
@@ -64,23 +67,43 @@ import com.queryeer.api.service.IQueryFileProvider;
 class AIChatWindow extends DialogUtils.AFrame
 {
     private static final String COPY_SCHEME = "copy:";
-    // CSOFF
-    private static final String HTML_STYLE = "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " .user-label { color: #0064b4; font-weight: bold; }"
-                                             + " .user-text { color: #0050a0; margin-left: 8px; margin-top: 2px; }"
-                                             + " .asst-label { color: #147814; font-weight: bold; }"
-                                             + " .asst-text { color: #1e641e; margin-left: 8px; margin-top: 2px; }"
-                                             + " .error-text { color: #cc0000; margin-left: 8px; }"
-                                             + " pre { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; padding: 6px; margin: 4px; }"
-                                             + " code { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; }"
-                                             + " blockquote { margin-left: 16px; }"
-                                             + " table { border: 1px solid #cccccc; border-collapse: collapse; }"
-                                             + " td, th { border: 1px solid #cccccc; padding: 4px 8px; }"
-                                             + " .copy-btn { font-size: 10pt; color: #666666; }";
-    // CSON
-
-    private static final String HTML_START = "<html><head><style>" + HTML_STYLE + "</style></head><body>";
     private static final String HTML_END = "</body></html>";
-    private static final String EMPTY_HTML = HTML_START + HTML_END;
+
+    // CSOFF
+    private static String buildHtmlStyle()
+    {
+        if (UiUtils.isDarkLookAndFeel())
+        {
+            return "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " .user-label { color: #5ab0ff; font-weight: bold; }"
+                   + " .user-text { color: #7dc4ff; margin-left: 8px; margin-top: 2px; }"
+                   + " .asst-label { color: #57cc57; font-weight: bold; }"
+                   + " .asst-text { color: #80d980; margin-left: 8px; margin-top: 2px; }"
+                   + " .error-text { color: #ff6b6b; margin-left: 8px; }"
+                   + " pre { font-family: monospace; font-size: 11pt; background-color: #2b2b2b; padding: 6px; margin: 4px; }"
+                   + " code { font-family: monospace; font-size: 11pt; background-color: #2b2b2b; }"
+                   + " blockquote { margin-left: 16px; }"
+                   + " table { border: 1px solid #555555; border-collapse: collapse; }"
+                   + " td, th { border: 1px solid #555555; padding: 4px 8px; }"
+                   + " .copy-btn { font-size: 10pt; color: #aaaaaa; }";
+        }
+        return "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " .user-label { color: #0064b4; font-weight: bold; }"
+               + " .user-text { color: #0050a0; margin-left: 8px; margin-top: 2px; }"
+               + " .asst-label { color: #147814; font-weight: bold; }"
+               + " .asst-text { color: #1e641e; margin-left: 8px; margin-top: 2px; }"
+               + " .error-text { color: #cc0000; margin-left: 8px; }"
+               + " pre { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; padding: 6px; margin: 4px; }"
+               + " code { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; }"
+               + " blockquote { margin-left: 16px; }"
+               + " table { border: 1px solid #cccccc; border-collapse: collapse; }"
+               + " td, th { border: 1px solid #cccccc; padding: 4px 8px; }"
+               + " .copy-btn { font-size: 10pt; color: #666666; }";
+    }
+
+    private static String buildHtmlStart()
+    {
+        return "<html><head><style>" + buildHtmlStyle() + "</style></head><body>";
+    }
+    // CSON
 
     private static final Parser MARKDOWN_PARSER = Parser.builder()
             .extensions(List.of(TablesExtension.create(), StrikethroughExtension.create(), TaskListItemsExtension.create()))
@@ -103,6 +126,10 @@ class AIChatWindow extends DialogUtils.AFrame
     private JScrollPane infoScrollPane;
     private boolean infoExpanded = false;
     private JEditorPane chatPane;
+    private JScrollPane chatScroll;
+    private JPanel newContentIndicator;
+    private boolean autoScroll = true;
+    private boolean programmaticScroll = false;
     private JTextArea inputArea;
     private JButton sendButton;
     private JButton contextButton;
@@ -111,6 +138,13 @@ class AIChatWindow extends DialogUtils.AFrame
     private IQueryFile currentFile;
     private boolean responding = false;
     private Timer streamingTimer;
+
+    /** Sent-message history for the input area (Alt+Up / Alt+Down navigation). */
+    private final List<String> inputHistory = new ArrayList<>();
+    /** Current position while browsing history; -1 means "not browsing". */
+    private int historyIndex = -1;
+    /** Draft text saved when the user starts browsing backwards so it can be restored. */
+    private String historyDraft = null;
     /** Maps copy-button IDs (e.g. "cb-3") to the raw code content to be copied. */
     private final Map<String, String> codeBlockMap = new HashMap<>();
     private final AtomicInteger codeBlockIdCounter = new AtomicInteger(0);
@@ -204,12 +238,47 @@ class AIChatWindow extends DialogUtils.AFrame
         getContentPane().add(northContainer, BorderLayout.NORTH);
 
         // Center: scrollable chat history rendered as HTML
-        chatPane = new JEditorPane("text/html", EMPTY_HTML);
+        chatPane = new JEditorPane("text/html", buildHtmlStart() + HTML_END);
         chatPane.setEditable(false);
         chatPane.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         chatPane.addHyperlinkListener(copyButtonListener());
-        JScrollPane chatScroll = new JScrollPane(chatPane);
-        getContentPane().add(chatScroll, BorderLayout.CENTER);
+        chatScroll = new JScrollPane(chatPane);
+
+        // Detect manual scrolling: if user scrolls away from bottom, disable auto-scroll
+        AdjustmentListener scrollListener = e ->
+        {
+            if (programmaticScroll)
+            {
+                return;
+            }
+            JScrollBar bar = chatScroll.getVerticalScrollBar();
+            boolean atBottom = bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 5;
+            if (atBottom)
+            {
+                autoScroll = true;
+                newContentIndicator.setVisible(false);
+            }
+            else
+            {
+                autoScroll = false;
+            }
+        };
+        chatScroll.getVerticalScrollBar()
+                .addAdjustmentListener(scrollListener);
+
+        // Indicator shown when auto-scroll is off and new content arrives
+        // CSOFF
+        JButton scrollDownButton = new JButton("\u25BC New content \u2013 scroll down");
+        // CSON
+        scrollDownButton.addActionListener(e -> scrollToBottom());
+        newContentIndicator = new JPanel(new FlowLayout(FlowLayout.CENTER, 4, 2));
+        newContentIndicator.add(scrollDownButton);
+        newContentIndicator.setVisible(false);
+
+        JPanel chatWrapper = new JPanel(new BorderLayout());
+        chatWrapper.add(chatScroll, BorderLayout.CENTER);
+        chatWrapper.add(newContentIndicator, BorderLayout.SOUTH);
+        getContentPane().add(chatWrapper, BorderLayout.CENTER);
 
         // Bottom: input area + buttons
         JPanel bottomPanel = new JPanel(new BorderLayout(4, 4));
@@ -219,7 +288,7 @@ class AIChatWindow extends DialogUtils.AFrame
         inputArea.setLineWrap(true);
         inputArea.setWrapStyleWord(true);
         inputArea.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
-        inputArea.setToolTipText("Type your message. Press Ctrl+Enter to send.");
+        inputArea.setToolTipText("Type your message. Ctrl+Enter to send. Alt+Up/Down for history.");
         inputArea.addKeyListener(new KeyAdapter()
         {
             @Override
@@ -229,6 +298,18 @@ class AIChatWindow extends DialogUtils.AFrame
                         && e.isControlDown())
                 {
                     sendMessage();
+                    e.consume();
+                }
+                else if (e.getKeyCode() == KeyEvent.VK_UP
+                        && e.isAltDown())
+                {
+                    navigateHistory(-1);
+                    e.consume();
+                }
+                else if (e.getKeyCode() == KeyEvent.VK_DOWN
+                        && e.isAltDown())
+                {
+                    navigateHistory(1);
                     e.consume();
                 }
             }
@@ -331,9 +412,10 @@ class AIChatWindow extends DialogUtils.AFrame
     {
         currentFile = file;
         FileChatState state = currentState();
-        chatPane.setText(state != null ? buildHtml(state.completedHtmlBody, null)
-                : EMPTY_HTML);
-        scrollToBottom();
+        autoScroll = true;
+        newContentIndicator.setVisible(false);
+        updateChatHtml(state != null ? buildHtml(state.completedHtmlBody, null)
+                : buildHtmlStart() + HTML_END);
         updateContextButton();
         updateInfoPanel();
     }
@@ -402,16 +484,25 @@ class AIChatWindow extends DialogUtils.AFrame
                 || !provider.isConfigured())
         {
             state.completedHtmlBody += errorHtml("No provider configured. Please configure an AI provider in Options.");
-            chatPane.setText(buildHtml(state.completedHtmlBody, null));
-            scrollToBottom();
+            updateChatHtml(buildHtml(state.completedHtmlBody, null));
             return;
         }
 
         inputArea.setText("");
+        // Record in input history (avoid consecutive duplicates)
+        if (inputHistory.isEmpty()
+                || !inputHistory.get(inputHistory.size() - 1)
+                        .equals(userText))
+        {
+            inputHistory.add(userText);
+        }
+        historyIndex = -1;
+        historyDraft = null;
         state.completedHtmlBody += userHtml(userText);
         state.responseBuilder.setLength(0);
-        chatPane.setText(buildHtml(state.completedHtmlBody, ""));
-        scrollToBottom();
+        autoScroll = true;
+        newContentIndicator.setVisible(false);
+        updateChatHtml(buildHtml(state.completedHtmlBody, ""));
         setResponding(true, state, provider);
 
         List<AIChatMessage> historySnapshot = new ArrayList<>(state.history);
@@ -430,15 +521,13 @@ class AIChatWindow extends DialogUtils.AFrame
             String responseText = state.responseBuilder.toString();
             state.history.add(new AIChatMessage(Role.ASSISTANT, responseText));
             state.completedHtmlBody += assistantHtml(responseText, provider);
-            chatPane.setText(buildHtml(state.completedHtmlBody, null));
-            scrollToBottom();
+            updateChatHtml(buildHtml(state.completedHtmlBody, null));
             setResponding(false, state, provider);
         }), error -> SwingUtilities.invokeLater(() ->
         {
             stopStreamingTimer();
             state.completedHtmlBody += errorHtml(error.getMessage());
-            chatPane.setText(buildHtml(state.completedHtmlBody, null));
-            scrollToBottom();
+            updateChatHtml(buildHtml(state.completedHtmlBody, null));
             setResponding(false, state, provider);
         })));
     }
@@ -485,6 +574,58 @@ class AIChatWindow extends DialogUtils.AFrame
         return sb.toString();
     }
 
+    /** Navigate input history. direction=-1 goes back (older), +1 goes forward (newer). */
+    private void navigateHistory(int direction)
+    {
+        if (inputHistory.isEmpty())
+        {
+            return;
+        }
+        if (direction < 0)
+        {
+            // Going back: save draft on first navigation
+            if (historyIndex == -1)
+            {
+                historyDraft = inputArea.getText();
+                historyIndex = inputHistory.size();
+            }
+            int next = historyIndex - 1;
+            if (next >= 0)
+            {
+                historyIndex = next;
+                inputArea.setText(inputHistory.get(historyIndex));
+                inputArea.setCaretPosition(inputArea.getText()
+                        .length());
+            }
+        }
+        else
+        {
+            // Going forward
+            if (historyIndex == -1)
+            {
+                return;
+            }
+            int next = historyIndex + 1;
+            if (next < inputHistory.size())
+            {
+                historyIndex = next;
+                inputArea.setText(inputHistory.get(historyIndex));
+                inputArea.setCaretPosition(inputArea.getText()
+                        .length());
+            }
+            else
+            {
+                // Restore draft
+                historyIndex = -1;
+                inputArea.setText(historyDraft != null ? historyDraft
+                        : "");
+                historyDraft = null;
+                inputArea.setCaretPosition(inputArea.getText()
+                        .length());
+            }
+        }
+    }
+
     private void clearChat()
     {
         FileChatState state = currentState();
@@ -496,7 +637,7 @@ class AIChatWindow extends DialogUtils.AFrame
         state.completedHtmlBody = "";
         state.sessionId = null;
         codeBlockMap.clear();
-        chatPane.setText(EMPTY_HTML);
+        chatPane.setText(buildHtmlStart() + HTML_END);
     }
 
     private void setResponding(boolean responding, FileChatState state, IAIAssistantProvider provider)
@@ -517,8 +658,7 @@ class AIChatWindow extends DialogUtils.AFrame
         // CSON
         {
             String current = state.responseBuilder.toString();
-            chatPane.setText(buildHtml(state.completedHtmlBody, current));
-            scrollToBottom();
+            updateChatHtml(buildHtml(state.completedHtmlBody, current));
         });
         streamingTimer.setRepeats(true);
         streamingTimer.start();
@@ -533,25 +673,67 @@ class AIChatWindow extends DialogUtils.AFrame
         }
     }
 
+    /**
+     * Updates the chat HTML content and handles scroll position. When auto-scroll is enabled the view scrolls to the bottom after the update. When the user has scrolled up the current scroll position
+     * is restored and the "new content" indicator is shown.
+     */
+    private void updateChatHtml(String html)
+    {
+        JScrollBar vbar = chatScroll.getVerticalScrollBar();
+        final int savedPos = autoScroll ? -1
+                : vbar.getValue();
+        programmaticScroll = true;
+        chatPane.setText(html);
+        SwingUtilities.invokeLater(() ->
+        {
+            if (autoScroll)
+            {
+                vbar.setValue(vbar.getMaximum());
+            }
+            else
+            {
+                int max = Math.max(0, vbar.getMaximum() - vbar.getVisibleAmount());
+                vbar.setValue(Math.min(savedPos, max));
+                newContentIndicator.setVisible(true);
+            }
+            programmaticScroll = false;
+        });
+    }
+
     private void scrollToBottom()
     {
-        SwingUtilities.invokeLater(() -> chatPane.setCaretPosition(chatPane.getDocument()
-                .getLength()));
+        autoScroll = true;
+        newContentIndicator.setVisible(false);
+        SwingUtilities.invokeLater(() ->
+        {
+            programmaticScroll = true;
+            JScrollBar vbar = chatScroll.getVerticalScrollBar();
+            vbar.setValue(vbar.getMaximum());
+            programmaticScroll = false;
+        });
     }
 
     // ---- HTML building helpers ----
 
     private static String buildHtml(String completedBody, String streamingText)
     {
-        StringBuilder sb = new StringBuilder(HTML_START);
+        StringBuilder sb = new StringBuilder(buildHtmlStart());
         sb.append(completedBody);
-        if (streamingText != null
-                && !streamingText.isEmpty())
+        if (streamingText != null)
         {
             sb.append("<p><b class=\"asst-label\">Assistant:</b></p>");
-            sb.append("<div class=\"asst-text\"><p>");
-            sb.append(escapeHtml(streamingText));
-            sb.append("</p></div>");
+            sb.append("<div class=\"asst-text\">");
+            if (streamingText.isEmpty())
+            {
+                sb.append("<p><em>Starting...</em></p>");
+            }
+            else
+            {
+                sb.append("<p>");
+                sb.append(escapeHtml(streamingText));
+                sb.append("</p>");
+            }
+            sb.append("</div>");
         }
         sb.append(HTML_END);
         return sb.toString();
@@ -559,7 +741,7 @@ class AIChatWindow extends DialogUtils.AFrame
 
     private static String userHtml(String text)
     {
-        return "<p><b class=\"user-label\">You:</b></p><p class=\"user-text\">" + escapeHtml(text) + "</p>";
+        return "<p><b class=\"user-label\">You:</b></p><div class=\"user-text\">" + renderMarkdown(text) + "</div>";
     }
 
     private String assistantHtml(String text, IAIAssistantProvider provider)
