@@ -50,8 +50,13 @@ class SqlServerQueryPlanActionFactory implements ITableContextMenuActionFactory
                     @Override
                     public void actionPerformed(ActionEvent e)
                     {
-                        ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
-                        Object value = selectedRow.getCellValue();
+                        List<ITableOutputComponent.SelectedCell> cells = outputcomponent.getSelectedCells();
+                        if (cells.isEmpty())
+                        {
+                            return;
+                        }
+                        Object value = cells.get(0)
+                                .getCellValue();
                         String xml = String.valueOf(value);
                         if (isSqlServerQueryPlan(xml))
                         {
@@ -66,9 +71,9 @@ class SqlServerQueryPlanActionFactory implements ITableContextMenuActionFactory
             }
 
             @Override
-            public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
+            public boolean showContextMenu(ITableOutputComponent.SelectedCell selectedCell)
             {
-                return isSqlServerQueryPlan(String.valueOf(selectedRow.getCellValue()));
+                return isSqlServerQueryPlan(String.valueOf(selectedCell.getCellValue()));
             }
         });
     }

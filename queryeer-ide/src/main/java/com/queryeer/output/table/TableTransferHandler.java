@@ -108,8 +108,14 @@ class TableTransferHandler extends TransferHandler
             rowsValues.add(values);
             for (int col = 0; col < cols.length; col++)
             {
-                Object obj = table.getValueAt(rows[row], cols[col]);
-                values[col] = obj;
+                // Skip cells that fall in the bounding-box cross-product but are not actually
+                // selected (sparse CTRL+click selection). isCellSelected is overridden in Table
+                // to consult ctrlSelectedCells, so this works for both normal and ctrl selections.
+                if (!table.isCellSelected(rows[row], cols[col]))
+                {
+                    continue;
+                }
+                values[col] = table.getValueAt(rows[row], cols[col]);
             }
         }
 

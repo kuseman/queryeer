@@ -17,8 +17,8 @@ public interface ITableContextMenuAction extends IExtensionAction
         return false;
     }
 
-    /** Should this action be shown for provided row. */
-    default boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
+    /** Should this action be shown for the right-clicked cell. */
+    default boolean showContextMenu(ITableOutputComponent.SelectedCell selectedCell)
     {
         return true;
     }

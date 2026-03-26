@@ -22,6 +22,7 @@ import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.extensions.output.table.ITableContextMenuAction;
 import com.queryeer.api.extensions.output.table.ITableContextMenuActionFactory;
 import com.queryeer.api.extensions.output.table.ITableOutputComponent;
+import com.queryeer.api.extensions.output.table.ITableOutputComponent.SelectedCell;
 import com.queryeer.output.table.Model.QueryeerImage;
 
 /** Default factory for table context menu */
@@ -37,19 +38,80 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
     @Override
     public List<ITableContextMenuAction> create(ITableOutputComponent outputcomponent)
     {
-        return asList(new ViewAsJsonAction(dialogFactory, outputcomponent), new ViewAsXmlAction(dialogFactory, outputcomponent), new OpenInBrowserAction(outputcomponent));
+        return asList(new CopyAsCsvAction(outputcomponent), new ViewAsJsonAction(dialogFactory), new ViewAsXmlAction(dialogFactory), new OpenInBrowserAction());
+    }
+
+    private static class CopyAsCsvAction implements ITableContextMenuAction
+    {
+        private final ITableOutputComponent outputcomponent;
+
+        CopyAsCsvAction(ITableOutputComponent outputcomponent)
+        {
+            this.outputcomponent = outputcomponent;
+        }
+
+        @Override
+        public int order()
+        {
+            return 5;
+        }
+
+        @Override
+        public boolean showContextMenu(ITableOutputComponent.SelectedCell selectedCell)
+        {
+            int column = -1;
+            for (SelectedCell cell : outputcomponent.getSelectedCells())
+            {
+                if (column == -1)
+                {
+                    column = cell.getColumnIndex();
+                }
+                else if (column != cell.getColumnIndex())
+                {
+                    // Only single column selection
+                    return false;
+                }
+            }
+            return column != -1;
+        }
+
+        @Override
+        public Action getAction()
+        {
+            return new AbstractAction("Copy as CSV")
+            {
+                @Override
+                public void actionPerformed(ActionEvent e)
+                {
+                    List<ITableOutputComponent.SelectedCell> cells = outputcomponent.getSelectedCells();
+                    StringBuilder sb = new StringBuilder();
+                    for (ITableOutputComponent.SelectedCell cell : cells)
+                    {
+                        if (sb.length() > 0)
+                        {
+                            sb.append(',');
+                        }
+                        Object val = cell.getCellValue();
+                        sb.append(val != null ? val.toString()
+                                : "");
+                    }
+                    java.awt.Toolkit.getDefaultToolkit()
+                            .getSystemClipboard()
+                            .setContents(new java.awt.datatransfer.StringSelection(sb.toString()), null);
+                }
+            };
+        }
     }
 
     /** View as JSON */
     private static class ViewAsJsonAction implements ITableContextMenuAction
     {
         private final IDialogFactory dialogFactory;
-        private final ITableOutputComponent outputcomponent;
+        private ITableOutputComponent.SelectedCell contextCell;
 
-        ViewAsJsonAction(IDialogFactory dialogFactory, ITableOutputComponent outputcomponent)
+        ViewAsJsonAction(IDialogFactory dialogFactory)
         {
             this.dialogFactory = dialogFactory;
-            this.outputcomponent = outputcomponent;
         }
 
         @Override
@@ -66,9 +128,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
-                    Object value = selectedRow.getCellValue();
-                    dialogFactory.showValueDialog("Json viewer - " + selectedRow.getCellHeader(), value, IDialogFactory.Format.JSON);
+                    ITableOutputComponent.SelectedCell cell = contextCell;
+                    if (cell == null)
+                    {
+                        return;
+                    }
+                    dialogFactory.showValueDialog("Json viewer - " + cell.getColumnHeader(), cell.getCellValue(), IDialogFactory.Format.JSON);
                 }
             };
         }
@@ -103,21 +168,25 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
 
         @Override
-        public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
+        public boolean showContextMenu(ITableOutputComponent.SelectedCell selectedCell)
         {
-            return showLink(selectedRow.getCellValue());
+            if (showLink(selectedCell.getCellValue()))
+            {
+                contextCell = selectedCell;
+                return true;
+            }
+            return false;
         }
     }
 
     private static class ViewAsXmlAction implements ITableContextMenuAction
     {
         private final IDialogFactory dialogFactory;
-        private final ITableOutputComponent outputcomponent;
+        private ITableOutputComponent.SelectedCell contextCell;
 
-        ViewAsXmlAction(IDialogFactory dialogFactory, ITableOutputComponent outputcomponent)
+        ViewAsXmlAction(IDialogFactory dialogFactory)
         {
             this.dialogFactory = dialogFactory;
-            this.outputcomponent = outputcomponent;
         }
 
         @Override
@@ -134,9 +203,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
-                    Object value = selectedRow.getCellValue();
-                    dialogFactory.showValueDialog("XML viewer - " + selectedRow.getCellHeader(), value, IDialogFactory.Format.XML);
+                    ITableOutputComponent.SelectedCell cell = contextCell;
+                    if (cell == null)
+                    {
+                        return;
+                    }
+                    dialogFactory.showValueDialog("XML viewer - " + cell.getColumnHeader(), cell.getCellValue(), IDialogFactory.Format.XML);
                 }
             };
         }
@@ -157,19 +229,23 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
 
         @Override
-        public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
+        public boolean showContextMenu(ITableOutputComponent.SelectedCell selectedCell)
         {
-            return showLink(selectedRow.getCellValue());
+            if (showLink(selectedCell.getCellValue()))
+            {
+                contextCell = selectedCell;
+                return true;
+            }
+            return false;
         }
     }
 
     private static class OpenInBrowserAction implements ITableContextMenuAction
     {
-        private final ITableOutputComponent outputcomponent;
+        private ITableOutputComponent.SelectedCell contextCell;
 
-        OpenInBrowserAction(ITableOutputComponent outputcomponent)
+        OpenInBrowserAction()
         {
-            this.outputcomponent = outputcomponent;
         }
 
         @Override
@@ -186,8 +262,12 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
                 @Override
                 public void actionPerformed(ActionEvent e)
                 {
-                    ITableOutputComponent.SelectedRow selectedRow = outputcomponent.getSelectedRow();
-                    Object value = selectedRow.getCellValue();
+                    ITableOutputComponent.SelectedCell cell = contextCell;
+                    if (cell == null)
+                    {
+                        return;
+                    }
+                    Object value = cell.getCellValue();
                     if (value == null)
                     {
                         return;
@@ -227,9 +307,14 @@ class TableContextMenuActionFactory implements ITableContextMenuActionFactory
         }
 
         @Override
-        public boolean showContextMenu(ITableOutputComponent.SelectedRow selectedRow)
+        public boolean showContextMenu(ITableOutputComponent.SelectedCell selectedCell)
         {
-            return showLink(selectedRow.getCellValue());
+            if (showLink(selectedCell.getCellValue()))
+            {
+                contextCell = selectedCell;
+                return true;
+            }
+            return false;
         }
     }
 }
