@@ -106,8 +106,6 @@ class ClaudeCodeAIAssistantProvider implements IAIAssistantProvider
                 : null;
         List<String> command = buildCommand(executable, userMessage, systemPrompt, resumeId);
 
-        onChunk.accept("Starting Calude executable..." + System.lineSeparator());
-
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
 
