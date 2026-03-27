@@ -6,6 +6,9 @@ on:
 
 name: Create release and upload Release Asset
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Upload Release Asset
@@ -17,9 +20,11 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "VERSION=${TAG/v/}" >> $GITHUB_ENV
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up JDK 17
-        uses: actions/setup-java@v3.6.0
+        uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'zulu'
@@ -28,32 +33,33 @@ jobs:
         run: mvn -B clean package -DperformRelease=true -DskipTests=true -Dcheckstyle.skip --file pom.xml
       - name: Build Changelog
         id: github_release
-        uses: mikepenz/release-changelog-builder-action@v3
+        uses: mikepenz/release-changelog-builder-action@v5
         with:
           commitMode: true
+          configurationJson: |
+            {
+              "label_extractor": [
+                { "pattern": "^chore: prepare for next development iteration", "on_property": "title", "label": "skip" },
+                { "pattern": "^release:.*", "on_property": "title", "label": "skip" }
+              ],
+              "ignore_labels": ["skip"],
+              "categories": [
+                { "title": "## Features",  "rules": [{ "pattern": "^feat.*", "on_property": "title" }] },
+                { "title": "## Bug Fixes", "rules": [{ "pattern": "^fix.*",  "on_property": "title" }] },
+                { "title": "## Chores",    "rules": [{ "pattern": "^chore.*","on_property": "title" }] }
+              ]
+            }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: ${{steps.github_release.outputs.changelog}}
+          name: Release ${{ env.VERSION }}
+          body: ${{ steps.github_release.outputs.changelog }}
           draft: false
           prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-          asset_path: ./queryeer-dist/target/queryeer-${{ env.VERSION }}-dist.zip
-          asset_name: queryeer-${{ env.VERSION }}-dist.zip
-          asset_content_type: application/zip
+          files: ./queryeer-dist/target/queryeer-${{ env.VERSION }}-dist.zip
 
   publish:
     runs-on: ubuntu-latest
@@ -64,10 +70,10 @@ jobs:
           echo "VERSION=${TAG/v/}" >> $GITHUB_ENV
       - run: echo "Will start a Maven Central upload with tag ${VERSION}"
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Maven Central Repository
-        uses: actions/setup-java@v3.6.0
+        uses: actions/setup-java@v4
         with:
           java-version: 17
           distribution: 'zulu'

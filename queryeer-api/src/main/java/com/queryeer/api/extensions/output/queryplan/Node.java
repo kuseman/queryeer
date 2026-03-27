@@ -13,6 +13,7 @@ import java.util.List;
  */
 public record Node(String label, String toolTip, List<Node.NodeProperty> properties, List<Node.NodeLink> children)
 {
+
     public Node(String label, String toolTip, List<Node.NodeProperty> properties)
     {
         this(label, toolTip, properties, new ArrayList<>());
