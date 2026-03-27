@@ -48,8 +48,20 @@ class MultiCaretSupport
     private int blockCurrentLine = -1;
     private int blockCurrentCol = -1;
 
-    private static final int MENU_MASK = Toolkit.getDefaultToolkit()
-            .getMenuShortcutKeyMaskEx();
+    private static final int MENU_MASK = menuShortcutKeyMask();
+
+    private static int menuShortcutKeyMask()
+    {
+        try
+        {
+            return Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx();
+        }
+        catch (java.awt.HeadlessException e)
+        {
+            return InputEvent.CTRL_DOWN_MASK;
+        }
+    }
 
     // -----------------------------------------------------------------------
     // Constructor
@@ -364,11 +376,16 @@ class MultiCaretSupport
             }
             // When dot is at a newline character, modelToView2D may map to the start of the
             // next line (y jumps). Detect this and use the right edge of the preceding character.
+            // Guard: if the character at dot-1 is '\n', then dot is at column 0 of the next line
+            // (not at a newline itself) — do NOT apply the end-of-line correction in that case.
             if (dot > 0)
             {
+                String prevChar = textArea.getDocument()
+                        .getText(dot - 1, 1);
                 Rectangle2D prev = textArea.modelToView2D(dot - 1);
                 if (prev != null
-                        && prev.getY() < r.getY())
+                        && prev.getY() < r.getY()
+                        && !"\n".equals(prevChar))
                 {
                     r = new Rectangle2D.Double(prev.getMaxX(), prev.getY(), 0, prev.getHeight());
                 }
