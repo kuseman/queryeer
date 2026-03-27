@@ -17,8 +17,20 @@ import javax.swing.text.Document;
  */
 class MultiCaretEditHandler
 {
-    static final int MENU_MASK = Toolkit.getDefaultToolkit()
-            .getMenuShortcutKeyMaskEx();
+    static final int MENU_MASK = menuShortcutKeyMask();
+
+    private static int menuShortcutKeyMask()
+    {
+        try
+        {
+            return Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx();
+        }
+        catch (java.awt.HeadlessException e)
+        {
+            return InputEvent.CTRL_DOWN_MASK;
+        }
+    }
 
     /** Fallback flavor for transferables (e.g. TableTransferable) that don't expose DataFlavor.stringFlavor. */
     private static final DataFlavor PLAIN_TEXT_STRING_FLAVOR;
