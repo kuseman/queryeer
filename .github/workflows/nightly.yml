@@ -29,8 +29,13 @@ jobs:
           java-version: '17'
           distribution: 'zulu'
           cache: 'maven'
+      - name: Compute changelog from-tag (last 3 releases)
+        id: changelog_range
+        run: |
+          FROM_TAG=$(git tag -l 'v*' --sort=-version:refname | sed -n '4p')
+          echo "FROM_TAG=${FROM_TAG}" >> $GITHUB_OUTPUT
       - name: Build Snapshot
-        run: mvn -B clean package -DperformRelease=true -DskipTests=true -Dcheckstyle.skip -Dgpg.skip=true --file pom.xml
+        run: mvn -B clean package -DperformRelease=true -DskipTests=true -Dcheckstyle.skip -Dgpg.skip=true -Dchangelog.fromRef=${{ steps.changelog_range.outputs.FROM_TAG }} --file pom.xml
       - name: Get project version
         id: version
         run: echo "VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)" >> $GITHUB_OUTPUT

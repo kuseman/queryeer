@@ -42,61 +42,14 @@
                 </property>
             </activation>
             <build>
+                <finalName>queryeer-${project.version}</finalName>
                 <plugins>
-                    <plugin>
-                        <groupId>se.bjurr.gitchangelog</groupId>
-                        <artifactId>git-changelog-maven-plugin</artifactId>
-                        <version>1.92</version>
-                        <executions>
-                            <execution>
-                                <id>GenerateGitChangelog</id>
-                                <phase>generate-sources</phase>
-                                <goals>
-                                    <goal>git-changelog</goal>
-                                </goals>
-                                <configuration>
-                                    <file>${project.build.directory}/CHANGELOG.md</file>
-                                    <templateContent>
-                                        <![CDATA[
-           Changelog
-{{#tags}}
-{{#ifReleaseTag .}}
-## [{{name}}](https://github.com/kuseman/queryeer/releases/tag/{{name}}) ({{tagDate .}})
-
-  {{#ifContainsType commits type='feat'}}
-### Features
-
-    {{#commits}}
-      {{#ifCommitType . type='feat'}}
- - {{#eachCommitScope .}} **{{.}}** {{/eachCommitScope}} {{{commitDescription .}}} ([{{hash}}](https://github.com/kuseman/queryeer/commit/{{hashFull}}))
-      {{/ifCommitType}}
-    {{/commits}}
-  {{/ifContainsType}}
-
-  {{#ifContainsType commits type='fix'}}
-### Bug Fixes
-
-    {{#commits}}
-      {{#ifCommitType . type='fix'}}
- - {{#eachCommitScope .}} **{{.}}** {{/eachCommitScope}} {{{commitDescription .}}} ([{{hash}}](https://github.com/kuseman/queryeer/commit/{{hashFull}}))
-      {{/ifCommitType}}
-    {{/commits}}
-  {{/ifContainsType}}
-
-{{/ifReleaseTag}}
-{{/tags}}
-         ]]>
-                                    </templateContent>
-                                </configuration>
-                            </execution>
-                        </executions>
-                    </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-assembly-plugin</artifactId>
                         <version>3.3.0</version>
                         <configuration>
-                            <finalName>queryeer-${project.version}</finalName>
+                            <attach>false</attach>
                             <descriptors>
                                 <descriptor>src/main/dist/assembly/dist.xml</descriptor>
                             </descriptors>

@@ -94,6 +94,7 @@
                 <configuration>
                     <!-- No version in output directory to easier reference from editor launcher -->
                     <finalName>${project.artifactId}</finalName>
+                    <attach>false</attach>
                     <descriptors>
                         <descriptor>src/main/assembly/assembly.xml</descriptor>
                     </descriptors>

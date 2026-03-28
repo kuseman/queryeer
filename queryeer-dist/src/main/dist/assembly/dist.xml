@@ -17,9 +17,7 @@
 
     <dependencySets>
         <dependencySet>
-            <excludes>
-                <exclude>*:sources</exclude>
-            </excludes>
+            <useProjectArtifact>false</useProjectArtifact>
             <fileMode>0644</fileMode>
             <includes>
                 <include>*:jar:*</include>
@@ -28,13 +26,6 @@
         </dependencySet>
     </dependencySets>
     <fileSets>
-        <fileSet>
-            <directory>${basedir}/target</directory>
-            <includes>
-                <include>CHANGELOG.md</include>
-            </includes>
-            <outputDirectory>/</outputDirectory>
-        </fileSet>
         <fileSet>
             <directory>${basedir}/../queryeer-ide/src/main/resources/icons
             </directory>
