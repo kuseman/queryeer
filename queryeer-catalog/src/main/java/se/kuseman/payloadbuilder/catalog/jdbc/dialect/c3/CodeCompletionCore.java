@@ -28,6 +28,15 @@
  *    (e.g., operator-precedence expressions in SQL grammars).
  *  - processRule: token-following sequences are merged via longestCommonPrefix instead of clearing to empty
  *    on conflict, producing better "press tab" continuation suggestions.
+ *  - tokens list, callStack, ruleStack, result lists, path copies: replaced all remaining LinkedList usages
+ *    with ArrayList for O(1) indexed access (tokens.get(i)), O(1) append, O(1) remove-at-end (pop), and
+ *    better cache locality. LinkedList import removed entirely.
+ *  - shortcutMap: pre-sized to atn.ruleToStartState.length in the constructor so that ATN traversal never
+ *    triggers a HashMap rehash. Changed from final-initialised field to constructor-initialised field.
+ *  - Added setParser(Parser) to allow reusing a CodeCompletionCore instance across re-parses, avoiding
+ *    repeated allocation of shortcutMap and the CandidatesCollection maps.
+ *  - collectCandidates: added candidates.rulePositions.clear() alongside the existing rules/tokens clears
+ *    so that rulePositions does not accumulate stale entries across repeated calls on a reused instance.
  */
 package se.kuseman.payloadbuilder.catalog.jdbc.dialect.c3;
 
@@ -38,7 +47,6 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -151,7 +159,8 @@ public class CodeCompletionCore
 
     // A mapping of rule index to token stream position to end token positions.
     // A rule visited before with the same input position always produces the same output positions.
-    private final Map<Integer, Map<Integer, Set<Integer>>> shortcutMap = new HashMap<>();
+    // Pre-sized to the total number of grammar rules so that ATN traversal never triggers a rehash.
+    private final Map<Integer, Map<Integer, Set<Integer>>> shortcutMap;
     private final CandidatesCollection candidates = new CandidatesCollection();
 
     /**
@@ -174,6 +183,8 @@ public class CodeCompletionCore
         this.atn = parser.getATN();
         this.vocabulary = parser.getVocabulary();
         this.ruleNames = parser.getRuleNames();
+        // Pre-size to the total rule count so ATN traversal never causes a rehash.
+        this.shortcutMap = new HashMap<>(this.atn.ruleToStartState.length);
         if (preferredRules != null)
         {
             this.preferredRules = preferredRules;
@@ -195,6 +206,18 @@ public class CodeCompletionCore
     }
 
     /**
+     * Updates the parser reference after a re-parse. The ATN, vocabulary, and rule names are grammar-level constants identical across parser instances of the same class, so only the parser (which
+     * holds the new token stream) needs to change. Reusing the instance avoids reallocating {@link #shortcutMap} and the {@link #candidates} maps on every parse.
+     */
+    public void setParser(Parser parser)
+    {
+        this.parser = parser;
+        this.atn = parser.getATN();
+        this.vocabulary = parser.getVocabulary();
+        this.ruleNames = parser.getRuleNames();
+    }
+
+    /**
      * Main entry point. The caretTokenIndex specifies the token stream index for the token which currently covers the caret (or any other position for which you want code completion candidates).
      *
      * <p>
@@ -205,6 +228,7 @@ public class CodeCompletionCore
         this.shortcutMap.clear();
         this.candidates.rules.clear();
         this.candidates.tokens.clear();
+        this.candidates.rulePositions.clear();
         this.statesProcessed = 0;
         this.precedenceStack = new ArrayList<>();
 
@@ -213,7 +237,7 @@ public class CodeCompletionCore
         TokenStream tokenStream = this.parser.getInputStream();
         int currentIndex = tokenStream.index();
         tokenStream.seek(this.tokenStartIndex);
-        this.tokens = new LinkedList<>();
+        this.tokens = new ArrayList<>();
         int offset = 1;
         while (true)
         {
@@ -227,7 +251,7 @@ public class CodeCompletionCore
         }
         tokenStream.seek(currentIndex);
 
-        LinkedList<Integer> callStack = new LinkedList<>();
+        List<Integer> callStack = new ArrayList<>();
         int startRule = context != null ? context.getRuleIndex()
                 : 0;
         if (startRule < 0)
@@ -341,7 +365,7 @@ public class CodeCompletionCore
         {
             if (this.preferredRules.contains(ruleStack.get(i)))
             {
-                List<Integer> path = new LinkedList<>(ruleStack.subList(0, i));
+                List<Integer> path = new ArrayList<>(ruleStack.subList(0, i));
                 boolean addNew = true;
                 for (Map.Entry<Integer, List<Integer>> entry : this.candidates.rules.entrySet())
                 {
@@ -382,7 +406,7 @@ public class CodeCompletionCore
      */
     private List<Integer> getFollowingTokens(Transition initialTransition)
     {
-        LinkedList<Integer> result = new LinkedList<>();
+        List<Integer> result = new ArrayList<>();
         // FIX: was LinkedList — replaced with ArrayDeque for O(1) add/remove
         Deque<ATNState> pipeline = new ArrayDeque<>();
         pipeline.add(initialTransition.target);
@@ -402,7 +426,7 @@ public class CodeCompletionCore
                         if (list.size() == 1
                                 && !this.ignoredTokens.contains(list.get(0)))
                         {
-                            result.addLast(list.get(0));
+                            result.add(list.get(0));
                             pipeline.addLast(transition.target);
                         }
                     }
@@ -422,11 +446,11 @@ public class CodeCompletionCore
      */
     private FollowSetsHolder determineFollowSets(ATNState start, ATNState stop)
     {
-        LinkedList<FollowSetWithPath> result = new LinkedList<>();
+        List<FollowSetWithPath> result = new ArrayList<>();
         // Path-scoped state set: add before recursing, remove on return, so the same ATNState can be
         // reached via different paths (only prevents cycles on the current path).
         Set<ATNState> stateStack = new HashSet<>();
-        LinkedList<Integer> ruleStack = new LinkedList<>();
+        List<Integer> ruleStack = new ArrayList<>();
         // FIX: companion set for O(1) cycle detection (replaces LinkedList.indexOf() which is O(n))
         Set<Integer> ruleStackSet = new HashSet<>();
 
@@ -451,7 +475,7 @@ public class CodeCompletionCore
      * <p>
      * Returns true when the follow set is exhaustive (all paths were fully explored), false when at least one path reached a RULE_STOP state, meaning the caller may contribute additional tokens.
      */
-    private boolean collectFollowSets(ATNState s, ATNState stopState, LinkedList<FollowSetWithPath> followSets, Set<ATNState> stateStack, LinkedList<Integer> ruleStack, Set<Integer> ruleStackSet)
+    private boolean collectFollowSets(ATNState s, ATNState stopState, List<FollowSetWithPath> followSets, Set<ATNState> stateStack, List<Integer> ruleStack, Set<Integer> ruleStackSet)
     {
         // Cycle on the current path — treat as exhaustive for this branch.
         if (stateStack.contains(s))
@@ -480,10 +504,10 @@ public class CodeCompletionCore
                 {
                     continue;
                 }
-                ruleStack.addLast(ruleTransition.target.ruleIndex);
+                ruleStack.add(ruleTransition.target.ruleIndex);
                 ruleStackSet.add(ruleTransition.target.ruleIndex);
                 boolean ruleExhaustive = this.collectFollowSets(transition.target, stopState, followSets, stateStack, ruleStack, ruleStackSet);
-                ruleStack.removeLast();
+                ruleStack.remove(ruleStack.size() - 1);
                 ruleStackSet.remove(ruleTransition.target.ruleIndex);
 
                 // When the called rule is not exhaustive it can terminate early (RULE_STOP), so tokens
@@ -511,8 +535,8 @@ public class CodeCompletionCore
             {
                 FollowSetWithPath set = new FollowSetWithPath();
                 set.intervals = IntervalSet.of(Token.MIN_USER_TOKEN_TYPE, this.atn.maxTokenType);
-                set.path = new LinkedList<Integer>(ruleStack);
-                followSets.addLast(set);
+                set.path = new ArrayList<>(ruleStack);
+                followSets.add(set);
             }
             else
             {
@@ -526,9 +550,9 @@ public class CodeCompletionCore
                     }
                     FollowSetWithPath set = new FollowSetWithPath();
                     set.intervals = label;
-                    set.path = new LinkedList<Integer>(ruleStack);
+                    set.path = new ArrayList<>(ruleStack);
                     set.following = this.getFollowingTokens(transition);
-                    followSets.addLast(set);
+                    followSets.add(set);
                 }
             }
         }
@@ -543,7 +567,7 @@ public class CodeCompletionCore
      *
      * @param precedence the operator precedence level passed in by the caller for left-recursive rules (0 for non-recursive entry points).
      */
-    private Set<Integer> processRule(ATNState startState, int tokenIndex, LinkedList<Integer> callStack, String indentation, int precedence)
+    private Set<Integer> processRule(ATNState startState, int tokenIndex, List<Integer> callStack, String indentation, int precedence)
     {
         // Check first if we've taken this path with the same input before.
         Map<Integer, Set<Integer>> positionMap = this.shortcutMap.get(startState.ruleIndex);
@@ -594,7 +618,7 @@ public class CodeCompletionCore
             precedenceStack.add(precedence);
         }
 
-        callStack.addLast(startState.ruleIndex);
+        callStack.add(startState.ruleIndex);
         int currentSymbol = this.tokens.get(tokenIndex)
                 .getType();
 
@@ -608,7 +632,7 @@ public class CodeCompletionCore
             {
                 for (FollowSetWithPath set : followSets.sets)
                 {
-                    LinkedList<Integer> fullPath = new LinkedList<>(callStack);
+                    List<Integer> fullPath = new ArrayList<>(callStack);
                     fullPath.addAll(set.path);
                     if (!this.translateToRuleIndex(fullPath))
                     {
@@ -640,7 +664,7 @@ public class CodeCompletionCore
                 }
             }
 
-            callStack.removeLast();
+            callStack.remove(callStack.size() - 1);
             if (ruleStartState.isLeftRecursiveRule)
             {
                 precedenceStack.remove(precedenceStack.size() - 1);
@@ -656,7 +680,7 @@ public class CodeCompletionCore
             if (followSets.isExhaustive
                     && !followSets.combined.contains(currentSymbol))
             {
-                callStack.removeLast();
+                callStack.remove(callStack.size() - 1);
                 if (ruleStartState.isLeftRecursiveRule)
                 {
                     precedenceStack.remove(precedenceStack.size() - 1);
@@ -753,7 +777,7 @@ public class CodeCompletionCore
                                 {
                                     if (!this.ignoredTokens.contains(token))
                                     {
-                                        this.candidates.tokens.put(token, new LinkedList<Integer>());
+                                        this.candidates.tokens.put(token, new ArrayList<>());
                                     }
                                 }
                             }
@@ -801,7 +825,7 @@ public class CodeCompletionCore
                                                 logger.fine("=====> collected: " + this.vocabulary.getDisplayName(symbol));
                                             }
                                             List<Integer> following = addFollowing ? this.getFollowingTokens(transition)
-                                                    : new LinkedList<>();
+                                                    : new ArrayList<>();
                                             if (!this.candidates.tokens.containsKey(symbol))
                                             {
                                                 this.candidates.tokens.put(symbol, following);
@@ -837,7 +861,7 @@ public class CodeCompletionCore
             }
         }
 
-        callStack.removeLast();
+        callStack.remove(callStack.size() - 1);
         if (ruleStartState.isLeftRecursiveRule)
         {
             precedenceStack.remove(precedenceStack.size() - 1);
@@ -855,7 +879,7 @@ public class CodeCompletionCore
     private static List<Integer> longestCommonPrefix(List<Integer> a, List<Integer> b)
     {
         int minLength = Math.min(a.size(), b.size());
-        List<Integer> result = new LinkedList<>();
+        List<Integer> result = new ArrayList<>();
         for (int i = 0; i < minLength; i++)
         {
             if (a.get(i)
@@ -895,7 +919,7 @@ public class CodeCompletionCore
                 StringBuilder labels = new StringBuilder();
                 List<Integer> symbols = (transition.label() != null) ? transition.label()
                         .toList()
-                        : new LinkedList<>();
+                        : new ArrayList<>();
                 if (symbols.size() > 2)
                 {
                     labels.append(this.vocabulary.getDisplayName(symbols.get(0)) + " .. " + this.vocabulary.getDisplayName(symbols.get(symbols.size() - 1)));
@@ -943,7 +967,7 @@ public class CodeCompletionCore
         }
     }
 
-    private void printRuleState(LinkedList<Integer> stack)
+    private void printRuleState(List<Integer> stack)
     {
         if (stack.isEmpty())
         {

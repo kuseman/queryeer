@@ -474,6 +474,8 @@ class TextEditor implements ITextEditor, SearchListener
         {
             this.parser = new EditorParser(this, parser);
             textEditor.addParser(this.parser);
+            // Reduce default parse delay (1250ms) to improve completion responsiveness
+            textEditor.setParserDelay(750);
 
             if (parser.supportsToolTips())
             {
@@ -1355,6 +1357,24 @@ class TextEditor implements ITextEditor, SearchListener
         /** True while the signature-hint retry (triggered by parseCompleteRunner) is executing. Prevents re-queueing another retry from within the retry itself. */
         private volatile boolean isRetryingSignatureHint = false;
 
+        // --- Async completion fetch (Phase 3) ---
+        // getCompletionItems() can be expensive (tree traversal, alias collection, C3 ATN walk).
+        // Instead of blocking the EDT, we submit it to EXECUTOR and re-trigger doCompletion() when
+        // the result is ready. completionFuture is accessed only on the EDT; pendingResult* fields
+        // are written on the EXECUTOR thread and read on the EDT, so they are volatile.
+
+        /** In-flight off-EDT completion fetch, or null. Accessed only from the EDT. */
+        private Future<?> completionFuture = null;
+        /** Result of the last off-EDT getCompletionItems() call; null if no result is pending. */
+        private volatile ITextEditorDocumentParser.CompletionResult pendingResult = null;
+        /** Document caret offset for which {@link #pendingResult} was fetched. */
+        private volatile int pendingResultOffset = -1;
+        /**
+         * {@link EditorParser#sessionStartRevision} value captured when {@link #pendingResult} was fetched. Used to discard results from a superseded parse: if a new parse completes before the EDT
+         * consumes the pending result, this revision will no longer match {@link EditorParser#sessionStartRevision}.
+         */
+        private volatile int pendingResultSessionRevision = -1;
+
         EditorCompleter(EditorParser parser)
         {
             this.parser = parser;
@@ -1367,6 +1387,20 @@ class TextEditor implements ITextEditor, SearchListener
         void setAutoCompletion(EditorAutoCompletion autoCompletion)
         {
             this.autoCompletion = autoCompletion;
+        }
+
+        /** Cancel any in-flight async completion fetch and discard its pending result. EDT only. */
+        private void cancelPendingCompletion()
+        {
+            if (completionFuture != null
+                    && !completionFuture.isDone())
+            {
+                completionFuture.cancel(true);
+            }
+            completionFuture = null;
+            pendingResult = null;
+            pendingResultOffset = -1;
+            pendingResultSessionRevision = -1;
         }
 
         @Override
@@ -1500,6 +1534,8 @@ class TextEditor implements ITextEditor, SearchListener
             // spinner. A refresh will happen automatically when the parse completes.
             if (parser.state == EditorParser.State.PARSING)
             {
+                // A new parse is in progress — any in-flight completion fetch is now stale.
+                cancelPendingCompletion();
                 if (autoCompletion != null
                         && autoCompletion.isPopupVisible()
                         && cachedCompletionItems != null
@@ -1529,15 +1565,78 @@ class TextEditor implements ITextEditor, SearchListener
             }
             else
             {
-                CompletionResult result = parser.parser.getCompletionItems(offset);
-                if (result == null)
+                // Parse is COMPLETE. Strategy:
+                // • Cold start (no cache yet): run synchronously so the popup appears on the
+                // very first keypress. Phase 2 per-parse caches keep this fast (<50 ms typical).
+                // • Warm start (cache exists): return cached items immediately so the popup
+                // appears without any EDT block, then refresh in the background. When fresh
+                // results arrive, invokeLater re-calls doCompletion(); at that point the popup
+                // is already visible, so it updates cleanly without needing a second trigger.
+                int currentSessionRevision = parser.sessionStartRevision;
+                if (pendingResult != null
+                        && pendingResultOffset == offset
+                        && pendingResultSessionRevision == currentSessionRevision)
                 {
-                    return emptyList();
+                    // Async refresh result is ready — consume it and update the (already visible) popup.
+                    CompletionResult result = pendingResult;
+                    pendingResult = null;
+                    completionItems = result.getItems();
+                    // Cache the fresh unfiltered items for reuse while the next parse is in progress.
+                    // Skip caching partial results (catalog still loading) — they would persist as
+                    // stale items after the catalog finishes loading, preventing a fresh fetch.
+                    if (!result.isPartialResult())
+                    {
+                        cachedCompletionItems = completionItems;
+                        cachedTokenStartOffset = tokenStartOffset;
+                    }
                 }
-                completionItems = result.getItems();
-                // Cache the fresh unfiltered items for reuse while the next parse is in progress
-                cachedCompletionItems = completionItems;
-                cachedTokenStartOffset = tokenStartOffset;
+                else if (cachedCompletionItems == null)
+                {
+                    // Cold start: no cached items yet — run synchronously so the popup appears
+                    // immediately on this first request without requiring a second Ctrl+Space.
+                    CompletionResult syncResult = parser.parser.getCompletionItems(offset);
+                    if (syncResult != null)
+                    {
+                        completionItems = syncResult.getItems();
+                        if (!syncResult.isPartialResult())
+                        {
+                            cachedCompletionItems = completionItems;
+                            cachedTokenStartOffset = tokenStartOffset;
+                        }
+                    }
+                    else
+                    {
+                        return emptyList();
+                    }
+                }
+                else if (completionFuture == null
+                        || completionFuture.isDone())
+                {
+                    // Cached items exist but may be stale — return them immediately so the popup
+                    // appears, and refresh in the background. When the result is ready, the popup
+                    // is already visible and doCompletion() will update it correctly.
+                    final int capturedRevision = currentSessionRevision;
+                    final int capturedOffset = offset;
+                    completionFuture = EXECUTOR.submit(() ->
+                    {
+                        ITextEditorDocumentParser.CompletionResult r = parser.parser.getCompletionItems(capturedOffset);
+                        // Discard if the parse was replaced while we were fetching.
+                        if (r != null
+                                && capturedRevision == parser.sessionStartRevision)
+                        {
+                            pendingResultSessionRevision = capturedRevision;
+                            pendingResultOffset = capturedOffset;
+                            pendingResult = r; // volatile write — visible to EDT before invokeLater fires
+                            SwingUtilities.invokeLater(() -> autoCompletion.doCompletion());
+                        }
+                    });
+                    completionItems = cachedCompletionItems;
+                }
+                else
+                {
+                    // Async refresh already in progress — keep showing cached items.
+                    completionItems = cachedCompletionItems;
+                }
             }
 
             // When the entered text contains a dot (e.g. "ac." or "ac.col"), filter only by the

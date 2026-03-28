@@ -84,3 +84,40 @@ for the general debug pattern (token stream dump, `TokenOffset` inspection).
   also missed it because `RULE_ddl_object` was not in `getCodeCompleteRuleIndices()`. Fix: add
   `RULE_ddl_object` to the preferred rules and handle it in `getC3CompletionItems()`. The same
   issue applies to `UPDATE |` and `DELETE FROM |` since they also use `ddl_object`.
+- **No table suggestions in `EXISTS ( SELECT … FROM | )` subquery** — the closing `)` of
+  the EXISTS is parsed inside the outer query's `PredicateContext`. `isExpressionContext(tree=')')`
+  returns true, which fires `suggestColumns()` (returning null — no aliases outside the EXISTS)
+  and sets `expressionContextDetected=true`. The correct `RULE_table_source_item` is never
+  returned by C3 because `translateToRuleIndex` scans the callStack from the outermost rule and
+  hits `RULE_search_condition` (outer WHERE) before it reaches `RULE_table_source_item` (inner
+  FROM). Fix: add `isDirectlyAfterTableSourceKeyword()` check in `getDialectSpecificCompletionItems`
+  that fires in step 1 (before `isExpressionContext` in step 3). The check looks for the nearest
+  preceding DEFAULT-channel token; if it is `FROM`, `JOIN`, `INTO`, `UPDATE`, `APPLY`, or `MERGE`,
+  return `suggestTableSources()` immediately.
+- **No column suggestions for `SELECT | FROM dbo.tableA t`** (empty SELECT list) — ANTLR
+  error recovery detaches `dbo.tableA t` from the `Query_specificationContext` when no
+  `select_list` is present, making the `table_sources` inaccessible. The mini-parse in
+  `getC3CompletionItems` reruns on the same broken text (no injection because the caret is in
+  whitespace, not after a DOT) and finds the same empty aliases. Fix: extend
+  `miniParseStatementNode` to inject `__x__ ` (identifier + space) at the caret when
+  `text.charAt(miniCaret-1)` is whitespace and the caret is not at the end of the text. The
+  injected text turns `"SELECT  FROM …"` into `"SELECT __x__  FROM …"` — syntactically valid —
+  so ANTLR parses the FROM clause properly and `collectTableSourceAliases` finds the alias.
+- **No column suggestions for `WHERE a.col1` inside an EXISTS subquery WHERE clause** — the
+  bare expression `a.col1` without a comparison operator is not a valid T-SQL `search_condition`,
+  so ANTLR's panic-mode recovery detaches it from the inner `query_specification` and places it
+  in `Execute_body_batchContext` (same pattern as the UPDATE WHERE dot-trigger bug). The mini-
+  parse in the dotted-qualifier path re-parses the same broken text because the caret is after
+  `col1` (not after a DOT), so the existing DOT-based injection does not trigger. Fix: extend
+  `miniParseStatementNode` to also inject ` = 1` when `text.charAt(miniCaret-1)` is an
+  identifier character AND looking backward through the current identifier finds a DOT
+  (indicating an `alias.col` dotted qualifier). Result: `"WHERE a.col1 = 1\n)"` is a valid
+  predicate and ANTLR keeps it inside the inner `query_specification`.
+- **"Missing table 't'" false positive for `DELETE t FROM table t WHERE …`** — `ValidateVisitor.visitDdl_object`
+  already skipped validation inside `Update_statementContext` (because `UPDATE a FROM table a`
+  uses an alias as the UPDATE target). The same pattern exists for DELETE: `DELETE t FROM #t_articlesToSync t`
+  puts alias `t` in `delete_statement_from`, which is a `ddl_object`. Without the guard, the
+  validator looks up `t` as a real table name and reports "Missing table 't'". Fix: in the
+  `visitDdl_object` parent-walk loop, also return early when `current instanceof Delete_statementContext`
+  **and** `dCtx.table_sources() != null` (i.e., there is a FROM clause, confirming the delete
+  target is an alias, not a real table).

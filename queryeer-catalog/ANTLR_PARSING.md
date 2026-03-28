@@ -171,8 +171,15 @@ traversal unreliable. The base class uses three fallback tiers:
 ### Mini-Parse Fallback
 When a DOT-triggered completion causes error recovery to break the FROM clause (e.g.
 `SELECT a. FROM t`), `miniParseStatementNode()` re-parses just the current statement in
-isolation. A synthetic `__x__` token is injected after the DOT to maintain valid expression
-structure and prevent panic-mode recovery.
+isolation. The injected suffix depends on what follows the caret position and what precedes it:
+
+| Condition | Suffix | Rationale |
+|-----------|--------|-----------|
+| `char[miniCaret-1] == '.'` and next non-WS is `)` | `__x__ = 1` | `a.__x__` alone is not a valid `search_condition`; the `)` would be consumed by error recovery and break the EXISTS subquery |
+| `char[miniCaret-1] == '.'` and nothing follows (EOF) | `__x__ = 1` | Same — bare identifier in WHERE is not a valid predicate; ANTLR would detach it into `Execute_body_batchContext` |
+| `char[miniCaret-1] == '.'` otherwise | `__x__` | Plain identifier placeholder keeps the expression valid |
+| `char[miniCaret-1]` is identifier char AND preceded (through the current word) by `.` | ` = 1` | Caret at end of `alias.col` — no DOT injection but the partial predicate `a.col1` is still invalid; inject ` = 1` to complete it |
+| `char[miniCaret-1]` is whitespace AND `miniCaret < text.length()` | `__x__ ` | Caret between keywords (e.g. `SELECT | FROM t`); ANTLR detaches the FROM clause because there is no `select_list`; injecting a placeholder column makes the statement syntactically valid |
 
 ### effectiveNode vs tree vs prevTree
 `tree` is the parse node at the exact caret position — it may be EOF or the first token of
@@ -217,9 +224,39 @@ Network) to compute what grammar rules and tokens are syntactically valid at a g
 index. Returns `CandidatesCollection`:
 - `rules` — map of grammar rule index → call stack path
 - `tokens` — map of token type → follow set
+- `rulePositions` — map of preferred rule index → [startToken, endToken] extents
 
 `getC3CompletionItems()` in each dialect maps these rule indices to the appropriate
 `suggestColumns()`, `suggestTableSources()`, or procedure-list calls.
+
+**Instance reuse:** `CodeCompletionCore` is created once per `AntlrDocumentParser` and reused
+across re-parses via `setParser(Parser)`. Only the parser reference (which carries the new
+token stream) is updated; ATN/vocabulary/ruleNames are grammar-level constants and are
+reassigned for correctness but are identical across instances of the same parser class.
+The `shortcutMap` (pre-sized to `atn.ruleToStartState.length`) and `candidates` maps are
+reused without reallocation; `collectCandidates()` clears them at the top of each call.
+
+---
+
+## Performance Architecture
+
+Several layers of caching eliminate redundant work across repeated completion calls within
+a single parse generation. All caches are invalidated when `parseGeneration` increments (i.e.
+on each full re-parse). Cache fields live in `AntlrDocumentParser`; they are accessed only on
+the completion thread (no volatile needed — `parseGeneration` read provides happens-before).
+
+| Cache | Key | What is cached | Cost avoided |
+|-------|-----|----------------|--------------|
+| `findTokenFromOffset` | `(parseGeneration, caretOffset)` | `TokenOffset` result | Full parse-tree DFS |
+| `collectAliasesCached` (dialect) | `(parseGeneration, ParseTree node identity)` | `Set<TableAlias>` | `TableSourceAliasCollector` tree walk |
+| `miniParseStatementNode` (dialect) | `(parseGeneration, stmtStart, caretOffset)` | Mini-parse `ParseTree` | Isolated ANTLR re-parse of current statement |
+| `collectCandidates` | `(parseGeneration, c3TokenIndex, statementCtxStart)` | `CandidatesCollection` | Full ATN traversal via `CodeCompletionCore` |
+
+### `CodeCompletionCore.shortcutMap`
+Within a single `collectCandidates()` call, `shortcutMap` acts as a memoization table:
+if the same grammar rule has already been explored from the same token index, the stored end
+positions are returned immediately without re-traversing the ATN sub-graph. The map is
+pre-sized to `atn.ruleToStartState.length` to avoid rehashing during traversal.
 
 ---
 
