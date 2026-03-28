@@ -242,6 +242,21 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
 
     private final Map<String, List<String>> temporaryTables = new HashMap<>();
 
+    // --- Per-parse caches (accessed only from the EDT / completion thread) ---
+
+    // Cache for TableSourceAliasCollector.collectTableSourceAliases(node, db).
+    // Key: (parseGeneration, node identity). The result is deterministic for a given parse tree node.
+    private long cachedAliasesGeneration = -1;
+    private ParseTree cachedAliasesNode = null;
+    private Set<TableAlias> cachedAliases = null;
+
+    // Cache for miniParseStatementNode(statementCtx, caretOffset).
+    // Key: (parseGeneration, statementCtx.start.startIndex, caretOffset).
+    private long cachedMiniParseGeneration = -1;
+    private int cachedMiniParseStatementStart = -1;
+    private int cachedMiniParseCaretOffset = -1;
+    private ParseTree cachedMiniParseResult = null;
+
     SqlServerDocumentParser(Icons icons, IEventBus eventBus, QueryActionsConfigurable queryActionsConfigurable, CatalogCrawlService catalogCrawler, IConnectionContext connectionContext,
             ITemplateService templateService)
     {
@@ -304,6 +319,19 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         {
             return null;
         }
+
+        // Cache: re-parsing the same statement at the same caret position produces the same result.
+        // This eliminates up to 3 redundant full re-parses per completion request (the dotted-qualifier
+        // path in getDialectSpecificCompletionItems, getExpressionFallbackColumns, and getC3CompletionItems
+        // all call this method with the same inputs).
+        long gen = parseGeneration;
+        int stmtStart = statementCtx.start.getStartIndex();
+        if (cachedMiniParseGeneration == gen
+                && cachedMiniParseStatementStart == stmtStart
+                && cachedMiniParseCaretOffset == caretCharOffset)
+        {
+            return cachedMiniParseResult;
+        }
         TokenStream tokenStream = parser.getInputStream();
         int startTokenIdx = statementCtx.start.getTokenIndex();
 
@@ -350,13 +378,20 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                 && text.charAt(miniCaret - 1) == '.')
         {
             String suffix = "__x__";
-            // Check if the next non-whitespace character after the caret is ')'. If so, inject a
-            // full predicate expression to avoid the invalid-predicate error recovery described above.
+            // Check the next non-whitespace character after the caret:
+            // • ')' — inject a full predicate ("__x__ = 1") so the WHERE/ON clause stays valid
+            // without consuming the closing paren of the EXISTS subquery.
+            // • nothing (DOT at end of statement/EOF) — same injection, because "a.__x__" alone
+            // is not a valid T-SQL search_condition; without it ANTLR's panic-mode recovery
+            // detaches the expression from the UPDATE/SELECT/DELETE context and places it into
+            // Execute_body_batchContext, preventing collectTableSourceAliases from finding aliases.
+            boolean foundNonWhitespace = false;
             for (int i = miniCaret; i < text.length(); i++)
             {
                 char c = text.charAt(i);
                 if (!Character.isWhitespace(c))
                 {
+                    foundNonWhitespace = true;
                     if (c == ')')
                     {
                         suffix = "__x__ = 1";
@@ -364,7 +399,44 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     break;
                 }
             }
+            if (!foundNonWhitespace)
+            {
+                suffix = "__x__ = 1";
+            }
             miniText = text.substring(0, miniCaret) + suffix + text.substring(miniCaret);
+        }
+        else if (miniCaret > 0
+                && miniCaret <= text.length()
+                && isIdentifierChar(text.charAt(miniCaret - 1)))
+        {
+            // Caret is at the end of an identifier that is part of a dotted qualifier in a WHERE
+            // clause (e.g. "WHERE a.col1|)" inside an EXISTS subquery). The bare expression
+            // "a.col1" is not a valid T-SQL search_condition, so ANTLR's panic-mode recovery
+            // detaches it from the query_specification and places it in Execute_body_batchContext.
+            // Inject " = 1" to complete the predicate ("a.col1 = 1") and keep the WHERE clause
+            // properly anchored inside the inner query_specification.
+            int i = miniCaret - 1;
+            while (i > 0
+                    && isIdentifierChar(text.charAt(i - 1)))
+            {
+                i--;
+            }
+            if (i > 0
+                    && text.charAt(i - 1) == '.')
+            {
+                miniText = text.substring(0, miniCaret) + " = 1" + text.substring(miniCaret);
+            }
+        }
+        else if (miniCaret > 0
+                && miniCaret < text.length()
+                && Character.isWhitespace(text.charAt(miniCaret - 1)))
+        {
+            // Caret is in whitespace between keywords (e.g. "SELECT |FROM dbo.tableA t").
+            // ANTLR's error recovery cannot find a select_list and detaches the FROM clause from
+            // the Query_specificationContext. Inject a placeholder identifier so the statement
+            // becomes syntactically valid ("SELECT __x__ FROM ...") and the FROM clause stays
+            // properly attached so that collectTableSourceAliases can find the table aliases.
+            miniText = text.substring(0, miniCaret) + "__x__ " + text.substring(miniCaret);
         }
 
         // Re-parse the isolated statement text (no error listeners — errors here are expected/ignored)
@@ -377,12 +449,17 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         Tsql_fileContext miniFile = miniParser.tsql_file();
 
         TokenOffset miniOffset = findTokenFromOffset(miniParser, miniFile, miniCaret);
-        if (miniOffset == null)
-        {
-            return null;
-        }
-        return miniOffset.prevTree() != null ? miniOffset.prevTree()
-                : miniOffset.tree();
+        // CSOFF
+        ParseTree result = miniOffset == null ? null
+                : miniOffset.prevTree() != null ? miniOffset.prevTree()
+                        : miniOffset.tree();
+        // CSON
+        // Store result in cache (null results are also cached to avoid repeated failed parses)
+        cachedMiniParseGeneration = gen;
+        cachedMiniParseStatementStart = stmtStart;
+        cachedMiniParseCaretOffset = caretCharOffset;
+        cachedMiniParseResult = result;
+        return result;
     }
 
     @Override
@@ -750,6 +827,39 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
     }
 
     /**
+     * Returns {@code true} when the nearest preceding default-channel token before {@code tokenIndex} is a table-source keyword ({@code FROM}, {@code JOIN}, {@code INTO}, {@code UPDATE},
+     * {@code APPLY}, {@code MERGE}). Used to detect when the caret sits directly after a table-source keyword with no identifier between them (e.g. "FROM |" or "JOIN |"), even inside nested EXISTS
+     * subqueries where ANTLR's error recovery places the closing paren in an outer expression context and C3's {@code translateToRuleIndex} incorrectly picks {@code RULE_search_condition} over
+     * {@code RULE_table_source_item}.
+     */
+    private static boolean isDirectlyAfterTableSourceKeyword(Parser parser, int tokenIndex)
+    {
+        for (int i = tokenIndex - 1; i >= 0; i--)
+        {
+            Token t = parser.getInputStream()
+                    .get(i);
+            if (t.getChannel() == Token.DEFAULT_CHANNEL)
+            {
+                int type = t.getType();
+                return type == TSqlParser.FROM
+                        || type == TSqlParser.JOIN
+                        || type == TSqlParser.INTO
+                        || type == TSqlParser.UPDATE
+                        || type == TSqlParser.APPLY
+                        || type == TSqlParser.MERGE;
+            }
+        }
+        return false;
+    }
+
+    /** Returns {@code true} when {@code c} is a character that can appear in a SQL identifier (letter, digit, or underscore). */
+    private static boolean isIdentifierChar(char c)
+    {
+        return Character.isLetterOrDigit(c)
+                || c == '_';
+    }
+
+    /**
      * Returns true if the token at {@code tokenIndex} is a COMMA or an expression-preceding operator (e.g. {@code =}, {@code AND}, {@code +}), or if the nearest preceding default-channel token is one
      * of those. The latter handles the case where the caret lands exactly on the first character of a token that follows such a token (e.g. "LEFT(col, |)" where findTokenFromOffset returns the ")"
      * token, or "col = |" where findTokenFromOffset returns EOF).
@@ -886,6 +996,19 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         {
             return suggestProcedureParameters(execBody);
         }
+        // Bare table-source position fallback: when the caret sits directly after a table-source
+        // keyword (FROM, JOIN, etc.) with no identifier between, isExpressionContext on the base
+        // class can misfire — for example in nested EXISTS subqueries the closing ')' is placed
+        // inside the outer query's PredicateContext, so isExpressionContext returns true and
+        // C3's translateToRuleIndex picks RULE_search_condition instead of RULE_table_source_item.
+        // Detect this by checking that the nearest preceding default-channel token is a table-source
+        // keyword and return table sources directly, bypassing the base-class expression-context path.
+        if (parser != null
+                && tokenOffset.suggestTokenIndex() >= 0
+                && isDirectlyAfterTableSourceKeyword(parser, tokenOffset.suggestTokenIndex()))
+        {
+            return suggestTableSources();
+        }
         // Table-source dotted qualifier fallback: ANTLR error recovery can detach the DOT from
         // Table_source_itemContext in complex queries (e.g. "INNER JOIN dbo." after an already-
         // parsed table source), causing isTableSourceContext to return false. Detect the table-
@@ -969,10 +1092,29 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
         return false;
     }
 
+    /**
+     * Cached wrapper around {@link TableSourceAliasCollector#collectTableSourceAliases}. Returns the same {@link Set} instance for the same {@code (parseGeneration, node)} pair without re-traversing
+     * the parse tree.
+     */
+    private Set<TableAlias> collectAliasesCached(ParseTree node)
+    {
+        long gen = parseGeneration;
+        if (cachedAliasesGeneration == gen
+                && cachedAliasesNode == node)
+        {
+            return cachedAliases;
+        }
+        Set<TableAlias> aliases = TableSourceAliasCollector.collectTableSourceAliases(node, connectionContext.getDatabase());
+        cachedAliasesGeneration = gen;
+        cachedAliasesNode = node;
+        cachedAliases = aliases;
+        return aliases;
+    }
+
     @Override
     protected CompletionResult suggestColumns(ParseTree node)
     {
-        Set<TableAlias> aliases = TableSourceAliasCollector.collectTableSourceAliases(node, connectionContext.getDatabase());
+        Set<TableAlias> aliases = collectAliasesCached(node);
 
         if (aliases.isEmpty())
         {
@@ -1268,8 +1410,7 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
             // has no Select_statementContext in its parent chain, so collectTableSourceAliases returns
             // empty. Fall back to a mini-parse of the current statement for a clean tree.
             ParseTree nodeForColumns = effectiveNode;
-            if (TableSourceAliasCollector.collectTableSourceAliases(nodeForColumns, connectionContext.getDatabase())
-                    .isEmpty()
+            if (collectAliasesCached(nodeForColumns).isEmpty()
                     && statementCtx != null)
             {
                 ParseTree miniNode = miniParseStatementNode(statementCtx, tokenOffset.caretOffset());
@@ -1605,6 +1746,14 @@ class SqlServerDocumentParser extends AntlrDocumentParser<Tsql_fileContext>
                     // UPDATE a <---- a will fail because it's an alias and not a table
                     // FROM table a
                     if (current instanceof Update_statementContext)
+                    {
+                        return super.visitDdl_object(ctx);
+                    }
+                    // Same for delete statements with alias target:
+                    // DELETE t <---- t will fail because it's an alias and not a table
+                    // FROM #t_articlesToSync t
+                    if (current instanceof Delete_statementContext d
+                            && d.table_sources() != null)
                     {
                         return super.visitDdl_object(ctx);
                     }

@@ -369,6 +369,26 @@ class SqlServerDocumentParserTest extends AntlrDocumentParserTestBase
         assertTrue(cols.contains("t.col2"), "Expected t.col2 in UPDATE WHERE suggestions");
     }
 
+    @Test
+    void test_columnSuggestions_updateWhereClause_dotTrigger()
+    {
+        useTableCatalog();
+        // Caret is immediately after the dot in the UPDATE WHERE clause.
+        // The mini-parse path must find the alias from the T-SQL UPDATE...FROM syntax.
+        //@formatter:off
+        String query = "update a\n"
+                + "set col1 = 1\n"
+                + "from dbo.tableA a\n"
+                + "where a.";
+        //@formatter:on
+        CompletionResult result = complete(query, query.length());
+
+        assertNotNull(result, "Expected column completions in UPDATE WHERE after dot");
+        List<String> cols = aliasedColumns(result, "a");
+        assertTrue(cols.contains("a.col1"), "Expected a.col1 in UPDATE WHERE dot-trigger, got: " + cols + ", all: " + replacements(result));
+        assertTrue(cols.contains("a.col2"), "Expected a.col2 in UPDATE WHERE dot-trigger");
+    }
+
     // -----------------------------------------------------------------
     // Table-source suggestion tests — T-SQL specific
     // -----------------------------------------------------------------
@@ -497,6 +517,46 @@ class SqlServerDocumentParserTest extends AntlrDocumentParserTestBase
                         .contains("@tv"))
                 .collect(Collectors.toList());
         assertTrue(errors.isEmpty(), "No error expected for a declared table variable, but got: " + errors);
+    }
+
+    @Test
+    void test_validation_deleteWithAliasTarget_noError()
+    {
+        // DELETE t FROM #t_articlesToSync t — 't' is an alias, not a real table name.
+        // The validator must not report "Missing table 't'" for the alias target.
+        String query = """
+                CREATE TABLE #t_articlesToSync (articleNumber varchar(50))
+                DELETE t
+                FROM #t_articlesToSync t
+                WHERE TRIM(t.articleNumber) = ''
+                """;
+        sqlServerDocumentParser.parse(new StringReader(query));
+
+        List<ParseItem> errors = parseErrors().stream()
+                .filter(e -> e.getMessage()
+                        .contains("'t'"))
+                .collect(Collectors.toList());
+        assertTrue(errors.isEmpty(), "No 'Missing table t' error expected for DELETE alias target, but got: " + errors);
+    }
+
+    @Test
+    void test_validation_updateWithAliasTarget_noError()
+    {
+        // UPDATE t SET ... FROM tableA t — 't' is an alias, not a real table name.
+        // The validator must not report "Missing table 't'" for the UPDATE alias target.
+        String query = """
+                UPDATE t
+                SET t.col1 = 1
+                FROM dbo.tableA t
+                WHERE t.col2 = 'x'
+                """;
+        sqlServerDocumentParser.parse(new StringReader(query));
+
+        List<ParseItem> errors = parseErrors().stream()
+                .filter(e -> e.getMessage()
+                        .contains("'t'"))
+                .collect(Collectors.toList());
+        assertTrue(errors.isEmpty(), "No 'Missing table t' error expected for UPDATE alias target, but got: " + errors);
     }
 
     // -----------------------------------------------------------------

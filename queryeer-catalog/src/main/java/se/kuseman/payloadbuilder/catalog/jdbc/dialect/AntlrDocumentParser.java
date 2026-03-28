@@ -99,6 +99,27 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     protected Parser parser;
     protected CodeCompletionCore core;
 
+    /**
+     * Monotonically increasing counter, incremented at the end of every successful full parse. Reads on the background parse thread (write) and the EDT / completion thread (read) — must be volatile.
+     * Used as a cache-invalidation key for per-parse caches in subclasses and this base class.
+     */
+    volatile long parseGeneration = 0L;
+
+    // Per-parse cache for findTokenFromOffset. Only accessed from the EDT / completion thread; no
+    // volatile needed for the cache fields themselves (parseGeneration provides the happens-before).
+    private long cachedTokenOffsetGeneration = -1;
+    private int cachedTokenOffsetCaretPos = -1;
+    private TokenOffset cachedTokenOffset = null;
+
+    // Per-parse cache for collectCandidates. Key: (parseGeneration, c3TokenIndex, statementCtxStart).
+    // collectCandidates is the most expensive step in the completion pipeline (full ATN traversal);
+    // caching eliminates redundant walks when multiple completion calls share the same context
+    // (e.g. error-recovery fallback paths that re-run with the same token index).
+    private long c3CacheGeneration = -1;
+    private int c3CacheTokenIndex = -1;
+    private int c3CacheStmtStart = -1;
+    private CandidatesCollection c3CacheResult = null;
+
     protected List<ParseItem> parseResult = new ArrayList<>();
     /**
      * All statement-level {@link ParserRuleContext} instances from the last full parse, collected in document order. Populated automatically when {@link #getStatementRuleIndex()} returns a
@@ -161,13 +182,27 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
             context = parse(parser);
             if (full)
             {
-                core = new CodeCompletionCore(parser, getCodeCompleteRuleIndices(), Set.of());
+                // Reuse the CodeCompletionCore instance across re-parses to avoid reallocating
+                // its shortcutMap and CandidatesCollection maps on every keystroke.
+                // The ATN, vocabulary, and rule names are grammar-level constants; only the
+                // parser reference (which carries the new token stream) needs to be updated.
+                if (core == null)
+                {
+                    core = new CodeCompletionCore(parser, getCodeCompleteRuleIndices(), Set.of());
+                }
+                else
+                {
+                    core.setParser(parser);
+                }
                 statementContexts.clear();
                 if (getStatementRuleIndex() >= 0)
                 {
                     collectStatementContexts(context);
                 }
                 afterParse();
+                // Increment AFTER all parse state is written so that any thread reading
+                // parseGeneration == N is guaranteed to see all corresponding parse state.
+                parseGeneration++;
             }
         }
         catch (IOException e)
@@ -748,7 +783,27 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
         {
             return null;
         }
-        CandidatesCollection candidates = core.collectCandidates(c3TokenIndex, statementCtx);
+        // Cache collectCandidates: the ATN traversal is deterministic for a given (generation,
+        // c3TokenIndex, statementCtx) triple. Cache the result to avoid redundant traversals when
+        // the same context is visited via multiple code paths (e.g. expression-context retries).
+        long gen = parseGeneration;
+        int stmtStart = statementCtx != null ? statementCtx.start.getTokenIndex()
+                : -1;
+        CandidatesCollection candidates;
+        if (c3CacheGeneration == gen
+                && c3CacheTokenIndex == c3TokenIndex
+                && c3CacheStmtStart == stmtStart)
+        {
+            candidates = c3CacheResult;
+        }
+        else
+        {
+            candidates = core.collectCandidates(c3TokenIndex, statementCtx);
+            c3CacheGeneration = gen;
+            c3CacheTokenIndex = c3TokenIndex;
+            c3CacheStmtStart = stmtStart;
+            c3CacheResult = candidates;
+        }
         if (candidates.rules.isEmpty())
         {
             return null;
@@ -760,7 +815,23 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     @Override
     public CompletionResult getCompletionItems(int offset)
     {
-        TokenOffset tokenOffset = findTokenFromOffset(parser, context, offset);
+        // Cache findTokenFromOffset: the parse tree is stable for the lifetime of a parse generation,
+        // so for the same (generation, offset) pair the result is deterministic. The full-tree DFS
+        // is expensive for large documents; caching it eliminates redundant traversals on re-triggers.
+        long gen = parseGeneration;
+        TokenOffset tokenOffset;
+        if (cachedTokenOffsetGeneration == gen
+                && cachedTokenOffsetCaretPos == offset)
+        {
+            tokenOffset = cachedTokenOffset;
+        }
+        else
+        {
+            tokenOffset = findTokenFromOffset(parser, context, offset);
+            cachedTokenOffsetGeneration = gen;
+            cachedTokenOffsetCaretPos = offset;
+            cachedTokenOffset = tokenOffset;
+        }
         if (tokenOffset == null)
         {
             return null;
@@ -849,17 +920,24 @@ abstract class AntlrDocumentParser<T extends ParserRuleContext> implements IText
     /** If we are positioned at an IN expression see if we have anything in Clipboard that can be completed at offset. */
     private List<CompletionItem> getClipboardCompletions(TokenOffset tokenOffset)
     {
+        // Short-circuit: dialect does not define an IN token (getInTokenId() == -1 matches EOF type).
+        // Without this guard the comparison below would fire whenever the caret is on an EOF token.
+        int inTokenId = getInTokenId();
+        if (inTokenId < 0)
+        {
+            return emptyList();
+        }
         // Caret is between IN and next token => suggest
         if (tokenOffset.prevTree instanceof TerminalNode node
                 && node.getSymbol()
-                        .getType() == getInTokenId())
+                        .getType() == inTokenId)
         {
             return getClipboardSqlInCompletionItems(false);
         }
 
         Token in = tokenOffset.tree instanceof TerminalNode node
                 && node.getSymbol()
-                        .getType() == getInTokenId() ? node.getSymbol()
+                        .getType() == inTokenId ? node.getSymbol()
                                 : null;
 
         // Caret is on IN after N char => suggest

@@ -592,6 +592,73 @@ abstract class AntlrDocumentParserTestBase
         assertTrue(colsB.contains("b.id"), "Expected b.id after dot inside EXISTS, got: " + colsB + ", all: " + replacements(result));
     }
 
+    @Test
+    void test_columnSuggestions_emptySelectList_withFromClause()
+    {
+        useTableCatalog();
+        // Caret is in the SELECT list before any column has been typed, but the FROM clause
+        // is already present. Columns from the aliased table should be suggested.
+        // This tests that the C3/fallback path works when the select-list is empty (ANTLR
+        // error-recovers the missing expression) but table_sources are intact.
+        //@formatter:off
+        String query = "select \nfrom dbo.tableA t";
+        //@formatter:on
+        int caretOffset = "select ".length(); // right after "select "
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected column completions in empty SELECT list when FROM is present");
+        List<String> cols = aliasedColumns(result, "t");
+        assertTrue(cols.contains("t.col1"), "Expected t.col1 in SELECT-list suggestions, got: " + cols + ", all: " + replacements(result));
+        assertTrue(cols.contains("t.col2"), "Expected t.col2 in SELECT-list suggestions");
+    }
+
+    @Test
+    void test_tableSuggestions_existsSubquery_fromClause()
+    {
+        useTableCatalog();
+        // Caret is immediately after FROM inside an EXISTS subquery. The outer query has no
+        // FROM clause (select 1). Table-source suggestions must come from the inner scope.
+        //@formatter:off
+        String query = "select 1\n"
+                + "where exists\n"
+                + "(\n"
+                + "  select 1\n"
+                + "  from \n"
+                + ")";
+        //@formatter:on
+        int caretOffset = query.indexOf("  from \n") + "  from ".length();
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected table completions inside EXISTS subquery FROM");
+        List<String> items = replacements(result);
+        assertTrue(items.contains("dbo.tableA"), "Expected dbo.tableA in EXISTS FROM suggestions, got: " + items);
+        assertTrue(items.contains("dbo.tableB"), "Expected dbo.tableB in EXISTS FROM suggestions");
+    }
+
+    @Test
+    void test_columnSuggestions_existsSubquery_partialExpression_noOuterFrom()
+    {
+        useTableCatalog();
+        // Caret is at end of a partial column expression inside an EXISTS subquery WHERE clause.
+        // The outer query has no FROM clause (select 1). Only the inner alias must be in scope.
+        //@formatter:off
+        String query = "select 1\n"
+                + "where exists\n"
+                + "(\n"
+                + "  select 1\n"
+                + "  from dbo.tableA a\n"
+                + "  where a.col1\n"
+                + ")";
+        //@formatter:on
+        int caretOffset = query.indexOf("  where a.col1\n") + "  where a.col1".length();
+        CompletionResult result = complete(query, caretOffset);
+
+        assertNotNull(result, "Expected column completions inside EXISTS subquery with partial expression");
+        List<String> cols = aliasedColumns(result, "a");
+        assertTrue(cols.contains("a.col1"), "Expected a.col1 in EXISTS-subquery WHERE, got: " + cols + ", all: " + replacements(result));
+        assertTrue(cols.contains("a.col2"), "Expected a.col2 in EXISTS-subquery WHERE");
+    }
+
     // -----------------------------------------------------------------
     // Table-source suggestion tests
     // -----------------------------------------------------------------
