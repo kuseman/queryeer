@@ -4,6 +4,7 @@ import static java.util.Objects.requireNonNull;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -11,8 +12,10 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Objects;
 
 import javax.imageio.ImageIO;
@@ -31,6 +34,10 @@ import javax.swing.WindowConstants;
 import javax.swing.event.HyperlinkEvent;
 
 import org.apache.commons.io.IOUtils;
+import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension;
+import org.commonmark.ext.gfm.tables.TablesExtension;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 
 import com.queryeer.api.component.DialogUtils;
 
@@ -39,6 +46,15 @@ import se.kuseman.payloadbuilder.core.Payloadbuilder;
 /** About dialog */
 class AboutDialog extends DialogUtils.ADialog
 {
+    // CSOFF
+    private static final Parser MARKDOWN_PARSER = Parser.builder()
+            .extensions(List.of(TablesExtension.create(), StrikethroughExtension.create()))
+            .build();
+    private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder()
+            .extensions(List.of(TablesExtension.create(), StrikethroughExtension.create()))
+            .build();
+    // CSON
+
     private static final String CHANGELOG = readChangeLog();
     private final String version;
     private final File etcFolder;
@@ -79,9 +95,25 @@ class AboutDialog extends DialogUtils.ADialog
         JPanel contentPanel = new JPanel();
         contentPanel.setLayout(new GridBagLayout());
 
-        JTextArea changelog = new JTextArea();
+        JEditorPane changelog = new JEditorPane("text/html", CHANGELOG);
         changelog.setEditable(false);
-        changelog.setText(CHANGELOG);
+        changelog.addHyperlinkListener(e ->
+        {
+            if (e.getEventType()
+                    .equals(HyperlinkEvent.EventType.ACTIVATED))
+            {
+                try
+                {
+                    Desktop.getDesktop()
+                            .browse(e.getURL()
+                                    .toURI());
+                }
+                catch (IOException | URISyntaxException e1)
+                {
+                    e1.printStackTrace();
+                }
+            }
+        });
 
         JLabel banner = new JLabel(getBanner());
         banner.setVerticalAlignment(SwingConstants.TOP);
@@ -187,15 +219,45 @@ class AboutDialog extends DialogUtils.ADialog
         return sb.toString();
     }
 
+    // CSOFF
+    private static String buildHtmlStyle()
+    {
+        if (UiUtils.isDarkLookAndFeel())
+        {
+            return "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " pre { font-family: monospace; font-size: 11pt; background-color: #2b2b2b; padding: 6px; margin: 4px; }"
+                   + " code { font-family: monospace; font-size: 11pt; background-color: #2b2b2b; }"
+                   + " blockquote { margin-left: 16px; }"
+                   + " table { border: 1px solid #555555; border-collapse: collapse; }"
+                   + " td, th { border: 1px solid #555555; padding: 4px 8px; }";
+        }
+        return "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " pre { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; padding: 6px; margin: 4px; }"
+               + " code { font-family: monospace; font-size: 11pt; background-color: #f0f0f0; }"
+               + " blockquote { margin-left: 16px; }"
+               + " table { border: 1px solid #cccccc; border-collapse: collapse; }"
+               + " td, th { border: 1px solid #cccccc; padding: 4px 8px; }";
+    }
+    // CSON
+
+    private static String renderMarkdownToHtml(String markdown)
+    {
+        String body = MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(markdown));
+        return "<html><head><style>" + buildHtmlStyle() + "</style></head><body>" + body + "</body></html>";
+    }
+
     private static String readChangeLog()
     {
-        try
+        try (InputStream md = AboutDialog.class.getResourceAsStream("/CHANGELOG.md"))
         {
-            return IOUtils.toString(AboutDialog.class.getResourceAsStream("/changelog.txt"), StandardCharsets.UTF_8);
+            if (md != null)
+            {
+                String markdown = IOUtils.toString(md, StandardCharsets.UTF_8);
+                return renderMarkdownToHtml(markdown);
+            }
         }
         catch (Exception e)
         {
-            return "";
+            // ignore
         }
+        return "";
     }
 }
