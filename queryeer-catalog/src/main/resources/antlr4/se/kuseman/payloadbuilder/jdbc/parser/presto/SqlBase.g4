@@ -229,7 +229,8 @@ queryNoWith:
       queryTerm
       (ORDER BY sortItem (',' sortItem)*)?
       (OFFSET offset=INTEGER_VALUE (ROW | ROWS)?)?
-      ((LIMIT limit=(INTEGER_VALUE | ALL) | (FETCH FIRST fetchFirstNRows=INTEGER_VALUE ROWS ONLY))?)?
+      // UPSTREAM-DIFF: removed outer redundant '?' from '((...)?)?', was '((LIMIT ... | FETCH FIRST ...)?)?'
+      (LIMIT limit=(INTEGER_VALUE | ALL) | (FETCH FIRST fetchFirstNRows=INTEGER_VALUE ROWS ONLY))?
     ;
 
 queryTerm
