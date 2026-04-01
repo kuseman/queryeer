@@ -117,6 +117,12 @@ public interface IQueryEngine extends IExtension
         return emptyList();
     }
 
+    /** Return {@link IMcpHandler} for this query engine if supported. */
+    default IMcpHandler getMcpHandler()
+    {
+        return null;
+    }
+
     /** State that can be stored on a query file. Engines can use this to store a connection etc. that is associated with the file */
     interface IState extends Closeable
     {
