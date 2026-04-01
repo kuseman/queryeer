@@ -4,6 +4,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Objects.requireNonNull;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
@@ -88,6 +89,7 @@ import com.queryeer.api.component.DialogUtils;
 import com.queryeer.api.component.DialogUtils.IQuickSearchModel;
 import com.queryeer.api.component.IDialogFactory;
 import com.queryeer.api.event.NewQueryFileEvent;
+import com.queryeer.api.event.ShowOptionsEvent;
 import com.queryeer.api.event.Subscribe;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.output.IOutputExtension;
@@ -98,6 +100,8 @@ import com.queryeer.domain.Caret;
 import com.queryeer.event.CaretChangedEvent;
 import com.queryeer.event.QueryFileClosingEvent;
 import com.queryeer.event.QueryFileSaveEvent;
+import com.queryeer.mcp.McpConfigurable;
+import com.queryeer.mcp.McpServerStatusEvent;
 
 /** Main view */
 class QueryeerView extends JFrame
@@ -127,6 +131,7 @@ class QueryeerView extends JFrame
     private final JLabel labelVersion;
     private final JLabel labelTasks;
     private final JLabel labelTasksSpinner;
+    private final JLabel labelMcpStatus;
 
     private final JMenu editMenu;
     private final JMenuItem openItem;
@@ -271,6 +276,20 @@ class QueryeerView extends JFrame
             }
         });
 
+        labelMcpStatus = new JLabel("● MCP");
+        labelMcpStatus.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
+        labelMcpStatus.setToolTipText("MCP Server — click to configure");
+        labelMcpStatus.setForeground(Color.RED);
+        labelMcpStatus.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseClicked(MouseEvent e)
+            {
+                eventBus.publish(new ShowOptionsEvent(McpConfigurable.class));
+            }
+        });
+
+        panelStatus.add(labelMcpStatus);
         panelStatus.add(labelAIAssistant);
         panelStatus.add(labelLogs);
         panelStatus.add(panelTasks);
@@ -845,6 +864,24 @@ class QueryeerView extends JFrame
     {
         Caret caret = event.getCaret();
         labelCaret.setText(String.format("%d : %d : %d", caret.getLineNumber(), caret.getOffset(), caret.getPosition()));
+    }
+
+    @Subscribe
+    private void mcpServerStatus(McpServerStatusEvent event)
+    {
+        SwingUtilities.invokeLater(() ->
+        {
+            if (event.isRunning())
+            {
+                labelMcpStatus.setForeground(new Color(0, 150, 0));
+                labelMcpStatus.setToolTipText("MCP Server running on port " + event.getPort() + " — click to configure");
+            }
+            else
+            {
+                labelMcpStatus.setForeground(Color.RED);
+                labelMcpStatus.setToolTipText("MCP Server stopped — click to configure");
+            }
+        });
     }
 
     private String getAcceleratorText(KeyStroke accelerator)

@@ -38,6 +38,7 @@ import com.queryeer.api.editor.TextSelection;
 import com.queryeer.api.event.ExecuteQueryEvent;
 import com.queryeer.api.event.ExecuteQueryEvent.OutputType;
 import com.queryeer.api.event.ShowOptionsEvent;
+import com.queryeer.api.extensions.engine.IMcpHandler;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.extensions.engine.QueryEngineException;
 import com.queryeer.api.extensions.output.text.ITextOutputComponent;
@@ -66,11 +67,11 @@ class PayloadbuilderQueryEngine implements IQueryEngine
     private static final Icon ICON = IconFactory.of(FontAwesome.PRODUCT_HUNT);
 
     private final IEventBus eventBus;
-    private final CatalogsConfigurable catalogsConfigurable;
+    final CatalogsConfigurable catalogsConfigurable;
     private final CatalogExtensionViewFactory catalogExtensionViewFactory;
     private final CompletionRegistry completionRegistry;
     private final IEditorFactory editorFactory;
-    private final VariablesConfigurable variablesConfigurable;
+    final VariablesConfigurable variablesConfigurable;
     private QuickPropertiesComponent quickPropertiesComponent;
 
     PayloadbuilderQueryEngine(IEventBus eventBus, CatalogsConfigurable catalogsConfigurable, CatalogExtensionViewFactory catalogExtensionViewFactory, CompletionRegistry completionRegistry,
@@ -200,7 +201,10 @@ class PayloadbuilderQueryEngine implements IQueryEngine
                             String message = "Warning, line: " + warning.location()
                                     .line() + System.lineSeparator() + warning.message() + System.lineSeparator();
                             textOutput.appendWarning(message, selection);
-                            editor.highlight(selection, Color.BLUE);
+                            if (editor != null)
+                            {
+                                editor.highlight(selection, Color.BLUE);
+                            }
                         }
 
                         textOutput.getTextWriter()
@@ -269,7 +273,10 @@ class PayloadbuilderQueryEngine implements IQueryEngine
                     }
                     String message = "Syntax error, line: " + e.getLocation()
                             .line() + System.lineSeparator() + e.getMessage() + System.lineSeparator();
-                    editor.highlight(selection, Color.RED);
+                    if (editor != null)
+                    {
+                        editor.highlight(selection, Color.RED);
+                    }
                     textOutput.appendWarning(message, selection);
                     throw new QueryEngineException("", true);
                 }
@@ -280,6 +287,12 @@ class PayloadbuilderQueryEngine implements IQueryEngine
                 }
             }
         }
+    }
+
+    @Override
+    public IMcpHandler getMcpHandler()
+    {
+        return new PayloadbuilderMcpHandler(this);
     }
 
     @Override
@@ -316,7 +329,7 @@ class PayloadbuilderQueryEngine implements IQueryEngine
         return new ExecuteQueryEvent(outputType, newQueryName, new ExecuteQueryContext(query));
     }
 
-    private void initCatalogs(QuerySession querySession)
+    void initCatalogs(QuerySession querySession)
     {
         for (QueryeerCatalog catalog : catalogsConfigurable.getCatalogs())
         {
