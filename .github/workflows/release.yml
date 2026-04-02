@@ -33,6 +33,9 @@ jobs:
         id: changelog_range
         run: |
           FROM_TAG=$(git tag -l 'v*' --sort=-version:refname | sed -n '10p')
+          if [ -z "$FROM_TAG" ]; then
+            FROM_TAG=$(git tag -l 'v*' --sort=version:refname | head -1)
+          fi
           echo "FROM_TAG=${FROM_TAG}" >> $GITHUB_OUTPUT
       - name: Build project
         run: mvn -B clean package -DperformRelease=true -DskipTests=true -Dcheckstyle.skip -Dchangelog.fromRef=${{ steps.changelog_range.outputs.FROM_TAG }} --file pom.xml
