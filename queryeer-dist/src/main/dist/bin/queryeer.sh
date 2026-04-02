@@ -12,4 +12,12 @@ for filepath in "${LIB_DIR}"/*; do
   CLASSPATH="${CLASSPATH}:${filepath}"
 done
 
-java -cp "${CLASSPATH}" -Dfile.encoding=UTF-8 -Dplugins="${PLUGINS_DIR}" -Dshared="${SHARED_DIR}" com.queryeer.Main
+# Resolve Java executable: bundled jre > JAVA_HOME > PATH
+JAVA_EXE="java"
+if [ -x "${APP_HOME}/jre/bin/java" ]; then
+  JAVA_EXE="${APP_HOME}/jre/bin/java"
+elif [ -n "${JAVA_HOME}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+  JAVA_EXE="${JAVA_HOME}/bin/java"
+fi
+
+"${JAVA_EXE}" -cp "${CLASSPATH}" -Dfile.encoding=UTF-8 -Dplugins="${PLUGINS_DIR}" -Dshared="${SHARED_DIR}" com.queryeer.Main

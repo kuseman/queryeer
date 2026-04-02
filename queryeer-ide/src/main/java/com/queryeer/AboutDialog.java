@@ -12,9 +12,14 @@ import java.awt.Insets;
 import java.awt.Window;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 
@@ -28,12 +33,12 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingConstants;
 import javax.swing.WindowConstants;
 import javax.swing.event.HyperlinkEvent;
 
-import org.apache.commons.io.IOUtils;
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension;
 import org.commonmark.ext.gfm.tables.TablesExtension;
 import org.commonmark.parser.Parser;
@@ -56,6 +61,7 @@ class AboutDialog extends DialogUtils.ADialog
     // CSON
 
     private static final String CHANGELOG = readChangeLog();
+    private static final String PAYLOADBUILDER_CHANGELOG = readPayloadbuilderChangeLog();
     private final String version;
     private final File etcFolder;
     private final File sharedFolder;
@@ -95,31 +101,21 @@ class AboutDialog extends DialogUtils.ADialog
         JPanel contentPanel = new JPanel();
         contentPanel.setLayout(new GridBagLayout());
 
-        JEditorPane changelog = new JEditorPane("text/html", CHANGELOG);
-        changelog.setEditable(false);
-        changelog.addHyperlinkListener(e ->
-        {
-            if (e.getEventType()
-                    .equals(HyperlinkEvent.EventType.ACTIVATED))
-            {
-                try
-                {
-                    Desktop.getDesktop()
-                            .browse(e.getURL()
-                                    .toURI());
-                }
-                catch (IOException | URISyntaxException e1)
-                {
-                    e1.printStackTrace();
-                }
-            }
-        });
-
         JLabel banner = new JLabel(getBanner());
         banner.setVerticalAlignment(SwingConstants.TOP);
         contentPanel.add(banner, new GridBagConstraints(0, 0, 1, 3, 0, 1, GridBagConstraints.NORTH, GridBagConstraints.BOTH, new Insets(5, 5, 0, 0), 0, 0));
         contentPanel.add(aboutText, new GridBagConstraints(1, 0, 1, 1, 0, 0, GridBagConstraints.BASELINE, GridBagConstraints.BOTH, new Insets(5, 5, 0, 0), 0, 0));
-        contentPanel.add(new JScrollPane(changelog), new GridBagConstraints(1, 1, 1, 1, 1, 1, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(5, 5, 5, 5), 0, 0));
+
+        JTabbedPane changelogTabs = new JTabbedPane();
+        if (!CHANGELOG.isEmpty())
+        {
+            changelogTabs.addTab("Queryeer", new JScrollPane(createChangelogPane(CHANGELOG)));
+        }
+        if (PAYLOADBUILDER_CHANGELOG != null)
+        {
+            changelogTabs.addTab("Payloadbuilder", new JScrollPane(createChangelogPane(PAYLOADBUILDER_CHANGELOG)));
+        }
+        contentPanel.add(changelogTabs, new GridBagConstraints(1, 1, 1, 1, 1, 1, GridBagConstraints.CENTER, GridBagConstraints.BOTH, new Insets(5, 5, 5, 5), 0, 0));
 
         getContentPane().add(contentPanel, BorderLayout.CENTER);
 
@@ -214,7 +210,8 @@ class AboutDialog extends DialogUtils.ADialog
         sb.append("Shared Location: " + (sharedFolder != null ? sharedFolder.getAbsolutePath()
                 : ""));
         sb.append("\n\n");
-        sb.append("(C) Copyright Marcus Henriksson 2025");
+        sb.append("(C) Copyright Marcus Henriksson (" + LocalDateTime.now()
+                .getYear() + ")");
 
         return sb.toString();
     }
@@ -244,20 +241,78 @@ class AboutDialog extends DialogUtils.ADialog
         return "<html><head><style>" + buildHtmlStyle() + "</style></head><body>" + body + "</body></html>";
     }
 
+    private static JEditorPane createChangelogPane(String html)
+    {
+        JEditorPane pane = new JEditorPane("text/html", html);
+        pane.setEditable(false);
+        pane.addHyperlinkListener(e ->
+        {
+            if (e.getEventType()
+                    .equals(HyperlinkEvent.EventType.ACTIVATED))
+            {
+                try
+                {
+                    Desktop.getDesktop()
+                            .browse(e.getURL()
+                                    .toURI());
+                }
+                catch (IOException | URISyntaxException e1)
+                {
+                    e1.printStackTrace();
+                }
+            }
+        });
+        return pane;
+    }
+
     private static String readChangeLog()
     {
-        try (InputStream md = AboutDialog.class.getResourceAsStream("/CHANGELOG.md"))
+        return readChangeLogForClass(AboutDialog.class, "");
+    }
+
+    private static String readPayloadbuilderChangeLog()
+    {
+        return readChangeLogForClass(Payloadbuilder.class, null);
+    }
+
+    private static String readChangeLogForClass(Class<?> clazz, String fallback)
+    {
+        try
         {
-            if (md != null)
+            URL location = clazz.getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation();
+            if (location == null)
             {
-                String markdown = IOUtils.toString(md, StandardCharsets.UTF_8);
-                return renderMarkdownToHtml(markdown);
+                return fallback;
+            }
+            Path locationPath = Path.of(location.toURI());
+            if (location.getPath()
+                    .endsWith(".jar"))
+            {
+                try (FileSystem fs = FileSystems.newFileSystem(locationPath, (ClassLoader) null))
+                {
+                    Path changelogPath = fs.getPath("/CHANGELOG.md");
+                    if (Files.exists(changelogPath))
+                    {
+                        return renderMarkdownToHtml(new String(Files.readAllBytes(changelogPath), StandardCharsets.UTF_8));
+                    }
+                }
+            }
+            else
+            {
+                // Dev mode: running from classes directory
+                Path changelogPath = locationPath.resolve("CHANGELOG.md");
+                if (Files.exists(changelogPath))
+                {
+                    return renderMarkdownToHtml(new String(Files.readAllBytes(changelogPath), StandardCharsets.UTF_8));
+                }
             }
         }
         catch (Exception e)
         {
             // ignore
         }
-        return "";
+        return fallback;
     }
 }
