@@ -126,7 +126,7 @@ class TableOutputWriter implements QueryeerOutputWriter
     public void writeValue(Object input)
     {
         Object value = input;
-        if (value instanceof Iterator it)
+        if (value instanceof Iterator<?> it)
         {
             startArray();
             while (it.hasNext())
