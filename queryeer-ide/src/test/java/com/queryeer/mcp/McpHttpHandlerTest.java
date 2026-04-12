@@ -20,6 +20,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,7 +28,9 @@ import com.queryeer.api.IQueryFile;
 import com.queryeer.api.editor.IEditor;
 import com.queryeer.api.extensions.engine.IMcpHandler;
 import com.queryeer.api.extensions.engine.IQueryEngine;
+import com.queryeer.api.extensions.output.table.ITableOutputComponent;
 import com.queryeer.api.service.IConfig;
+import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.service.ITemplateService;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpContext;
@@ -57,7 +60,7 @@ class McpHttpHandlerTest
         serverConfig.setPort(3700);
 
         IConfig config = new MockConfig(List.of(mockEngine));
-        handler = new McpHttpHandler(config, serverConfig, new MockTemplateService());
+        handler = new McpHttpHandler(config, serverConfig, new MockTemplateService(), Mockito.mock(IQueryFileProvider.class));
     }
 
     // ---- initialize ----
@@ -109,8 +112,8 @@ class McpHttpHandlerTest
         JsonNode tools = MAPPER.readTree(exchange.responseBody())
                 .path("result")
                 .path("tools");
-        assertEquals(1, tools.size());
-        assertEquals("active_tool", tools.get(0)
+        assertEquals(4, tools.size()); // One active tool and 3 internal
+        assertEquals("active_tool", tools.get(3)
                 .path("name")
                 .asText());
     }
@@ -149,7 +152,7 @@ class McpHttpHandlerTest
         JsonNode schema = MAPPER.readTree(exchange.responseBody())
                 .path("result")
                 .path("tools")
-                .get(0)
+                .get(3) // 3 internal tools
                 .path("inputSchema");
         assertEquals("object", schema.path("type")
                 .asText());
@@ -182,7 +185,7 @@ class McpHttpHandlerTest
     // ---- tools/call ----
 
     @Test
-    void tools_call_happy_path_returns_markdown() throws IOException
+    void tools_call_happy_path_returns_json() throws IOException
     {
         McpTool tool = buildTool("my_tool", true);
         tool.setQuery("SELECT 1");
@@ -205,8 +208,11 @@ class McpHttpHandlerTest
                 .get(0)
                 .path("text")
                 .asText();
-        assertTrue(text.contains("| col |"));
-        assertTrue(text.contains("| hello |"));
+        assertEquals("""
+                | col |
+                | --- |
+                | hello |
+                """, text);
     }
 
     @Test
@@ -321,7 +327,7 @@ class McpHttpHandlerTest
     void tools_call_engine_without_mcp_support_returns_error() throws IOException
     {
         MockEngineNoMcp noMcpEngine = new MockEngineNoMcp();
-        McpHttpHandler localHandler = new McpHttpHandler(new MockConfig(List.of(noMcpEngine)), serverConfig, new MockTemplateService());
+        McpHttpHandler localHandler = new McpHttpHandler(new MockConfig(List.of(noMcpEngine)), serverConfig, new MockTemplateService(), Mockito.mock(IQueryFileProvider.class));
 
         McpTool tool = new McpTool();
         tool.setName("no_mcp_tool");
@@ -370,6 +376,98 @@ class McpHttpHandlerTest
                 .path("text")
                 .asText()
                 .contains("DB is down"));
+    }
+
+    // ---- table output tools (integration through HTTP handler) ----
+
+    @Test
+    void tools_call_table_meta_returns_json_via_http() throws IOException
+    {
+        McpTableOutputHandlerTest.TableData table = new McpTableOutputHandlerTest.TableData(List.of("id", "name"), List.of(Integer.class, String.class), new Object[7][2]);
+
+        IQueryFileProvider tableProvider = buildProviderWithTable(1, table);
+        McpHttpHandler tableHandler = new McpHttpHandler(new MockConfig(List.of()), serverConfig, new MockTemplateService(), tableProvider);
+
+        MockExchange exchange = post("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\"," + "\"params\":{\"name\":\"__resultset_meta\",\"arguments\":{}}}");
+        tableHandler.handle(exchange);
+
+        JsonNode response = MAPPER.readTree(exchange.responseBody());
+        assertFalse(response.path("result")
+                .path("isError")
+                .asBoolean());
+
+        String text = response.path("result")
+                .path("content")
+                .get(0)
+                .path("text")
+                .asText();
+        JsonNode tableData = MAPPER.readTree(text);
+        assertEquals(1, tableData.path("resultsetCount")
+                .asInt());
+        assertEquals(7, tableData.path("resultsets")
+                .get(0)
+                .path("rowCount")
+                .asInt());
+    }
+
+    @Test
+    void tools_call_table_get_rows_returns_json_via_http() throws IOException
+    {
+        Object[][] data = { { 1, "Alice" }, { 2, "Bob" }, { 3, "Carol" } };
+        McpTableOutputHandlerTest.TableData table = new McpTableOutputHandlerTest.TableData(List.of("id", "name"), List.of(Integer.class, String.class), data);
+
+        IQueryFileProvider tableProvider = buildProviderWithTable(2, table);
+        McpHttpHandler tableHandler = new McpHttpHandler(new MockConfig(List.of()), serverConfig, new MockTemplateService(), tableProvider);
+
+        MockExchange exchange = post("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\"," + "\"params\":{\"name\":\"__resultset_get_rows\","
+                                     + "\"arguments\":{\"resultsetIndex\":0,\"columns\":\"*\",\"offset\":0,\"limit\":3}}}");
+        tableHandler.handle(exchange);
+
+        JsonNode response = MAPPER.readTree(exchange.responseBody());
+        assertFalse(response.path("result")
+                .path("isError")
+                .asBoolean());
+
+        String text = response.path("result")
+                .path("content")
+                .get(0)
+                .path("text")
+                .asText();
+        JsonNode tableData = MAPPER.readTree(text);
+        assertEquals(3, tableData.path("rows")
+                .size());
+    }
+
+    @Test
+    void tools_call_table_meta_unknown_file_returns_error_via_http() throws IOException
+    {
+        IQueryFileProvider emptyProvider = Mockito.mock(IQueryFileProvider.class);
+        McpHttpHandler tableHandler = new McpHttpHandler(new MockConfig(List.of()), serverConfig, new MockTemplateService(), emptyProvider);
+
+        MockExchange exchange = post("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\"," + "\"params\":{\"name\":\"__table_meta\",\"arguments\":{}}}");
+        tableHandler.handle(exchange);
+
+        JsonNode response = MAPPER.readTree(exchange.responseBody());
+        assertTrue(response.path("result")
+                .path("isError")
+                .asBoolean());
+    }
+
+    private IQueryFileProvider buildProviderWithTable(int fileId, ITableOutputComponent.Table table)
+    {
+        ITableOutputComponent comp = Mockito.mock(ITableOutputComponent.class);
+        Mockito.doReturn(List.of(table))
+                .when(comp)
+                .getTables();
+
+        IQueryFile queryFile = Mockito.mock(IQueryFile.class);
+        Mockito.when(queryFile.getOutputComponent(ITableOutputComponent.class))
+                .thenReturn(comp);
+
+        IQueryFileProvider provider = Mockito.mock(IQueryFileProvider.class);
+        Mockito.when(provider.getCurrentFile())
+                .thenReturn(queryFile);
+        return provider;
     }
 
     // ---- unknown method ----
@@ -569,6 +667,7 @@ class McpHttpHandlerTest
                         throw throwOnExecute;
                     }
                     capturedArguments = parameters;
+
                     outputWriter.initResult(resultColumns);
                     for (List<Object> row : resultRows)
                     {

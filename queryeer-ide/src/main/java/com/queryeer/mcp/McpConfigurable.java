@@ -38,6 +38,7 @@ import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.IEventBus;
+import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.service.ITemplateService;
 
 /**
@@ -74,14 +75,14 @@ public class McpConfigurable implements IConfigurable
     // Last published running state — used to suppress redundant events
     private boolean lastPublishedRunning = false;
 
-    McpConfigurable(IConfig config, IEditorFactory editorFactory, ITemplateService templateService, IEventBus eventBus)
+    McpConfigurable(IConfig config, IEditorFactory editorFactory, ITemplateService templateService, IEventBus eventBus, IQueryFileProvider queryFileProvider)
     {
         this.config = requireNonNull(config, "config");
         this.editorFactory = requireNonNull(editorFactory, "editorFactory");
         this.eventBus = requireNonNull(eventBus, "eventBus");
 
         serverConfig = loadConfig();
-        mcpHandler = new McpHttpHandler(config, serverConfig, templateService);
+        mcpHandler = new McpHttpHandler(config, serverConfig, templateService, queryFileProvider);
         mcpServer = new McpServer(mcpHandler);
 
         // Start server if there's a valid port in config

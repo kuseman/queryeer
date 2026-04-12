@@ -15,9 +15,11 @@ import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.queryeer.api.service.IQueryFileProvider;
 
 /** Integration-style tests for {@link McpServer} */
 class McpServerTest
@@ -32,7 +34,7 @@ class McpServerTest
     {
         McpServerConfig config = new McpServerConfig();
         config.setPort(TEST_PORT);
-        McpHttpHandler handler = new McpHttpHandler(new McpHttpHandlerTest.MockConfig(List.of()), config, new McpHttpHandlerTest.MockTemplateService());
+        McpHttpHandler handler = new McpHttpHandler(new McpHttpHandlerTest.MockConfig(List.of()), config, new McpHttpHandlerTest.MockTemplateService(), Mockito.mock(IQueryFileProvider.class));
         server = new McpServer(handler);
     }
 
@@ -84,7 +86,7 @@ class McpServerTest
         startServer();
         McpServerConfig config2 = new McpServerConfig();
         config2.setPort(TEST_PORT);
-        McpHttpHandler handler2 = new McpHttpHandler(new McpHttpHandlerTest.MockConfig(List.of()), config2, new McpHttpHandlerTest.MockTemplateService());
+        McpHttpHandler handler2 = new McpHttpHandler(new McpHttpHandlerTest.MockConfig(List.of()), config2, new McpHttpHandlerTest.MockTemplateService(), Mockito.mock(IQueryFileProvider.class));
         McpServer server2 = new McpServer(handler2);
         try
         {

@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -90,7 +91,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     private final IOutputExtension extension;
 
     private List<ITableContextMenuAction> contextMenuActions;
-    private Table lastClickedTable;
+    private com.queryeer.output.table.Table lastClickedTable;
     private int lastClickedTableRow;
     private int lastClickedTableColumn;
     private IDialogFactory dialogFactory;
@@ -100,12 +101,12 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
 
     Map<Object, Object> internCache = new HashMap<>();
 
-    class TableComponent extends JPanel
+    class TableComponent extends JPanel implements ITableOutputComponent.Table
     {
-        private final Table table;
+        private final com.queryeer.output.table.Table table;
         private final boolean hasMetaData;
 
-        TableComponent(Table table, Map<String, Object> resultMetaData)
+        TableComponent(com.queryeer.output.table.Table table, Map<String, Object> resultMetaData)
         {
             this.table = table;
             this.hasMetaData = !MapUtils.isEmpty(resultMetaData);
@@ -149,6 +150,44 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                 add(metaPanel, BorderLayout.NORTH);
             }
             add(new JScrollPane(table), BorderLayout.CENTER);
+        }
+
+        @Override
+        public int getRowCount()
+        {
+            return table.getModel()
+                    .getRowCount();
+        }
+
+        @Override
+        public List<String> getColumns()
+        {
+            return IntStream.range(0, table.getModel()
+                    .getColumnCount())
+                    .mapToObj(i -> i == 0 ? "rowId"
+                            : table.getModel()
+                                    .getColumnName(i))
+                    .toList();
+        }
+
+        @Override
+        public List<Class<?>> getTypes()
+        {
+            List<Class<?>> result = new ArrayList<>();
+            for (int i = 0; i < table.getModel()
+                    .getColumnCount(); i++)
+            {
+                result.add(table.getModel()
+                        .getColumnClass(i));
+            }
+            return result;
+        }
+
+        @Override
+        public Object getValueAt(int row, int column)
+        {
+            return table.getModel()
+                    .getValueAt(row, column);
         }
     }
 
@@ -216,7 +255,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             for (TableComponent tc : tables)
             {
                 JTableHeader tableHeader = tc.table.getTableHeader();
-                Table table = tc.table;
+                com.queryeer.output.table.Table table = tc.table;
                 tableHeader.setFont(tableHeader.getFont()
                         .deriveFont(fontSize));
 
@@ -417,7 +456,13 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         return computeSelectedCells(lastClickedTable);
     }
 
-    static List<SelectedCell> computeSelectedCells(Table table)
+    @Override
+    public List<ITableOutputComponent.Table> getTables()
+    {
+        return new ArrayList<>(tables);
+    }
+
+    static List<SelectedCell> computeSelectedCells(com.queryeer.output.table.Table table)
     {
         int[] selectedRows = table.getSelectedRows();
         int[] selectedCols = table.getSelectedColumns();
@@ -443,7 +488,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     @Override
     public void selectRow(int tableIndex, int row)
     {
-        Table table = tables.get(tableIndex).table;
+        com.queryeer.output.table.Table table = tables.get(tableIndex).table;
 
         Rectangle bounds = new Rectangle(table.getBounds());
         table.scrollRectToVisible(bounds);
@@ -483,7 +528,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         return Strings.CI.contains(value, context.getSearchFor());
     }
 
-    private ITableContextMenuAction getAction(Table table, int row, int col)
+    private ITableContextMenuAction getAction(com.queryeer.output.table.Table table, int row, int col)
     {
         TableSelectedCell selectedCell = new TableSelectedCell(table, row, col);
         int actionsSize = contextMenuActions.size();
@@ -499,7 +544,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         return null;
     }
 
-    private Table createTable()
+    private com.queryeer.output.table.Table createTable()
     {
         if (contextMenuActions == null)
         {
@@ -510,7 +555,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
                     .collect(toList());
         }
 
-        Table table = new Table(contextMenuActions);
+        com.queryeer.output.table.Table table = new com.queryeer.output.table.Table(contextMenuActions);
         // Remove default Enter move to next cell/row, we view the cell value instead
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
                 .put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "none");
@@ -612,7 +657,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e)
             {
-                Point point = (Point) table.getClientProperty(Table.POPUP_TRIGGER_LOCATION);
+                Point point = (Point) table.getClientProperty(com.queryeer.output.table.Table.POPUP_TRIGGER_LOCATION);
                 if (point != null)
                 {
                     int row = table.rowAtPoint(point);
@@ -780,7 +825,7 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
     /** Add new result set to this instance */
     synchronized void addResult(final Model model, Map<String, Object> resultMetaData)
     {
-        final Table resultTable = createTable();
+        final com.queryeer.output.table.Table resultTable = createTable();
         model.addTableModelListener(e ->
         {
             if (!resultTable.columnsAdjusted.get()
@@ -913,18 +958,18 @@ class TableOutputComponent extends JPanel implements ITableOutputComponent, Sear
         if (tables.size() > 0
                 && !tables.get(tables.size() - 1).table.columnsAdjusted.get())
         {
-            Table lastTable = tables.get(tables.size() - 1).table;
+            com.queryeer.output.table.Table lastTable = tables.get(tables.size() - 1).table;
             lastTable.adjustColumns();
         }
     }
 
     private static class TableSelectedCell implements SelectedCell
     {
-        private final Table table;
+        private final com.queryeer.output.table.Table table;
         private final int tableRow;
         private final int tableColumn;
 
-        TableSelectedCell(Table table, int tableRow, int tableColumn)
+        TableSelectedCell(com.queryeer.output.table.Table table, int tableRow, int tableColumn)
         {
             this.table = table;
             this.tableRow = tableRow;
