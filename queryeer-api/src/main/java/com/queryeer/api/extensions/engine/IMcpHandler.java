@@ -1,10 +1,11 @@
 package com.queryeer.api.extensions.engine;
 
+import static java.util.Objects.requireNonNull;
+
 import java.awt.Component;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-
-import se.kuseman.payloadbuilder.api.OutputWriter;
 
 /** Definition of handler for MCP server. This handler executes queries that targets the owning {@link IQueryEngine}. etc. */
 public interface IMcpHandler
@@ -29,5 +30,22 @@ public interface IMcpHandler
     /**
      * Executes provided query with parameters to provided output writer. NOTE! Query is unprocessed regarding param place holders. It's up to the query engine to parse/replace.
      */
-    void execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters, OutputWriter outputWriter) throws Exception;
+    McpResult execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters) throws Exception;
+
+    /** Result of an MCP tool calling. */
+    record McpResult(List<String> columns, List<Object[]> rows)
+    {
+        /** Ctor. */
+        public McpResult
+        {
+            requireNonNull(columns);
+            requireNonNull(rows);
+            int size = columns.size();
+            if (rows.stream()
+                    .anyMatch(r -> r.length != size))
+            {
+                throw new IllegalArgumentException("All row counts must equal the column count");
+            }
+        }
+    }
 }

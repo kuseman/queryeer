@@ -77,7 +77,6 @@ class McpTableOutputHandlerTest
         }
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     private void registerQueryFile(ITableOutputComponent.Table... tables)
     {
         ITableOutputComponent comp = mock(ITableOutputComponent.class);

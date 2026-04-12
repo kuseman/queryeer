@@ -3,7 +3,7 @@ package com.queryeer.mcp;
 import com.queryeer.api.component.Property;
 
 /** A single input parameter for an MCP tool. */
-class McpToolParameter
+public class McpToolParameter
 {
     private String name = "";
     private String description = "";
@@ -67,6 +67,11 @@ class McpToolParameter
         ParameterType(String jsonSchemaType)
         {
             this.jsonSchemaType = jsonSchemaType;
+        }
+
+        public String getJsonSchemaType()
+        {
+            return jsonSchemaType;
         }
     }
 }

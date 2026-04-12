@@ -208,11 +208,7 @@ class McpHttpHandlerTest
                 .get(0)
                 .path("text")
                 .asText();
-        assertEquals("""
-                | col |
-                | --- |
-                | hello |
-                """, text);
+        assertEquals("{\"columns\":[\"col\"],\"rows\":[[\"hello\"]]}", text);
     }
 
     @Test
@@ -660,7 +656,7 @@ class McpHttpHandlerTest
             return new IMcpHandler()
             {
                 @Override
-                public void execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters, OutputWriter outputWriter) throws Exception
+                public McpResult execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters) throws Exception
                 {
                     if (throwOnExecute != null)
                     {
@@ -668,16 +664,9 @@ class McpHttpHandlerTest
                     }
                     capturedArguments = parameters;
 
-                    outputWriter.initResult(resultColumns);
-                    for (List<Object> row : resultRows)
-                    {
-                        outputWriter.startRow();
-                        for (Object val : row)
-                        {
-                            outputWriter.writeValue(val);
-                        }
-                        outputWriter.endRow();
-                    }
+                    return new McpResult(List.of(resultColumns), resultRows.stream()
+                            .map(List::toArray)
+                            .toList());
                 }
             };
         }

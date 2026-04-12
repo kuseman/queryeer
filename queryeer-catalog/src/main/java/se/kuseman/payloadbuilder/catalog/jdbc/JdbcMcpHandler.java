@@ -8,12 +8,15 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.commons.lang3.tuple.Pair;
+
 import com.queryeer.api.extensions.engine.IMcpHandler;
 
-import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.catalog.jdbc.NamedParameterParser.ParsedQuery;
 import se.kuseman.payloadbuilder.catalog.jdbc.dialect.JdbcDialect;
 
@@ -41,7 +44,7 @@ class JdbcMcpHandler implements IMcpHandler
     }
 
     @Override
-    public void execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters, OutputWriter outputWriter) throws Exception
+    public McpResult execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters) throws Exception
     {
         String connectionName = (String) mcpConnectionConfig.get(JdbcMcpConnectionComponent.KEY_CONNECTION);
         String database = (String) mcpConnectionConfig.get(JdbcMcpConnectionComponent.KEY_DATABASE);
@@ -83,6 +86,9 @@ class JdbcMcpHandler implements IMcpHandler
                 stm.setObject(index++, value);
             }
 
+            List<String> columns = null;
+            List<Object[]> rows = new ArrayList<>();
+
             boolean first = true;
             while (true)
             {
@@ -96,7 +102,28 @@ class JdbcMcpHandler implements IMcpHandler
                         break;
                     }
 
-                    queryEngine.writeResultSet(connection, dialect, con, rs, () -> false, () -> true, outputWriter);
+                    int columnCount = rs.getMetaData()
+                            .getColumnCount();
+                    Pair<int[], String[]> columnsMeta = queryEngine.getColumnsMeta(rs);
+                    List<String> current = List.of(columnsMeta.getValue());
+                    if (columns == null)
+                    {
+                        columns = current;
+                    }
+                    else if (!columns.equals(current))
+                    {
+                        throw new IllegalArgumentException("All result set columns must be equal");
+                    }
+
+                    while (rs.next())
+                    {
+                        Object[] row = new Object[columnCount];
+                        rows.add(row);
+                        for (int i = 0; i < columnCount; i++)
+                        {
+                            row[i] = dialect.getJdbcValue(rs, i + 1, columnsMeta.getKey()[i]);
+                        }
+                    }
                 }
 
                 if (exception.get() != null)
@@ -104,6 +131,8 @@ class JdbcMcpHandler implements IMcpHandler
                     throw exception.get();
                 }
             }
+
+            return new McpResult(columns, rows);
         }
     }
 }

@@ -45,7 +45,7 @@ import com.queryeer.api.service.ITemplateService;
  * IConfigurable for the embedded MCP server. Provides UI for configuring the server port and managing MCP tool definitions.
  */
 @Inject
-public class McpConfigurable implements IConfigurable
+public class McpConfigurable implements IConfigurable, IMcpToolService
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(McpConfigurable.class);
     static final ObjectMapper MAPPER = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -116,6 +116,20 @@ public class McpConfigurable implements IConfigurable
         {
             LOGGER.warn("Failed to start MCP server on port {}: {}", cfg.getPort(), e.getMessage());
         }
+    }
+
+    // ---- IMcpToolService ----
+
+    @Override
+    public List<McpTool> getTools()
+    {
+        return mcpHandler.getActiveTools();
+    }
+
+    @Override
+    public String executeTool(String toolName, Map<String, Object> arguments) throws Exception
+    {
+        return mcpHandler.executeToolDirect(toolName, arguments);
     }
 
     // ---- IConfigurable ----

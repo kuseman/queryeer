@@ -25,6 +25,9 @@ class JdbcMcpConnectionComponent extends JPanel
     static final String KEY_CONNECTION = "connection";
     static final String KEY_DATABASE = "database";
 
+    /** True while loadDatabases is populating the model — suppresses false dirty notifications. */
+    private boolean updatingDatabases = false;
+
     JdbcMcpConnectionComponent(JdbcConnectionsModel connectionsModel, Map<String, Object> config, Consumer<Boolean> dirtyConsumer)
     {
         requireNonNull(connectionsModel, "connectionsModel");
@@ -90,6 +93,10 @@ class JdbcMcpConnectionComponent extends JPanel
 
         databaseCombo.addActionListener(e ->
         {
+            if (updatingDatabases)
+            {
+                return;
+            }
             Object selected = databaseCombo.getSelectedItem();
             config.put(KEY_DATABASE, selected != null ? selected.toString()
                     .trim()
@@ -101,7 +108,7 @@ class JdbcMcpConnectionComponent extends JPanel
         loadDatabases(connectionsModel, (String) connectionCombo.getSelectedItem(), databasesModel, (String) config.get(KEY_DATABASE));
     }
 
-    private static void loadDatabases(JdbcConnectionsModel connectionsModel, String connectionName, DefaultComboBoxModel<String> databasesModel, String preselect)
+    private void loadDatabases(JdbcConnectionsModel connectionsModel, String connectionName, DefaultComboBoxModel<String> databasesModel, String preselect)
     {
         if (connectionName == null
                 || connectionName.isBlank())
@@ -127,18 +134,26 @@ class JdbcMcpConnectionComponent extends JPanel
             connectionsModel.getDatabases(connection, false, false);
             SwingUtilities.invokeLater(() ->
             {
-                databasesModel.removeAllElements();
-                if (connection.getDatabases() != null)
+                updatingDatabases = true;
+                try
                 {
-                    for (String db : connection.getDatabases())
+                    databasesModel.removeAllElements();
+                    if (connection.getDatabases() != null)
                     {
-                        databasesModel.addElement(db);
+                        for (String db : connection.getDatabases())
+                        {
+                            databasesModel.addElement(db);
+                        }
+                    }
+                    if (preselect != null
+                            && !preselect.isBlank())
+                    {
+                        databasesModel.setSelectedItem(preselect);
                     }
                 }
-                if (preselect != null
-                        && !preselect.isBlank())
+                finally
                 {
-                    databasesModel.setSelectedItem(preselect);
+                    updatingDatabases = false;
                 }
             });
         }, "mcp-load-databases").start();
