@@ -126,8 +126,7 @@ class QueryFileTabbedPane extends JTabbedPane
                     QueryFileTabComponent component = new QueryFileTabComponent(file, () -> eventBus.publish(new QueryFileClosingEvent(view.getModel())));
                     add(view, index);
                     setTabComponentAt(index, component);
-                    setToolTipTextAt(index, file.getFile()
-                            .getAbsolutePath());
+                    setToolTipTextAt(index, file.getTooltip());
                     view.requestFocusInWindow();
                 }
             }

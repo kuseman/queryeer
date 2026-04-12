@@ -5,6 +5,7 @@ import static java.util.Objects.requireNonNull;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,9 +19,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.queryeer.api.extensions.engine.IMcpHandler;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IConfig;
+import com.queryeer.api.service.IQueryFileProvider;
 import com.queryeer.api.service.ITemplateService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -40,7 +43,7 @@ import com.sun.net.httpserver.HttpHandler;
 class McpHttpHandler implements HttpHandler
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(McpHttpHandler.class);
-    static final ObjectMapper MAPPER = new ObjectMapper();
+    static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
 
     private static final String MCP_SESSION_HEADER = "Mcp-Session-Id";
     private static final String SERVER_NAME = "Queryeer MCP Server";
@@ -49,14 +52,16 @@ class McpHttpHandler implements HttpHandler
 
     private final IConfig config;
     private final ITemplateService templateService;
+    private final McpTableOutputHandler tableOutputHandler;
     private volatile McpServerConfig serverConfig;
     private final Map<String, Boolean> sessions = new ConcurrentHashMap<>();
 
-    McpHttpHandler(IConfig config, McpServerConfig serverConfig, ITemplateService templateService)
+    McpHttpHandler(IConfig config, McpServerConfig serverConfig, ITemplateService templateService, IQueryFileProvider queryFileProvider)
     {
         this.config = requireNonNull(config, "config");
         this.serverConfig = requireNonNull(serverConfig, "serverConfig");
         this.templateService = requireNonNull(templateService, "templateService");
+        this.tableOutputHandler = new McpTableOutputHandler(queryFileProvider);
     }
 
     void updateConfig(McpServerConfig serverConfig)
@@ -172,7 +177,11 @@ class McpHttpHandler implements HttpHandler
         McpServerConfig cfg = serverConfig;
         ArrayNode toolsArray = MAPPER.createArrayNode();
 
-        for (McpTool tool : cfg.getTools())
+        List<McpTool> tools = new ArrayList<>();
+        tools.addAll(tableOutputHandler.getTableOutputTools());
+        tools.addAll(cfg.getTools());
+
+        for (McpTool tool : tools)
         {
             if (!tool.isActive())
             {
@@ -190,7 +199,7 @@ class McpHttpHandler implements HttpHandler
             for (McpToolParameter param : tool.getParameters())
             {
                 ObjectNode propNode = MAPPER.createObjectNode();
-                propNode.put("type", toJsonSchemaType(param.getType()));
+                propNode.put("type", param.getType().jsonSchemaType);
                 propNode.put("description", param.getDescription());
                 properties.set(param.getName(), propNode);
                 required.add(param.getName());
@@ -215,8 +224,12 @@ class McpHttpHandler implements HttpHandler
         JsonNode argumentsNode = params.path("arguments");
 
         McpServerConfig cfg = serverConfig;
-        McpTool tool = cfg.getTools()
-                .stream()
+
+        List<McpTool> tools = new ArrayList<>();
+        tools.addAll(tableOutputHandler.getTableOutputTools());
+        tools.addAll(cfg.getTools());
+
+        McpTool tool = tools.stream()
                 .filter(t -> t.getName()
                         .equals(toolName))
                 .findFirst()
@@ -246,26 +259,31 @@ class McpHttpHandler implements HttpHandler
                     arguments.put(name, McpParameterSanitizer.sanitize(name, stringValue, param.getType()));
                 }
             }
-            String renderedQuery = templateService.process("mcp-tool-" + tool.getName(), tool.getQuery(), arguments, true);
-            // Find engine by class name
-            IQueryEngine engine = findEngine(tool.getEngineClass());
-            if (engine == null)
-            {
-                return buildToolError(idNode, "Query engine not found: " + tool.getEngineClass());
-            }
 
-            IMcpHandler mcpHandler = engine.getMcpHandler();
-            if (mcpHandler == null)
+            String result = tableOutputHandler.handleToolCall(toolName, arguments);
+            if (result == null)
             {
-                return buildToolError(idNode, "Query engine does not support MCP: " + tool.getEngineClass());
-            }
-            // // Execute query
-            MarkdownTableOutputWriter writer = new MarkdownTableOutputWriter();
-            mcpHandler.execute(tool.getConnectionConfig(), renderedQuery, arguments, writer);
-            writer.flush();
+                String renderedQuery = templateService.process("mcp-tool-" + tool.getName(), tool.getQuery(), arguments, true);
+                // Find engine by class name
+                IQueryEngine engine = findEngine(tool.getEngineClass());
+                if (engine == null)
+                {
+                    return buildToolError(idNode, "Query engine not found: " + tool.getEngineClass());
+                }
 
-            String markdown = writer.getResult();
-            return buildToolResult(idNode, markdown, false);
+                IMcpHandler mcpHandler = engine.getMcpHandler();
+                if (mcpHandler == null)
+                {
+                    return buildToolError(idNode, "Query engine does not support MCP: " + tool.getEngineClass());
+                }
+                // // Execute query
+                MarkdownTableOutputWriter writer = new MarkdownTableOutputWriter();
+                mcpHandler.execute(tool.getConnectionConfig(), renderedQuery, arguments, writer);
+                writer.flush();
+
+                result = writer.getResult();
+            }
+            return buildToolResult(idNode, result, false);
         }
         catch (Exception e)
         {
@@ -357,16 +375,5 @@ class McpHttpHandler implements HttpHandler
         {
             os.write(bytes);
         }
-    }
-
-    private static String toJsonSchemaType(McpToolParameter.ParameterType type)
-    {
-        return switch (type)
-        {
-            case INTEGER -> "integer";
-            case NUMBER -> "number";
-            case BOOLEAN -> "boolean";
-            case STRING -> "string";
-        };
     }
 }

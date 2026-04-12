@@ -57,9 +57,16 @@ class McpToolParameter
     /** Data type of an MCP tool parameter, used for validation and SQL injection mitigation. */
     public enum ParameterType
     {
-        STRING,
-        INTEGER,
-        NUMBER,
-        BOOLEAN
+        STRING("string"),
+        INTEGER("integer"),
+        NUMBER("number"),
+        BOOLEAN("boolean");
+
+        final String jsonSchemaType;
+
+        ParameterType(String jsonSchemaType)
+        {
+            this.jsonSchemaType = jsonSchemaType;
+        }
     }
 }
