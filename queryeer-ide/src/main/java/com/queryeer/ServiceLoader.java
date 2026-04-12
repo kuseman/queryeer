@@ -489,7 +489,6 @@ class ServiceLoader
             {
                 return;
             }
-
             for (ServiceType serviceType : serviceTypes)
             {
                 if (serviceType.type != null

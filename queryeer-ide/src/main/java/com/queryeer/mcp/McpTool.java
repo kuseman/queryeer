@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 /** A single MCP tool definition that exposes a query as a callable tool. */
-class McpTool
+public class McpTool
 {
     private String name = "";
     private String description = "";

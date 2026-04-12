@@ -83,13 +83,6 @@ class ClaudeCodeAIAssistantProvider implements IAIAssistantProvider
         doChat(history, userMessage, systemPrompt, session, onChunk, onComplete, onError);
     }
 
-    /** Non-session entry point for providers that call the old overload directly. */
-    @Override
-    public void chat(List<AIChatMessage> history, String userMessage, String systemPrompt, Consumer<String> onChunk, Runnable onComplete, Consumer<Throwable> onError)
-    {
-        doChat(history, userMessage, systemPrompt, null, onChunk, onComplete, onError);
-    }
-
     // CSOFF
     private void doChat(List<AIChatMessage> history, String userMessage, String systemPrompt, AIChatSession session, Consumer<String> onChunk, Runnable onComplete, Consumer<Throwable> onError)
     {

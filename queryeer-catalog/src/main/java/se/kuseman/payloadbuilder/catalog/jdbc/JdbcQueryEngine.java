@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BooleanSupplier;
 
 import javax.swing.Icon;
 import javax.swing.SwingUtilities;
@@ -481,37 +480,8 @@ class JdbcQueryEngine implements IQueryEngine
     private int writeResultSet(IQueryFile queryFile, Connection connection, JdbcEngineState engineState, ConnectionContext state, ResultSet rs, OutputWriter writer) throws Exception
     {
         JdbcDialect jdbcDialect = state.getJdbcDialect();
-        return writeResultSet(state.getJdbcConnection(), jdbcDialect, connection, rs, () ->
-        {
-            if (state != null
-                    && state.isAbort())
-            {
-                LOGGER.debug("Aborting query due to abort in state");
-                return true;
-            }
-            return false;
-        }, () ->
-        {
-            if (!jdbcDialect.processResultSet(queryFile, engineState, rs))
-            {
-                LOGGER.debug("Aborting query due to jdbcDialect#processResultSet returned false");
-                return false;
-            }
-            return true;
-        }, writer);
-    }
+        JdbcConnection jdbcConnection = state.getJdbcConnection();
 
-    //@formatter:off
-    int writeResultSet(
-            JdbcConnection jdbcConnection,
-            JdbcDialect jdbcDialect,
-            Connection connection,
-            ResultSet rs,
-            BooleanSupplier abortSupplier,
-            ThrowingBooleanSupplier firstRowSupplier,
-            OutputWriter writer) throws Exception
-    //@formatter:on
-    {
         int rowCount = 0;
         Pair<int[], String[]> pair = getColumnsMeta(rs);
         int[] sqlTypes = pair.getKey();
@@ -538,15 +508,18 @@ class JdbcQueryEngine implements IQueryEngine
 
         while (rs.next())
         {
-            if (abortSupplier.getAsBoolean())
+            if (state != null
+                    && state.isAbort())
             {
+                LOGGER.debug("Aborting query due to abort in state");
                 break;
             }
 
             if (first)
             {
-                if (!firstRowSupplier.getAsBoolean())
+                if (!jdbcDialect.processResultSet(queryFile, engineState, rs))
                 {
+                    LOGGER.debug("Aborting query due to jdbcDialect#processResultSet returned false");
                     return 0;
                 }
                 first = false;
@@ -570,12 +543,6 @@ class JdbcQueryEngine implements IQueryEngine
         writer.endResult();
 
         return rowCount;
-    }
-
-    @FunctionalInterface
-    interface ThrowingBooleanSupplier
-    {
-        boolean getAsBoolean() throws Exception;
     }
 
     private List<String> getBatches(JdbcDialect dialect, String query)
@@ -619,7 +586,7 @@ class JdbcQueryEngine implements IQueryEngine
         return batches;
     }
 
-    private Pair<int[], String[]> getColumnsMeta(ResultSet rs) throws SQLException
+    Pair<int[], String[]> getColumnsMeta(ResultSet rs) throws SQLException
     {
         int count = rs.getMetaData()
                 .getColumnCount();

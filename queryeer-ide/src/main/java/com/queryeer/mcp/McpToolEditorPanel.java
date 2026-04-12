@@ -95,7 +95,7 @@ class McpToolEditorPanel extends JPanel
             }
         });
 
-        parametersComponent = new ListPropertiesComponent<>(McpToolParameter.class, dirtyConsumer, McpToolParameter::new, McpToolEditorPanel::cloneParameter);
+        parametersComponent = new ListPropertiesComponent<>(McpToolParameter.class, this::guardedDirty, McpToolParameter::new, McpToolEditorPanel::cloneParameter);
 
         infoArea = new JTextArea();
         infoArea.setEditable(false);
@@ -347,6 +347,14 @@ class McpToolEditorPanel extends JPanel
         }
     }
 
+    private void guardedDirty(boolean dirty)
+    {
+        if (!loading)
+        {
+            dirtyConsumer.accept(dirty);
+        }
+    }
+
     private void setEditorEnabled(boolean enabled)
     {
         setComponentEnabled(this, enabled);
@@ -373,7 +381,7 @@ class McpToolEditorPanel extends JPanel
         if (engine != null
                 && connectionConfig != null)
         {
-            Component conComp = engine.mcpHandler.getMcpConnectionComponent(connectionConfig, dirtyConsumer);
+            Component conComp = engine.mcpHandler.getMcpConnectionComponent(connectionConfig, this::guardedDirty);
             if (conComp != null)
             {
                 connectionArea.add(conComp, BorderLayout.CENTER);

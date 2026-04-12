@@ -62,6 +62,9 @@ import com.queryeer.api.extensions.assistant.IAIContextItem;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IEventBus;
 import com.queryeer.api.service.IQueryFileProvider;
+import com.queryeer.mcp.IMcpToolService;
+import com.queryeer.mcp.McpTool;
+import com.queryeer.mcp.McpToolParameter;
 
 /** Floating AI assistant chat window. Each query file has its own conversation state. */
 class AIChatWindow extends DialogUtils.AFrame
@@ -84,7 +87,8 @@ class AIChatWindow extends DialogUtils.AFrame
                    + " blockquote { margin-left: 16px; }"
                    + " table { border: 1px solid #555555; border-collapse: collapse; }"
                    + " td, th { border: 1px solid #555555; padding: 4px 8px; }"
-                   + " .copy-btn { font-size: 10pt; color: #aaaaaa; }";
+                   + " .copy-btn { font-size: 10pt; color: #aaaaaa; }"
+                   + " .tool-call { color: #888888; font-size: 10pt; font-style: italic; margin-left: 8px; }";
         }
         return "body { font-family: sans-serif; font-size: 12pt; margin: 8px; }" + " .user-label { color: #0064b4; font-weight: bold; }"
                + " .user-text { color: #0050a0; margin-left: 8px; margin-top: 2px; }"
@@ -96,7 +100,8 @@ class AIChatWindow extends DialogUtils.AFrame
                + " blockquote { margin-left: 16px; }"
                + " table { border: 1px solid #cccccc; border-collapse: collapse; }"
                + " td, th { border: 1px solid #cccccc; padding: 4px 8px; }"
-               + " .copy-btn { font-size: 10pt; color: #666666; }";
+               + " .copy-btn { font-size: 10pt; color: #666666; }"
+               + " .tool-call { color: #888888; font-size: 10pt; font-style: italic; margin-left: 8px; }";
     }
 
     private static String buildHtmlStart()
@@ -119,6 +124,7 @@ class AIChatWindow extends DialogUtils.AFrame
 
     private final List<IAIAssistantProvider> providers;
     private final IEventBus eventBus;
+    private final IMcpToolService mcpToolService;
     private final WeakHashMap<IQueryFile, FileChatState> fileStates = new WeakHashMap<>();
 
     private JComboBox<IAIAssistantProvider> providerCombo;
@@ -150,11 +156,12 @@ class AIChatWindow extends DialogUtils.AFrame
     private final AtomicInteger codeBlockIdCounter = new AtomicInteger(0);
 
     // CSOFF
-    AIChatWindow(List<IAIAssistantProvider> providers, IQueryFileProvider queryFileProvider, IEventBus eventBus)
+    AIChatWindow(List<IAIAssistantProvider> providers, IQueryFileProvider queryFileProvider, IEventBus eventBus, IMcpToolService mcpToolService)
     {
         super("AI Assistant");
         this.providers = requireNonNull(providers, "providers");
         this.eventBus = requireNonNull(eventBus, "eventBus");
+        this.mcpToolService = requireNonNull(mcpToolService, "mcpToolService");
         requireNonNull(queryFileProvider, "queryFileProvider");
 
         setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
@@ -214,6 +221,11 @@ class AIChatWindow extends DialogUtils.AFrame
         configureButton.setToolTipText("Open Options to configure the selected provider");
         configureButton.addActionListener(e -> openProviderOptions());
         topPanel.add(configureButton);
+
+        JButton helpButton = new JButton("?");
+        helpButton.setToolTipText("Show AI Assistant usage information");
+        helpButton.addActionListener(e -> showHelpDialog());
+        topPanel.add(helpButton);
 
         // Provider info panel (collapsible, collapsed by default)
         // CSOFF
@@ -320,7 +332,7 @@ class AIChatWindow extends DialogUtils.AFrame
         clearButton.setToolTipText("Clear the chat history");
         clearButton.addActionListener(e -> clearChat());
         sendButton = new JButton("Send (Ctrl+Enter)");
-        sendButton.addActionListener(e -> sendMessage());
+        sendButton.addActionListener(e -> onSendButtonClicked());
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         buttonPanel.add(clearButton);
         buttonPanel.add(sendButton);
@@ -406,6 +418,128 @@ class AIChatWindow extends DialogUtils.AFrame
         {
             eventBus.publish(new ShowOptionsEvent(provider.getClass()));
         }
+    }
+
+    // CSOFF
+    private static final String HELP_MARKDOWN_PREAMBLE = "## AI Assistant — Quick Reference\n\n" + "### Sending Messages\n"
+                                                         + "- Type your message in the input area at the bottom.\n"
+                                                         + "- Press **Ctrl+Enter** to send, or click the **Send** button.\n"
+                                                         + "- Use **Alt+Up / Alt+Down** to navigate through sent-message history.\n"
+                                                         + "- Click **Abort** (replaces Send while responding) to cancel an in-progress request.\n"
+                                                         + "- Click **Clear** to reset the conversation history for the current tab.\n\n"
+                                                         + "### Include Query\n"
+                                                         + "When the **Include query** checkbox is ticked, the full text of the active query tab is appended "
+                                                         + "to the system prompt so the AI has context about what you are working on. Uncheck it to omit the query.\n\n"
+                                                         + "### Context Objects\n"
+                                                         + "Click **Context objects** to pick database schema items (tables, columns, views, etc.) to include as "
+                                                         + "context. The selected objects are described in the system prompt so the AI can generate accurate queries "
+                                                         + "for your schema. The button label shows the count of selected items when any are active.\n\n"
+                                                         + "### MCP Tools\n"
+                                                         + "If MCP tools are configured (**Options \u2192 MCP**), the AI can call them automatically to execute queries, "
+                                                         + "inspect schemas, or perform other operations. Each tool invocation is shown inline in the chat:\n\n"
+                                                         + "    [Tool: tool_name({\"arg\": \"value\"})]\n\n"
+                                                         + "Tool calls happen transparently \u2014 the AI decides when to invoke a tool based on your question and loops "
+                                                         + "until it has a final answer (up to 10 iterations).";
+
+    private static final String HELP_MARKDOWN_POSTAMBLE = "### Provider Settings\n" + "Use the **Provider** drop-down to switch between configured providers. The **[md]** suffix indicates "
+                                                          + "the provider returns Markdown, which is rendered in the chat. Click the **\u25BA Provider Settings** "
+                                                          + "expander to review the active model, temperature, and other parameters. Click the **\u2699** button to "
+                                                          + "open the full provider configuration in Options.";
+    // CSON
+
+    private String buildHelpHtml()
+    {
+        StringBuilder sb = new StringBuilder(buildHtmlStart());
+        sb.append(renderMarkdown(HELP_MARKDOWN_PREAMBLE));
+
+        List<McpTool> tools = mcpToolService.getTools();
+        if (tools.isEmpty())
+        {
+            sb.append("<p><em>No MCP tools are currently configured.</em></p>");
+        }
+        else
+        {
+            sb.append("<table>");
+            sb.append("<tr><th>Name</th><th>Description</th><th>Parameters</th></tr>");
+            for (McpTool tool : tools)
+            {
+                sb.append("<tr>");
+                sb.append("<td><code>")
+                        .append(escapeHtml(tool.getName()))
+                        .append("</code></td>");
+                sb.append("<td>")
+                        .append(escapeHtml(tool.getDescription()))
+                        .append("</td>");
+                sb.append("<td>");
+                List<McpToolParameter> params = tool.getParameters();
+                if (params.isEmpty())
+                {
+                    sb.append("<em>none</em>");
+                }
+                else
+                {
+                    // CSOFF
+                    sb.append("<ul style=\"margin:0;padding-left:16px\">");
+                    // CSON
+                    for (McpToolParameter param : params)
+                    {
+                        sb.append("<li><code>")
+                                .append(escapeHtml(param.getName()))
+                                .append("</code> <em>(")
+                                .append(escapeHtml(param.getType()
+                                        .getJsonSchemaType()))
+                                .append(")</em>");
+                        if (!isBlank(param.getDescription()))
+                        {
+                            // CSOFF
+                            sb.append(" \u2014 ")
+                                    // CSON
+                                    .append(escapeHtml(param.getDescription()));
+                        }
+                        sb.append("</li>");
+                    }
+                    sb.append("</ul>");
+                }
+                sb.append("</td>");
+                sb.append("</tr>");
+            }
+            sb.append("</table>");
+        }
+
+        sb.append(renderMarkdown("\n\n" + HELP_MARKDOWN_POSTAMBLE));
+        sb.append(HTML_END);
+        return sb.toString();
+    }
+
+    private void showHelpDialog()
+    {
+        JEditorPane helpPane = new JEditorPane("text/html", buildHelpHtml());
+        helpPane.setEditable(false);
+        helpPane.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+
+        JScrollPane scroll = new JScrollPane(helpPane);
+        scroll.setPreferredSize(new Dimension(600, 520));
+
+        // CSOFF
+        javax.swing.JDialog dialog = new javax.swing.JDialog(this, "AI Assistant \u2014 Help", true);
+        // CSON
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        dialog.getContentPane()
+                .setLayout(new BorderLayout(4, 4));
+        dialog.getContentPane()
+                .add(scroll, BorderLayout.CENTER);
+
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(ev -> dialog.dispose());
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 4));
+        btnPanel.add(closeButton);
+        dialog.getContentPane()
+                .add(btnPanel, BorderLayout.SOUTH);
+
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        SwingUtilities.invokeLater(() -> helpPane.setCaretPosition(0));
+        dialog.setVisible(true);
     }
 
     private void switchToFile(IQueryFile file)
@@ -509,8 +643,11 @@ class AIChatWindow extends DialogUtils.AFrame
         String systemPrompt = buildSystemPrompt(state);
         state.history.add(new AIChatMessage(Role.USER, userText));
 
-        AIChatSession session = new AIChatSession(state.sessionId, id -> state.sessionId = id);
-
+        AIChatSession session = new AIChatSession(state.sessionId, id -> state.sessionId = id, description -> SwingUtilities.invokeLater(() ->
+        {
+            state.completedHtmlBody += toolCallHtml(description);
+            updateChatHtml(buildHtml(state.completedHtmlBody, null));
+        }));
         EXECUTOR.submit(() -> provider.chat(historySnapshot, userText, systemPrompt, session, chunk -> SwingUtilities.invokeLater(() ->
         {
             state.responseBuilder.append(chunk);
@@ -640,10 +777,27 @@ class AIChatWindow extends DialogUtils.AFrame
         chatPane.setText(buildHtmlStart() + HTML_END);
     }
 
+    private void onSendButtonClicked()
+    {
+        if (responding)
+        {
+            IAIAssistantProvider provider = (IAIAssistantProvider) providerCombo.getSelectedItem();
+            if (provider != null)
+            {
+                provider.cancel();
+            }
+        }
+        else
+        {
+            sendMessage();
+        }
+    }
+
     private void setResponding(boolean responding, FileChatState state, IAIAssistantProvider provider)
     {
         this.responding = responding;
-        sendButton.setEnabled(!responding);
+        sendButton.setText(responding ? "Abort"
+                : "Send (Ctrl+Enter)");
         inputArea.setEnabled(!responding);
         if (responding)
         {
@@ -754,6 +908,11 @@ class AIChatWindow extends DialogUtils.AFrame
     private static String errorHtml(String message)
     {
         return "<p class=\"error-text\">[Error: " + escapeHtml(message) + "]</p>";
+    }
+
+    private static String toolCallHtml(String description)
+    {
+        return "<p class=\"tool-call\">[Tool: " + escapeHtml(description) + "]</p>";
     }
 
     private static String renderMarkdown(String markdown)

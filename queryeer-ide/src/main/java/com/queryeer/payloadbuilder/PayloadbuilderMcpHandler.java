@@ -2,6 +2,7 @@ package com.queryeer.payloadbuilder;
 
 import java.awt.Component;
 import java.awt.FlowLayout;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,12 +19,15 @@ import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension.ExceptionAct
 import com.queryeer.payloadbuilder.CatalogsConfigurable.QueryeerCatalog;
 import com.queryeer.payloadbuilder.VariablesConfigurable.Environment;
 
-import se.kuseman.payloadbuilder.api.OutputWriter;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
+import se.kuseman.payloadbuilder.api.catalog.Column;
+import se.kuseman.payloadbuilder.api.catalog.Schema;
+import se.kuseman.payloadbuilder.api.execution.TupleVector;
 import se.kuseman.payloadbuilder.core.CompiledQuery;
 import se.kuseman.payloadbuilder.core.Payloadbuilder;
 import se.kuseman.payloadbuilder.core.QueryException;
-import se.kuseman.payloadbuilder.core.QueryResult;
+import se.kuseman.payloadbuilder.core.RawQueryResult;
+import se.kuseman.payloadbuilder.core.RawQueryResult.ResultConsumer;
 import se.kuseman.payloadbuilder.core.catalog.CatalogRegistry;
 import se.kuseman.payloadbuilder.core.execution.QuerySession;
 
@@ -98,7 +102,7 @@ class PayloadbuilderMcpHandler implements IMcpHandler
     }
 
     @Override
-    public void execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters, OutputWriter outputWriter) throws Exception
+    public McpResult execute(Map<String, Object> mcpConnectionConfig, String query, Map<String, Object> parameters) throws Exception
     {
         QuerySession session = new QuerySession(new CatalogRegistry(), parameters);
         queryEngine.initCatalogs(session);
@@ -118,6 +122,9 @@ class PayloadbuilderMcpHandler implements IMcpHandler
             }
         }
 
+        List<String> columns = new ArrayList<>();
+        List<Object[]> rows = new ArrayList<>();
+
         int reRunCountLatch = 3;
         boolean complete = false;
         while (!complete)
@@ -125,13 +132,53 @@ class PayloadbuilderMcpHandler implements IMcpHandler
             try
             {
                 CompiledQuery compiledQuery = Payloadbuilder.compile(session, query);
-                QueryResult queryResult = compiledQuery.execute(session);
+                RawQueryResult queryResult = compiledQuery.executeRaw(session);
+
+                ResultConsumer rc = new ResultConsumer()
+                {
+                    @Override
+                    public void schema(Schema schema)
+                    {
+                    }
+
+                    @Override
+                    public boolean consume(TupleVector vector)
+                    {
+                        List<String> current = vector.getSchema()
+                                .getColumns()
+                                .stream()
+                                .map(Column::getName)
+                                .toList();
+                        if (columns.isEmpty())
+                        {
+                            columns.addAll(current);
+                        }
+                        else if (!columns.equals(current))
+                        {
+                            throw new IllegalArgumentException("All result set columns must be equal");
+                        }
+
+                        int rowCount = vector.getRowCount();
+                        int columnCount = vector.getSchema()
+                                .getSize();
+
+                        Object[] row = new Object[columnCount];
+                        rows.add(row);
+                        for (int j = 0; j < rowCount; j++)
+                        {
+                            for (int i = 0; i < columnCount; i++)
+                            {
+                                row[i] = vector.getColumn(i)
+                                        .valueAsObject(j);
+                            }
+                        }
+                        return true;
+                    }
+                };
 
                 while (queryResult.hasMoreResults())
                 {
-                    queryResult.writeResult(outputWriter);
-                    // Flush after each result set
-                    outputWriter.flush();
+                    queryResult.consumeResult(rc);
                 }
                 complete = true;
             }
@@ -161,5 +208,6 @@ class PayloadbuilderMcpHandler implements IMcpHandler
                 throw e;
             }
         }
+        return new McpResult(columns, rows);
     }
 }

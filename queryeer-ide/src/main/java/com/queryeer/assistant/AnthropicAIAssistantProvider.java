@@ -19,6 +19,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -30,6 +33,7 @@ import com.queryeer.api.component.Property;
 import com.queryeer.api.extensions.IConfigurable;
 import com.queryeer.api.extensions.Inject;
 import com.queryeer.api.extensions.assistant.AIChatMessage;
+import com.queryeer.api.extensions.assistant.AIChatSession;
 import com.queryeer.api.extensions.assistant.IAIAssistantProvider;
 import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.ICryptoService;
@@ -58,6 +62,8 @@ class AnthropicAIAssistantProvider implements IAIAssistantProvider
     private AnthropicSettings settings;
     private PropertiesComponent component;
     private volatile boolean cancelled;
+    private volatile CompletableFuture<HttpResponse<InputStream>> pendingRequest;
+    private volatile InputStream activeResponseBody;
 
     AnthropicAIAssistantProvider(IConfig config, ICryptoService cryptoService)
     {
@@ -83,7 +89,7 @@ class AnthropicAIAssistantProvider implements IAIAssistantProvider
 
     // CSOFF
     @Override
-    public void chat(List<AIChatMessage> history, String userMessage, String systemPrompt, Consumer<String> onChunk, Runnable onComplete, Consumer<Throwable> onError)
+    public void chat(List<AIChatMessage> history, String userMessage, String systemPrompt, AIChatSession session, Consumer<String> onChunk, Runnable onComplete, Consumer<Throwable> onError)
     {
         cancelled = false;
 
@@ -114,34 +120,64 @@ class AnthropicAIAssistantProvider implements IAIAssistantProvider
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
+        pendingRequest = httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofInputStream());
+        HttpResponse<InputStream> response;
         try
         {
-            HttpResponse<InputStream> response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-            if (response.statusCode() != 200)
+            response = pendingRequest.get();
+            pendingRequest = null;
+        }
+        catch (CancellationException e)
+        {
+            onComplete.run();
+            return;
+        }
+        catch (ExecutionException e)
+        {
+            if (!cancelled)
             {
-                String errorBody = new String(response.body()
-                        .readAllBytes(), StandardCharsets.UTF_8);
-                onError.accept(parseApiError(response.statusCode(), errorBody));
-                return;
+                Throwable cause = e.getCause() != null ? e.getCause()
+                        : e;
+                onError.accept(cause);
             }
-            streamResponse(response.body(), onChunk, onComplete, onError);
+            else
+            {
+                onComplete.run();
+            }
+            return;
         }
         catch (InterruptedException e)
         {
             Thread.currentThread()
                     .interrupt();
             onComplete.run();
+            return;
         }
-        catch (IOException e)
+
+        if (response.statusCode() != 200)
         {
-            if (!cancelled)
+            String errorBody;
+            try
             {
-                onError.accept(e);
+                errorBody = new String(response.body()
+                        .readAllBytes(), StandardCharsets.UTF_8);
             }
-            else
+            catch (IOException e)
             {
-                onComplete.run();
+                errorBody = "(could not read error response)";
             }
+            onError.accept(parseApiError(response.statusCode(), errorBody));
+            return;
+        }
+
+        activeResponseBody = response.body();
+        try
+        {
+            streamResponse(response.body(), onChunk, onComplete, onError);
+        }
+        finally
+        {
+            activeResponseBody = null;
         }
     }
     // CSON
@@ -150,6 +186,23 @@ class AnthropicAIAssistantProvider implements IAIAssistantProvider
     public void cancel()
     {
         cancelled = true;
+        CompletableFuture<HttpResponse<InputStream>> pending = pendingRequest;
+        if (pending != null)
+        {
+            pending.cancel(true);
+        }
+        InputStream body = activeResponseBody;
+        if (body != null)
+        {
+            try
+            {
+                body.close();
+            }
+            catch (IOException e)
+            {
+                // Ignore – closing intentionally to interrupt the read loop
+            }
+        }
     }
 
     @Override

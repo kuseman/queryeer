@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.queryeer.api.extensions.engine.IMcpHandler;
+import com.queryeer.api.extensions.engine.IMcpHandler.McpResult;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IConfig;
 import com.queryeer.api.service.IQueryFileProvider;
@@ -174,19 +175,10 @@ class McpHttpHandler implements HttpHandler
 
     private String handleToolsList(JsonNode idNode)
     {
-        McpServerConfig cfg = serverConfig;
         ArrayNode toolsArray = MAPPER.createArrayNode();
 
-        List<McpTool> tools = new ArrayList<>();
-        tools.addAll(tableOutputHandler.getTableOutputTools());
-        tools.addAll(cfg.getTools());
-
-        for (McpTool tool : tools)
+        for (McpTool tool : getActiveTools())
         {
-            if (!tool.isActive())
-            {
-                continue;
-            }
             ObjectNode toolNode = MAPPER.createObjectNode();
             toolNode.put("name", tool.getName());
             toolNode.put("description", tool.getDescription());
@@ -223,13 +215,7 @@ class McpHttpHandler implements HttpHandler
                 .asText("");
         JsonNode argumentsNode = params.path("arguments");
 
-        McpServerConfig cfg = serverConfig;
-
-        List<McpTool> tools = new ArrayList<>();
-        tools.addAll(tableOutputHandler.getTableOutputTools());
-        tools.addAll(cfg.getTools());
-
-        McpTool tool = tools.stream()
+        McpTool tool = getActiveTools().stream()
                 .filter(t -> t.getName()
                         .equals(toolName))
                 .findFirst()
@@ -239,51 +225,24 @@ class McpHttpHandler implements HttpHandler
         {
             return buildToolError(idNode, "Unknown tool: " + toolName);
         }
-        if (!tool.isActive())
+
+        // Extract raw string values for each declared parameter
+        Map<String, Object> arguments = new HashMap<>();
+        if (argumentsNode.isObject())
         {
-            return buildToolError(idNode, "Tool '" + toolName + "' is inactive");
+            for (McpToolParameter param : tool.getParameters())
+            {
+                String name = param.getName();
+                JsonNode value = argumentsNode.findValue(name);
+                arguments.put(name, value != null ? value.asText()
+                        : null);
+            }
         }
 
+        String result;
         try
         {
-            // Convert arguments JSON map and validates param types
-            Map<String, Object> arguments = new HashMap<>();
-            if (argumentsNode.isObject())
-            {
-                for (McpToolParameter param : tool.getParameters())
-                {
-                    String name = param.getName();
-                    JsonNode value = argumentsNode.findValue(name);
-                    String stringValue = value != null ? value.asText()
-                            : null;
-                    arguments.put(name, McpParameterSanitizer.sanitize(name, stringValue, param.getType()));
-                }
-            }
-
-            String result = tableOutputHandler.handleToolCall(toolName, arguments);
-            if (result == null)
-            {
-                String renderedQuery = templateService.process("mcp-tool-" + tool.getName(), tool.getQuery(), arguments, true);
-                // Find engine by class name
-                IQueryEngine engine = findEngine(tool.getEngineClass());
-                if (engine == null)
-                {
-                    return buildToolError(idNode, "Query engine not found: " + tool.getEngineClass());
-                }
-
-                IMcpHandler mcpHandler = engine.getMcpHandler();
-                if (mcpHandler == null)
-                {
-                    return buildToolError(idNode, "Query engine does not support MCP: " + tool.getEngineClass());
-                }
-                // // Execute query
-                MarkdownTableOutputWriter writer = new MarkdownTableOutputWriter();
-                mcpHandler.execute(tool.getConnectionConfig(), renderedQuery, arguments, writer);
-                writer.flush();
-
-                result = writer.getResult();
-            }
-            return buildToolResult(idNode, result, false);
+            result = executeToolDirect(toolName, arguments);
         }
         catch (Exception e)
         {
@@ -293,9 +252,64 @@ class McpHttpHandler implements HttpHandler
                 t = e.getCause() != null ? e.getCause()
                         : t;
             }
-            LOGGER.error("Error executing MCP tool '{}'", toolName, e);
-            return buildToolResult(idNode, "Error executing tool '" + toolName + "': " + t.getMessage(), true);
+            return buildToolError(idNode, "Error executing tool '" + toolName + "': " + t.getMessage());
         }
+        return buildToolResult(idNode, result, false);
+    }
+
+    /** Returns all active tools from both built-in (table output) and user-defined sources. */
+    List<McpTool> getActiveTools()
+    {
+        List<McpTool> tools = new ArrayList<>();
+        tools.addAll(tableOutputHandler.getTableOutputTools());
+        tools.addAll(serverConfig.getTools());
+        tools.removeIf(t -> !t.isActive());
+        return tools;
+    }
+
+    /**
+     * Executes a tool by name, sanitizing and type-coercing the arguments first. Never throws; returns an error string on failure.
+     */
+    String executeToolDirect(String toolName, Map<String, Object> arguments) throws Exception
+    {
+        McpTool tool = getActiveTools().stream()
+                .filter(t -> t.getName()
+                        .equals(toolName))
+                .findFirst()
+                .orElse(null);
+
+        if (tool == null)
+        {
+            throw new IllegalArgumentException("Error: Unknown tool: " + toolName);
+        }
+
+        // Sanitize and type-coerce all declared parameters
+        Map<String, Object> sanitized = new HashMap<>();
+        for (McpToolParameter param : tool.getParameters())
+        {
+            Object raw = arguments.get(param.getName());
+            String rawStr = raw != null ? String.valueOf(raw)
+                    : null;
+            sanitized.put(param.getName(), McpParameterSanitizer.sanitize(param.getName(), rawStr, param.getType()));
+        }
+        String result = tableOutputHandler.handleToolCall(toolName, sanitized);
+        if (result == null)
+        {
+            String renderedQuery = templateService.process("mcp-tool-" + tool.getName(), tool.getQuery(), sanitized, true);
+            IQueryEngine engine = findEngine(tool.getEngineClass());
+            if (engine == null)
+            {
+                throw new IllegalArgumentException("Query engine not found: " + tool.getEngineClass());
+            }
+            IMcpHandler mcpHandler = engine.getMcpHandler();
+            if (mcpHandler == null)
+            {
+                throw new IllegalArgumentException("Query engine does not support MCP: " + tool.getEngineClass());
+            }
+            McpResult mcpResult = mcpHandler.execute(tool.getConnectionConfig(), renderedQuery, sanitized);
+            result = MAPPER.writeValueAsString(mcpResult);
+        }
+        return result;
     }
 
     private IQueryEngine findEngine(String engineClass)
