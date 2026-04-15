@@ -88,7 +88,7 @@ public class McpConfigurable implements IConfigurable
         startServerSilently(serverConfig);
 
         // Fire of the status event after some period to let the UI subscribe on eventbus else the event is never reached.
-        Timer timer = new Timer(10_000, e -> publishStatusEvent());
+        Timer timer = new Timer(5_000, e -> publishStatusEvent());
         timer.setRepeats(false);
         timer.start();
     }
@@ -251,6 +251,7 @@ public class McpConfigurable implements IConfigurable
         northWrapper.setLayout(new javax.swing.BoxLayout(northWrapper, javax.swing.BoxLayout.Y_AXIS));
         northWrapper.add(topPanel);
         northWrapper.add(cmdPanel);
+
         root.add(northWrapper, BorderLayout.NORTH);
 
         // --- Tool list panel ---
