@@ -236,7 +236,10 @@ class QueryFileModel implements IQueryFile
     void abort()
     {
         queryEngine.abortQuery(this);
-
+        if (selectedOutputComponent != null)
+        {
+            selectedOutputComponent.abort();
+        }
         // If running at interval then stop the timer
         if (executionTimer != null)
         {

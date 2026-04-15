@@ -145,12 +145,13 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent, S
     public void clearState()
     {
         text.setText("");
-        synchronized (TextOutputComponent.this)
-        {
-            appendGeneration++;
-            abortAppend = true;
-            chunkQueue.clear();
-        }
+        abortInternal();
+    }
+
+    @Override
+    public void abort()
+    {
+        abortInternal();
     }
 
     @Override
@@ -262,16 +263,26 @@ class TextOutputComponent extends JScrollPane implements ITextOutputComponent, S
                 : "";
     }
 
-    void showFind()
-    {
-        findDialog.setVisible(true);
-    }
-
     @Override
     public void dispose()
     {
         findDialog.setVisible(false);
         findDialog.dispose();
+    }
+
+    private void abortInternal()
+    {
+        synchronized (TextOutputComponent.this)
+        {
+            appendGeneration++;
+            abortAppend = true;
+            chunkQueue.clear();
+        }
+    }
+
+    void showFind()
+    {
+        findDialog.setVisible(true);
     }
 
     private Runnable textAppender = () ->
