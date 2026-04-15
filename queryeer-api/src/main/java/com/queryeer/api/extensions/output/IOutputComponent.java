@@ -35,6 +35,11 @@ public interface IOutputComponent
     {
     }
 
+    /** Called when query is aborted. */
+    default void abort()
+    {
+    }
+
     /** Dispose any resources etc. Called when a query tab is closed. */
     default void dispose()
     {
