@@ -51,6 +51,16 @@ public class Main
                 .getUptime());
         time = System.currentTimeMillis();
 
+        // Trigger expensive static initializations in background while the main thread sets up
+        Thread warmup = new Thread(() ->
+        {
+            new ExpressionEvaluator();
+            new TemplateService();
+            installFlatLafs();
+        }, "StartupWarmup");
+        warmup.setDaemon(true);
+        warmup.start();
+
         Thread.currentThread()
                 .setUncaughtExceptionHandler(new UncaughtExceptionHandler()
                 {
@@ -117,9 +127,9 @@ public class Main
         LOGGER.debug("Wire time: {} ms", System.currentTimeMillis() - time);
         time = System.currentTimeMillis();
 
-        installFlatLafs();
-
         QueryeerController controller = serviceLoader.get(QueryeerController.class);
+        LOGGER.debug("Controller+View+Session init time: {} ms", System.currentTimeMillis() - time);
+        time = System.currentTimeMillis();
 
         // Start all Swing applications on the EDT.
         SwingUtilities.invokeLater(() ->
@@ -130,7 +140,7 @@ public class Main
                 RepaintManager.setCurrentManager(new CheckThreadViolationRepaintManager());
             }
 
-            LOGGER.debug("UI init time: {} ms", System.currentTimeMillis() - time);
+            LOGGER.debug("UI setVisible time: {} ms", System.currentTimeMillis() - time);
             controller.getView()
                     .setVisible(true);
         });
@@ -138,30 +148,25 @@ public class Main
 
     private static void installFlatLafs()
     {
-        Thread t = new Thread(() ->
+        String method = "installLafInfo";
+        try (ScanResult scanResult = new ClassGraph().enableClassInfo()
+                .enableMethodInfo()
+                .scan())
         {
-            String method = "installLafInfo";
-            try (ScanResult scanResult = new ClassGraph().enableClassInfo()
-                    .enableMethodInfo()
-                    .scan())
+            ClassInfoList list = scanResult.getSubclasses(FlatLaf.class)
+                    .filter(c -> !c.isAbstract())
+                    .filter(c -> c.hasDeclaredMethod(method));
+            for (ClassInfo ci : list)
             {
-                ClassInfoList list = scanResult.getSubclasses(FlatLaf.class)
-                        .filter(c -> !c.isAbstract())
-                        .filter(c -> c.hasDeclaredMethod(method));
-                for (ClassInfo ci : list)
-                {
-                    ci.loadClass()
-                            .getMethod(method)
-                            .invoke(null);
-                }
+                ci.loadClass()
+                        .getMethod(method)
+                        .invoke(null);
             }
-            catch (Exception e)
-            {
-                LOGGER.error("Error installing LAF", e);
-            }
-        });
-        t.setDaemon(true);
-        t.start();
+        }
+        catch (Exception e)
+        {
+            LOGGER.error("Error installing LAF", e);
+        }
     }
 
     private static void setTaskBarInfo()
@@ -181,6 +186,10 @@ public class Main
 
     private static void wire(Config config, File backupFolder, ServiceLoader serviceLoader) throws IOException, InstantiationException, IllegalAccessException
     {
+        // CSOFF
+        long t = System.currentTimeMillis();
+        // CSON
+
         serviceLoader.register(serviceLoader);
 
         // Service
@@ -190,7 +199,12 @@ public class Main
 
         CryptoService cryptoService = new CryptoService(serviceLoader);
         serviceLoader.register(ICryptoService.class, cryptoService);
+        LOGGER.debug("Wire: CryptoService: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
+
         serviceLoader.register(ITemplateService.class, new TemplateService());
+        LOGGER.debug("Wire: TemplateService: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         serviceLoader.register(IConfig.class, config);
         serviceLoader.register(config);
@@ -200,13 +214,19 @@ public class Main
 
         ExpressionEvaluator expressionEvaluator = new ExpressionEvaluator();
         serviceLoader.register(IExpressionEvaluator.class, expressionEvaluator);
+        LOGGER.debug("Wire: ExpressionEvaluator: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         FileWatchService watchService = new FileWatchService();
         serviceLoader.register(watchService);
+        LOGGER.debug("Wire: FileWatchService: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         PayloadbuilderService payloadbuilderService = new PayloadbuilderService();
         serviceLoader.register(IPayloadbuilderService.class, payloadbuilderService);
         serviceLoader.register(IGraphVisualizationService.class, new GraphVisualizationService());
+        LOGGER.debug("Wire: PayloadbuilderService: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         // UI
         QueryeerModel queryeerModel = new QueryeerModel(config, backupFolder, watchService);
@@ -218,18 +238,22 @@ public class Main
         serviceLoader.register(ProjectsView.class);
         serviceLoader.register(DialogFactory.class, List.of(IDialogFactory.class));
         serviceLoader.register(IIconFactory.class, new IconFactory());
-
-        long time = System.currentTimeMillis();
+        LOGGER.debug("Wire: Core services registered: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         PluginHandler pluginHandler = new PluginHandler(config);
+        LOGGER.debug("Wire: PluginHandler (classloaders): {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         // Inject plugins last
-        serviceLoader.injectExtensions(pluginHandler);
-
-        LOGGER.debug("Wire: Plugins time: {} ms", System.currentTimeMillis() - time);
+        File classgraphCache = new File(config.getEtcFolder(), "queryeer.classgraph.cache");
+        serviceLoader.injectExtensions(pluginHandler, classgraphCache);
+        LOGGER.debug("Wire: ClassGraph scan + inject: {} ms", System.currentTimeMillis() - t);
+        t = System.currentTimeMillis();
 
         // Initalize config with all query engines
         config.init(serviceLoader.getAll(IQueryEngine.class));
+        LOGGER.debug("Wire: config.init (query engines): {} ms", System.currentTimeMillis() - t);
 
         Runtime.getRuntime()
                 .addShutdownHook(new Thread(() -> watchService.close()));

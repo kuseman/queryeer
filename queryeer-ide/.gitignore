@@ -1,5 +1,6 @@
 Queryeer.launch
 log4j.properties
+log4j-startup-debug.properties
 /etc
 /shared
 /target/

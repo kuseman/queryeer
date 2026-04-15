@@ -46,8 +46,17 @@ class FileWatchService
         thread.setName("QueryeerFileWatchService");
         thread.setDaemon(true);
         thread.start();
+    }
 
-        WatchService watchService = null;
+    /** Lazily creates and returns the WatchService on first use. */
+    private synchronized WatchService getOrCreateWatchService()
+    {
+        if (watchService != null
+                || close)
+        {
+            return watchService;
+        }
+
         try
         {
             if (OsUtils.isMacOsx())
@@ -72,7 +81,7 @@ class FileWatchService
         {
             LOGGER.error("Error creating watch service", e);
         }
-        this.watchService = watchService;
+        return watchService;
     }
 
     void close()
@@ -124,8 +133,12 @@ class FileWatchService
      */
     void register(Path path, FileWatchListener listener)
     {
-        if (watchService == null
-                || close)
+        if (close)
+        {
+            return;
+        }
+        getOrCreateWatchService();
+        if (watchService == null)
         {
             return;
         }
