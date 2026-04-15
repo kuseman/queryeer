@@ -23,9 +23,11 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.lang.management.ManagementFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -76,6 +78,7 @@ import javax.swing.table.AbstractTableModel;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.Strings;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kordamp.ikonli.fontawesome.FontAwesome;
 import org.slf4j.Logger;
@@ -208,7 +211,6 @@ class QueryeerView extends JFrame
         labelMemory = new JLabel("", SwingConstants.CENTER);
         labelMemory.setPreferredSize(new Dimension(100, 20));
         labelMemory.setBorder(new EtchedBorder(EtchedBorder.LOWERED));
-        labelMemory.setToolTipText("Memory (Total / Used)");
         labelMemory.addMouseListener(new MouseAdapter()
         {
             @Override
@@ -748,6 +750,19 @@ class QueryeerView extends JFrame
                         }
                     }
                 });
+
+        WindowListener wl = new WindowAdapter()
+        {
+            @Override
+            public void windowOpened(WindowEvent e)
+            {
+                long startupTime = ManagementFactory.getRuntimeMXBean()
+                        .getUptime();
+                labelMemory.setToolTipText("<html>Memory (Total / Used)<br/>Startup time: " + DurationFormatUtils.formatDurationHMS(startupTime));
+                removeWindowListener(this);
+            };
+        };
+        addWindowListener(wl);
 
         tasksDialog = new TasksDialog(this, eventBus, dialogFactory, running -> SwingUtilities.invokeLater(() -> labelTasksSpinner.setVisible(running)));
         logsDialog = new LogsDialog(this, dialogFactory);

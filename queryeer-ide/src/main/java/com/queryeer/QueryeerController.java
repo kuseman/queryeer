@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -114,7 +113,7 @@ class QueryeerController implements PropertyChangeListener
         init = true;
         init();
         initSession();
-        init = false;
+        // init = false is set by initSession (or scheduleRemainingSessionFiles) after all session files are loaded
     }
 
     // CSOFF
@@ -162,21 +161,20 @@ class QueryeerController implements PropertyChangeListener
     {
         QueryeerSession session = config.getSession();
         boolean saveSession = false;
-        Iterator<QueryeerSessionFile> it = new ArrayList<>(session.files).iterator();
-        while (it.hasNext())
+
+        // Validation pass: collect valid session files without loading them yet
+        List<QueryeerSessionFile> toLoad = new ArrayList<>();
+        for (QueryeerSessionFile sessionFile : new ArrayList<>(session.files))
         {
-            QueryeerSessionFile sessionFile = it.next();
             // Clean up trash
             if (sessionFile.file == null)
             {
-                it.remove();
                 saveSession = true;
                 continue;
             }
 
             // Correct wrong new state
-            if (sessionFile.file != null
-                    && sessionFile.file.exists())
+            if (sessionFile.file.exists())
             {
                 sessionFile.isNew = false;
             }
@@ -205,8 +203,7 @@ class QueryeerController implements PropertyChangeListener
                     && !sessionFile.backupFile.exists())
             {
                 // Check if the regular file exists, if so simply use the real file and ditch the backup
-                if (sessionFile.file != null
-                        && sessionFile.file.exists())
+                if (sessionFile.file.exists())
                 {
                     sessionFile.backupFile = null;
                 }
@@ -224,15 +221,13 @@ class QueryeerController implements PropertyChangeListener
                         LOGGER.error("Error wrting to backupfile: {}", sessionFile.backupFile, e);
                     }
                 }
-
                 saveSession = true;
             }
 
-            newQueryAction(sessionFile.file, sessionFile.backupFile, null, sessionFile.isNew, Optional.empty());
+            toLoad.add(sessionFile);
         }
 
-        if (session.activeFileIndex >= model.getFiles()
-                .size())
+        if (session.activeFileIndex >= toLoad.size())
         {
             session.activeFileIndex = 0;
             saveSession = true;
@@ -244,17 +239,40 @@ class QueryeerController implements PropertyChangeListener
         }
 
         // Add a new empty query if nothing was loaded
-        if (session.files.isEmpty())
+        if (toLoad.isEmpty())
         {
             newQueryAction(null);
-        }
-        else
-        {
-            QueryFileModel fileModel = model.getFiles()
-                    .get(session.activeFileIndex);
-            model.setSelectedFile(fileModel);
+            init = false;
+            model.init();
+            return;
         }
 
+        // Load the first file synchronously so the window isn't blank on first paint
+        QueryeerSessionFile first = toLoad.get(0);
+        newQueryAction(first.file, first.backupFile, null, first.isNew, Optional.empty());
+
+        // Suppress auto-selection while remaining tabs are added so the UI doesn't jump
+        model.setSessionLoading(true);
+
+        // Schedule remaining files one per EDT cycle — lets the window paint between each tab
+        int activeIdx = Math.max(0, Math.min(session.activeFileIndex, toLoad.size() - 1));
+        SwingUtilities.invokeLater(() -> scheduleRemainingSessionFiles(toLoad, 1, activeIdx));
+    }
+
+    private void scheduleRemainingSessionFiles(List<QueryeerSessionFile> files, int nextIdx, int activeIdx)
+    {
+        if (nextIdx < files.size())
+        {
+            QueryeerSessionFile sf = files.get(nextIdx);
+            newQueryAction(sf.file, sf.backupFile, null, sf.isNew, Optional.empty());
+            SwingUtilities.invokeLater(() -> scheduleRemainingSessionFiles(files, nextIdx + 1, activeIdx));
+            return;
+        }
+        // All session files loaded — select the active tab and finish init
+        model.setSessionLoading(false);
+        model.setSelectedFile(model.getFiles()
+                .get(activeIdx));
+        init = false;
         model.init();
     }
 

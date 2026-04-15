@@ -1,6 +1,5 @@
 package com.queryeer;
 
-import static com.queryeer.QueryeerController.MAPPER;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
@@ -27,6 +26,8 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.queryeer.api.extensions.engine.IQueryEngine;
 import com.queryeer.api.service.IConfig;
 
@@ -34,6 +35,7 @@ import com.queryeer.api.service.IConfig;
 class Config implements IConfig
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(Config.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     private static final String CONFIG = "queryeer.cfg";
     private static final String SESSION = "queryeer.session.cfg";
     private static final String RECENT_FILES = "queryeer.recent-files.cfg";
@@ -378,7 +380,7 @@ class Config implements IConfig
         }
         try
         {
-            QueryeerController.MAPPER.writerWithDefaultPrettyPrinter()
+            MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValue(file, this);
         }
         catch (IOException e)
@@ -418,7 +420,7 @@ class Config implements IConfig
 
         try
         {
-            return QueryeerController.MAPPER.readValue(configFile, Map.class);
+            return MAPPER.readValue(configFile, Map.class);
         }
         catch (IOException e)
         {
@@ -433,7 +435,7 @@ class Config implements IConfig
         File configFile = new File(etcFolder, FilenameUtils.getName(name + ".cfg"));
         try
         {
-            QueryeerController.MAPPER.writerWithDefaultPrettyPrinter()
+            MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValue(configFile, config);
         }
         catch (IOException e)
@@ -471,7 +473,7 @@ class Config implements IConfig
 
         try
         {
-            QueryeerController.MAPPER.writerWithDefaultPrettyPrinter()
+            MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValue(sessionFile, session);
         }
         catch (IOException e)

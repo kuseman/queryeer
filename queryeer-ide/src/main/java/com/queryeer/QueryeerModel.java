@@ -48,6 +48,7 @@ class QueryeerModel implements IQueryFileProvider
     private QueryFileModel selectedFile;
     private QueryFileModel previousSelectedFile;
     private Thread maintenanceThread;
+    private boolean sessionLoading;
 
     QueryeerModel(Config config, File backupPath, FileWatchService watchService)
     {
@@ -132,7 +133,15 @@ class QueryeerModel implements IQueryFileProvider
 
         pcs.fireIndexedPropertyChange(FILES, index, null, file);
 
-        setSelectedFile(file);
+        if (!sessionLoading)
+        {
+            setSelectedFile(file);
+        }
+    }
+
+    void setSessionLoading(boolean sessionLoading)
+    {
+        this.sessionLoading = sessionLoading;
     }
 
     private void register(QueryFileModel file)
