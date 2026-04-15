@@ -21,7 +21,6 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
-import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
@@ -100,8 +99,6 @@ class McpToolEditorPanel extends JPanel
 
         infoArea = new JTextArea();
         infoArea.setEditable(false);
-        infoArea.setLineWrap(true);
-        infoArea.setWrapStyleWord(true);
         infoArea.setRows(4);
         infoArea.setBackground(new Color(255, 255, 220));
         infoArea.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
@@ -180,9 +177,6 @@ class McpToolEditorPanel extends JPanel
         paramsPanel.setBorder(BorderFactory.createTitledBorder("Parameters"));
         paramsPanel.add(parametersComponent, BorderLayout.CENTER);
         add(paramsPanel, gbc);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weighty = 0;
-        gbc.gridwidth = 1;
         row++;
 
         // Query editor
@@ -195,8 +189,8 @@ class McpToolEditorPanel extends JPanel
         JPanel queryPanel = new JPanel(new BorderLayout());
         queryPanel.setBorder(BorderFactory.createTitledBorder("Query"));
         queryEditor = editorFactory.createTextEditor(SQL_KIT);
-        queryPanel.add(new JScrollPane(infoArea), BorderLayout.NORTH);
-        queryPanel.add(new JScrollPane(queryEditor.getComponent()), BorderLayout.CENTER);
+        queryPanel.add(infoArea, BorderLayout.NORTH);
+        queryPanel.add(queryEditor.getComponent(), BorderLayout.CENTER);
         add(queryPanel, gbc);
     }
 
