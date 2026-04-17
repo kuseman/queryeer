@@ -29,6 +29,7 @@ import com.queryeer.api.utils.CredentialUtils.Credentials;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.catalog.Column.Type;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
+import se.kuseman.payloadbuilder.catalog.AuthType;
 import se.kuseman.payloadbuilder.catalog.CredentialsException;
 import se.kuseman.payloadbuilder.catalog.es.ESConnectionsModel.Connection;
 import se.kuseman.payloadbuilder.test.VectorTestUtils;

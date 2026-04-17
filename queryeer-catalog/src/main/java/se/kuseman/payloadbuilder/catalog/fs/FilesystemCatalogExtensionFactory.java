@@ -3,8 +3,8 @@ package se.kuseman.payloadbuilder.catalog.fs;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtension;
 import com.queryeer.api.extensions.payloadbuilder.ICatalogExtensionFactory;
 
-/** SPI factory for {@link FilesystemCatalogExtension}. */
-public class FilesystemCatalogExtensionFactory implements ICatalogExtensionFactory
+/** Extension factory for {@link FilesystemCatalogExtension}. */
+class FilesystemCatalogExtensionFactory implements ICatalogExtensionFactory
 {
     @Override
     public ICatalogExtension create(String catalogAlias)
