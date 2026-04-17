@@ -185,6 +185,8 @@ class TextEditor implements ITextEditor, SearchListener
     private EditorCompleter completer;
     private MultiCaretSupport multiCaretSupport;
     private ParsingIndicator parsingIndicator;
+    private OutlineOverlay outlineOverlay;
+    private Timer outlineScanTimer;
 
     TextEditor(ITextEditorKit editorKit)
     {
@@ -397,10 +399,20 @@ class TextEditor implements ITextEditor, SearchListener
                     propertyChangeListeners.get(i)
                             .propertyChange(new PropertyChangeEvent(textEditor, IEditor.VALUE_CHANGED, null, null));
                 }
+
+                // Trigger outline re-scan on document change
+                if (outlineScanTimer != null)
+                {
+                    outlineScanTimer.restart();
+                }
             }
         };
         textEditor.getDocument()
                 .addDocumentListener(documentChangeListener);
+
+        // Debounced timer for outline scanning
+        outlineScanTimer = new Timer(500, e -> scheduleOutlineScan());
+        outlineScanTimer.setRepeats(false);
 
         // Re-register the document listener whenever textEditor.load() replaces the underlying document.
         // Without this, VALUE_CHANGED is never fired after a session restore and backups stop being written.
@@ -416,9 +428,20 @@ class TextEditor implements ITextEditor, SearchListener
             {
                 newDoc.addDocumentListener(documentChangeListener);
             }
+            // Re-scan outline when a new document is loaded
+            if (outlineScanTimer != null)
+            {
+                outlineScanTimer.restart();
+            }
         });
 
         toggleCommentAction = new ToggleCommentsAction(textEditor, multiCaretSupport);
+        // Keyboard shortcut: Ctrl/Cmd+Shift+O to toggle outline
+        textEditor.getInputMap()
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_O, Toolkit.getDefaultToolkit()
+                        .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK), "toggleOutline");
+        textEditor.getActionMap()
+                .put("toggleOutline", toggleOutlineAction);
 
         //@formatter:off
         List<Action> actions = new ArrayList<>();
@@ -432,7 +455,8 @@ class TextEditor implements ITextEditor, SearchListener
                 showGotoLineAction,
                 pasteSpecialAction,
                 lowerCaseSelection,
-                upperCaseSelection
+                upperCaseSelection,
+                toggleOutlineAction
                 ));
         //@formatter:on
 
@@ -452,18 +476,61 @@ class TextEditor implements ITextEditor, SearchListener
 
             putClientProperty(com.queryeer.api.action.Constants.QUERYEER_ACTIONS, actions);
 
-            // Add error strip and parsing indicator if we have a parser installed
+            // Determine the center component (with or without parser)
+            JComponent centerComponent;
             if (parser != null)
             {
                 parsingIndicator = new ParsingIndicator(scrollPane);
-                add(parsingIndicator.getLayer());
+                centerComponent = parsingIndicator.getLayer();
                 errorStrip = new ErrorStrip(textEditor);
                 add(errorStrip, BorderLayout.LINE_END);
             }
             else
             {
-                add(scrollPane);
+                centerComponent = scrollPane;
             }
+
+            // Overlay the outline panel on top of the editor, anchored at top-right corner
+            outlineOverlay = new OutlineOverlay((entry, transferFocus) -> navigateToOutlineEntry(entry, transferFocus));
+            outlineOverlay.setVisible(false);
+
+            final JComponent editorContent = centerComponent;
+            JPanel editorArea = new JPanel(null)
+            {
+                @Override
+                public void doLayout()
+                {
+                    editorContent.setBounds(0, 0, getWidth(), getHeight());
+                    Dimension pref = outlineOverlay.getPreferredSize();
+                    // Offset left to avoid covering the scrollbar
+                    int scrollBarWidth = scrollPane.getVerticalScrollBar()
+                            .isVisible()
+                                    ? scrollPane.getVerticalScrollBar()
+                                            .getWidth()
+                                    : 0;
+                    int x = getWidth() - pref.width - scrollBarWidth - 4;
+                    int y = 2;
+                    outlineOverlay.setBounds(x, y, pref.width, pref.height);
+                }
+
+                @Override
+                public Dimension getPreferredSize()
+                {
+                    return editorContent.getPreferredSize();
+                }
+
+                @Override
+                public Dimension getMinimumSize()
+                {
+                    return editorContent.getMinimumSize();
+                }
+            };
+            editorArea.add(outlineOverlay);
+            editorArea.add(editorContent);
+            add(editorArea);
+
+            // Trigger initial outline scan
+            outlineScanTimer.restart();
         }
     }
 
@@ -572,6 +639,71 @@ class TextEditor implements ITextEditor, SearchListener
         }
     }
 
+    private void scheduleOutlineScan()
+    {
+        String text;
+        try
+        {
+            Document doc = textEditor.getDocument();
+            text = doc.getText(0, doc.getLength());
+        }
+        catch (BadLocationException e)
+        {
+            return;
+        }
+        EXECUTOR.submit(() ->
+        {
+            OutlineScanner.ScanResult result = OutlineScanner.scan(text);
+            SwingUtilities.invokeLater(() ->
+            {
+                if (outlineOverlay != null)
+                {
+                    outlineOverlay.updateEntries(result);
+                }
+            });
+        });
+    }
+
+    private void navigateToOutlineEntry(OutlineScanner.OutlineEntry entry, boolean transferFocus)
+    {
+        int offset = entry.offset();
+        textEditor.setCaretPosition(offset);
+        try
+        {
+            Rectangle2D rect = textEditor.modelToView2D(offset);
+            if (rect != null)
+            {
+                Rectangle visible = textEditor.getVisibleRect();
+                Rectangle scrollTarget = new Rectangle(0, (int) rect.getY(), 1, visible.height);
+                textEditor.scrollRectToVisible(scrollTarget);
+            }
+        }
+        catch (BadLocationException ex)
+        {
+            // ignore — offset no longer valid
+        }
+        if (transferFocus)
+        {
+            textEditor.requestFocusInWindow();
+        }
+    }
+
+    private void showOutlineInfoDialog()
+    {
+        //@formatter:off
+        String message =
+                "No outline entries found in this document.\n\n"
+              + "To use the outline feature, add a directive comment\n"
+              + "in the first 20 lines of your document:\n\n"
+              + "  -- Outline pattern: --###\n\n"
+              + "Then mark sections with that pattern:\n\n"
+              + "  --### Rest calls\n"
+              + "  --### Database operations\n\n"
+              + "Supported comment styles: --  //  #";
+        //@formatter:on
+        JOptionPane.showMessageDialog(panel, message, "Outline", JOptionPane.INFORMATION_MESSAGE);
+    }
+
     // IEditor
 
     @Override
@@ -590,6 +722,10 @@ class TextEditor implements ITextEditor, SearchListener
         if (parsingIndicator != null)
         {
             parsingIndicator.dispose();
+        }
+        if (outlineScanTimer != null)
+        {
+            outlineScanTimer.stop();
         }
         UIManager.removePropertyChangeListener(uiManagerListener);
 
@@ -1127,6 +1263,39 @@ class TextEditor implements ITextEditor, SearchListener
                     UIManager.getLookAndFeel()
                             .provideErrorFeedback(textEditor);
                     ble.printStackTrace();
+                }
+            }
+        }
+    };
+
+    private final Action toggleOutlineAction = new AbstractAction("Toggle Outline", IconFactory.of(FontAwesome.LIST_UL))
+    {
+        {
+            putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_MENU, true);
+            putValue(com.queryeer.api.action.Constants.ACTION_MENU, com.queryeer.api.action.Constants.EDIT_MENU);
+            putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 7);
+            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_O, Toolkit.getDefaultToolkit()
+                    .getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK));
+            putValue(Action.ACTION_COMMAND_KEY, "toggleOutline");
+            putValue(Action.SHORT_DESCRIPTION, "Toggle Outline Panel");
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e)
+        {
+            if (outlineOverlay != null)
+            {
+                if (!outlineOverlay.hasEntries())
+                {
+                    showOutlineInfoDialog();
+                }
+                else if (!outlineOverlay.isVisible())
+                {
+                    outlineOverlay.setVisible(true);
+                }
+                else
+                {
+                    outlineOverlay.toggleCollapsed();
                 }
             }
         }
