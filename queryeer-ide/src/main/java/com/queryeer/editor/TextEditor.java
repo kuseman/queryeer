@@ -80,7 +80,6 @@ import javax.swing.text.Segment;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
-import org.apache.commons.lang3.mutable.MutableInt;
 import org.fife.io.UnicodeWriter;
 import org.fife.rsta.ui.GoToDialog;
 import org.fife.rsta.ui.search.FindDialog;
@@ -418,6 +417,8 @@ class TextEditor implements ITextEditor, SearchListener
                 newDoc.addDocumentListener(documentChangeListener);
             }
         });
+
+        toggleCommentAction = new ToggleCommentsAction(textEditor, multiCaretSupport);
 
         //@formatter:off
         List<Action> actions = new ArrayList<>();
@@ -886,178 +887,6 @@ class TextEditor implements ITextEditor, SearchListener
         }
     }
 
-    /**
-     * <pre>
-     * Toggle comments on selected lines
-     * </pre>
-     **/
-    private void toggleComments()
-    {
-        int lines = textEditor.getLineCount();
-
-        // Collect all carets (primary + secondary) to cover multicaret selections
-        List<int[]> allCarets = multiCaretSupport.buildAllCaretsSortedAsc();
-        boolean singleCaret = allCarets.size() == 1;
-
-        int primaryDot = textEditor.getCaretPosition();
-        int primaryMark = textEditor.getCaret()
-                .getMark();
-        boolean caretSelection = singleCaret
-                && primaryDot == primaryMark;
-
-        Boolean addComments = null;
-
-        try
-        {
-            // Collect unique line indices covered by any caret, in document order
-            Set<Integer> coveredLines = new java.util.TreeSet<>();
-            for (int[] caret : allCarets)
-            {
-                int selStart = Math.min(caret[0], caret[1]);
-                int selEnd = Math.max(caret[0], caret[1]);
-                for (int i = 0; i < lines; i++)
-                {
-                    int startOffset = textEditor.getLineStartOffset(i);
-                    int endOffset = textEditor.getLineEndOffset(i) - 1;
-                    if (between(startOffset, endOffset, selStart)
-                            || (startOffset > selStart
-                                    && endOffset <= selEnd)
-                            || (selEnd > startOffset
-                                    && selEnd <= endOffset))
-                    {
-                        coveredLines.add(i);
-                    }
-                }
-            }
-
-            List<MutableInt> commentOffsets = new ArrayList<>();
-            for (int lineIndex : coveredLines)
-            {
-                int startOffset = textEditor.getLineStartOffset(lineIndex);
-                int endOffset = textEditor.getLineEndOffset(lineIndex) - 1;
-                int lineLength = endOffset - startOffset;
-                if (lineLength == 0)
-                {
-                    continue;
-                }
-
-                // Find first non-whitespace position on this line
-                String lineText = textEditor.getText(startOffset, lineLength);
-                int indent = 0;
-                while (indent < lineLength
-                        && (lineText.charAt(indent) == ' '
-                                || lineText.charAt(indent) == '\t'))
-                {
-                    indent++;
-                }
-
-                if (indent == lineLength)
-                {
-                    // Whitespace-only line, skip
-                    continue;
-                }
-
-                boolean lineIsCommented = lineText.substring(indent)
-                        .startsWith("--");
-                if (addComments == null)
-                {
-                    addComments = !lineIsCommented;
-                }
-
-                if (addComments
-                        || lineIsCommented)
-                {
-                    commentOffsets.add(new MutableInt(startOffset + indent));
-                }
-            }
-
-            if (!commentOffsets.isEmpty())
-            {
-                // Capture original offsets before the edit loop modifies them
-                List<Integer> originalOffsets = new ArrayList<>(commentOffsets.size());
-                for (MutableInt o : commentOffsets)
-                {
-                    originalOffsets.add(o.intValue());
-                }
-
-                textEditor.beginAtomicEdit();
-                try
-                {
-                    int modifier = 0;
-                    for (MutableInt commentOffset : commentOffsets)
-                    {
-                        if (addComments)
-                        {
-                            textEditor.getDocument()
-                                    .insertString(commentOffset.intValue() + modifier, "--", null);
-                        }
-                        else
-                        {
-                            textEditor.getDocument()
-                                    .remove(commentOffset.intValue() + modifier, 2);
-                        }
-                        commentOffset.setValue(Math.max(commentOffset.intValue() + modifier, 0));
-                        modifier += addComments ? 2
-                                : -2;
-                    }
-                }
-                finally
-                {
-                    textEditor.endAtomicEdit();
-                }
-
-                int delta = addComments ? 2
-                        : -2;
-                if (singleCaret)
-                {
-                    // Single-caret: move selection to span the toggled comment range
-                    int selStart = commentOffsets.get(0)
-                            .intValue();
-                    int selEnd = caretSelection ? selStart
-                            : commentOffsets.get(commentOffsets.size() - 1)
-                                    .intValue();
-                    textEditor.setSelectionStart(selStart);
-                    textEditor.setSelectionEnd(selEnd);
-                }
-                else
-                {
-                    // Multicaret: restore primary caret to its shifted position
-                    int newDot = shiftCaretPosition(primaryDot, originalOffsets, delta);
-                    int newMark = shiftCaretPosition(primaryMark, originalOffsets, delta);
-                    if (newDot == newMark)
-                    {
-                        textEditor.setCaretPosition(newDot);
-                    }
-                    else
-                    {
-                        textEditor.getCaret()
-                                .setDot(newMark);
-                        textEditor.getCaret()
-                                .moveDot(newDot);
-                    }
-                    // Shift all secondary carets by the same rule
-                    multiCaretSupport.shiftSecondaryCarets(originalOffsets, delta);
-                }
-            }
-        }
-        catch (BadLocationException e)
-        {
-        }
-    }
-
-    private static int shiftCaretPosition(int pos, List<Integer> sortedPoints, int delta)
-    {
-        int shift = 0;
-        for (int p : sortedPoints)
-        {
-            if (p < pos)
-            {
-                shift += delta;
-            }
-        }
-        return Math.max(0, pos + shift);
-    }
-
     private void publishCaret()
     {
         if (eventBus == null)
@@ -1194,23 +1023,7 @@ class TextEditor implements ITextEditor, SearchListener
         }
     };
 
-    private Action toggleCommentAction = new AbstractAction("", IconFactory.of(FontAwesome.INDENT))
-    {
-        {
-            putValue(com.queryeer.api.action.Constants.ACTION_SHOW_IN_TOOLBAR, true);
-            putValue(com.queryeer.api.action.Constants.ACTION_ORDER, 9);
-            putValue(Action.ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_7, Toolkit.getDefaultToolkit()
-                    .getMenuShortcutKeyMaskEx()));
-            putValue(Action.ACTION_COMMAND_KEY, "toggleComments");
-            putValue(Action.SHORT_DESCRIPTION, "Toggle Comments On Selected Lines");
-        }
-
-        @Override
-        public void actionPerformed(ActionEvent e)
-        {
-            toggleComments();
-        }
-    };
+    private Action toggleCommentAction;
 
     private final Action pasteSpecialAction = new AbstractAction("Paste Special ...")
     {
@@ -2167,13 +1980,6 @@ class TextEditor implements ITextEditor, SearchListener
             return null;
         }
 
-    }
-
-    /** Return true or false depending on if value is between start and end. Both inclusive */
-    private static boolean between(int start, int end, int value)
-    {
-        return value >= start
-                && value <= end;
     }
 
     /**
