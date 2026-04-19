@@ -38,6 +38,7 @@ import se.kuseman.payloadbuilder.api.catalog.Catalog;
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
 import se.kuseman.payloadbuilder.api.execution.UTF8String;
+import se.kuseman.payloadbuilder.catalog.AuthType;
 import se.kuseman.payloadbuilder.catalog.Common;
 import se.kuseman.payloadbuilder.catalog.CredentialsException;
 import se.kuseman.payloadbuilder.catalog.es.ESConnectionsModel.Connection;

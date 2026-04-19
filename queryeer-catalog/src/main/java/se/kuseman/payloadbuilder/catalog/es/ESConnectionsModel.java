@@ -43,7 +43,9 @@ import com.queryeer.api.utils.CredentialUtils.Credentials;
 
 import se.kuseman.payloadbuilder.api.catalog.CatalogException;
 import se.kuseman.payloadbuilder.api.execution.IQuerySession;
+import se.kuseman.payloadbuilder.catalog.AuthType;
 import se.kuseman.payloadbuilder.catalog.Common;
+import se.kuseman.payloadbuilder.catalog.HttpClientUtils;
 
 /**
  * Model for {@link ESCatalogExtension}'s connections
